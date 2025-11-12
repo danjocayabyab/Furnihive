@@ -9,7 +9,7 @@ export default function SellerDashboard() {
       {/* Header */}
       <div>
         <h1 className="text-xl font-semibold text-[var(--brown-700)]">
-          Welcome back, Manila Furniture Co.! 👋
+          Welcome back, Manila Furniture Co.! 
         </h1>
         <p className="text-sm text-gray-600">
           Here’s what’s happening with your store today.
@@ -22,28 +22,28 @@ export default function SellerDashboard() {
           title="Total Sales"
           value="₱248,500"
           change="+12.5%"
-          icon="💰"
+          
           color="text-green-600"
         />
         <SummaryCard
           title="Active Orders"
           value="23"
           change="+3"
-          icon="🧾"
+          
           color="text-green-600"
         />
         <SummaryCard
           title="Products Listed"
           value="87"
           change="+5"
-          icon="📦"
+          
           color="text-green-600"
         />
         <SummaryCard
           title="Low Stock Items"
           value="12"
           change="-2"
-          icon="⚠️"
+          
           color="text-red-600"
         />
       </div>
@@ -52,36 +52,36 @@ export default function SellerDashboard() {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <NavButton
           label="Products"
-          icon="📦"
+          
           onClick={() => navigate("/seller/products")}
         />
         {/* ✅ Added navigation for Inventory */}
         <NavButton
           label="Inventory"
-          icon="📋"
+          
           onClick={() => navigate("/seller/inventory")}
         />
         <NavButton 
           label="Orders" 
-          icon="🧾" 
+           
           onClick={() => navigate("/seller/orders")} 
         />
 
         <NavButton 
           label="Promotions" 
-          icon="🎯" 
+          
           onClick={() => navigate("/seller/promotions")} 
         />
 
         <NavButton
           label="Analytics"
-          icon="📊"
+          
           onClick={() => navigate("/seller/analytics")} 
         />
 
         <NavButton
           label="Engagement"
-          icon="💬"
+          
           onClick={() => navigate("/seller/engagement")}
         />
       </div>

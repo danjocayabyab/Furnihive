@@ -122,38 +122,38 @@ export default function Inventory() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
-      {/* Header + back */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => navigate("/seller")}
-          className="rounded-full border border-[var(--line-amber)] w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
-          aria-label="Back"
-          title="Back to Dashboard"
-        >
-          ←
-        </button>
-        <div>
-          <div className="text-sm text-[var(--orange-700)]/80">
-            Track stock levels and manage inventory alerts
-          </div>
-          <h1 className="text-2xl font-semibold text-[var(--brown-700)]">
-            Inventory Management
-          </h1>
-        </div>
-      </div>
+     {/* Header + back */}
+<div className="flex items-center gap-3">
+  <button
+    onClick={() => navigate("/seller")}
+    className="rounded-lg border border-[var(--line-amber)] bg-white w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
+    aria-label="Back"
+    title="Back to Dashboard"
+  >
+    ←
+  </button>
+  <div>
+    <h1 className="text-xl font-semibold text-[var(--brown-700)]">
+      Inventory Management
+    </h1>
+    <p className="text-xs text-gray-600">
+      Track stock levels and manage inventory alerts
+    </p>
+  </div>
+</div>
 
       {/* Metric cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Metric icon="📦" label="Total Products" value={stats.total} />
-        <Metric icon="✅" label="Active" value={stats.active} />
-        <Metric icon="⚠️" label="Low Stock" value={stats.low} />
-        <Metric icon="❌" label="Out of Stock" value={stats.oos} />
+        <Metric  label="Total Products" value={stats.total} />
+        <Metric  label="Active" value={stats.active} />
+        <Metric  label="Low Stock" value={stats.low} />
+        <Metric  label="Out of Stock" value={stats.oos} />
       </div>
 
       {/* Search + filters */}
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2 rounded-full border border-[var(--line-amber)] bg-[var(--cream-50)] px-3 py-2 flex-1">
-          <span>🔎</span>
+          
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}

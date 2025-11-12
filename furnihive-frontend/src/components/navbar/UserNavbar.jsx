@@ -74,12 +74,8 @@ export default function UserNavbar() {
             <span>Messages</span>
           </NavLink>
 
-          {/* Cart */}
-          <button
-            onClick={() => navigate("/cart")}
-            className="relative flex items-center gap-2 px-3 py-2 rounded-full text-sm text-[var(--orange-700)] hover:bg-[var(--cream-50)]"
-            title="Cart"
-          >
+          {/* Cart — now same animation/active style as others */}
+          <NavLink to="/cart" className={navItemCls} title="Cart">
             <span></span>
             <span>Cart</span>
             {cartCount > 0 && (
@@ -87,7 +83,7 @@ export default function UserNavbar() {
                 {cartCount > 99 ? "99+" : cartCount}
               </span>
             )}
-          </button>
+          </NavLink>
 
           <NavLink to="/profile" className={navItemCls}>
             <span></span>

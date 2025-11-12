@@ -168,7 +168,7 @@ export default function SellerOrders() {
       {/* search + filters (filters button UI only) */}
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-3 flex items-center gap-3">
         <div className="flex-1 flex items-center gap-2 rounded-full border border-[var(--line-amber)] bg-[var(--cream-50)] px-3 py-2">
-          <span>🔎</span>
+          
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}

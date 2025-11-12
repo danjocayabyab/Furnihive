@@ -78,14 +78,11 @@ export default function Profile() {
   const [orders] = useState(initialOrders);
 
   // Reviews live here so both Overview/Orders panels can add, and Reviews tab can display.
-  const [reviews, setReviews] = useState([
-    // prefill with none; API would fetch here
-    // { id:'rev-1', orderId:'ORD-2024-001', product:'Modern Sectional Sofa', rating:5, text:'Great!', date:'2024-12-22' }
-  ]);
+  const [reviews, setReviews] = useState([]);
 
   // Modals
-  const [detailsFor, setDetailsFor] = useState(null); // order object or null
-  const [reviewFor, setReviewFor] = useState(null);   // order object or null
+  const [detailsFor, setDetailsFor] = useState(null);
+  const [reviewFor, setReviewFor] = useState(null);
 
   const money = (n) => `₱${Number(n).toLocaleString()}`;
 
@@ -104,7 +101,7 @@ export default function Profile() {
     setTab("reviews");
   };
 
-  // Derived counters for header stats (optionally reflect reviews length)
+  // Derived counters for header stats
   const computedStats = useMemo(
     () => ({
       ...user.stats,
@@ -112,6 +109,14 @@ export default function Profile() {
     }),
     [reviews]
   );
+
+  // ✅ Logout function (added)
+  const handleLogout = () => {
+    localStorage.removeItem("fh_user");
+    localStorage.removeItem("fh_token");
+    sessionStorage.clear();
+    navigate("/login");
+  };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 space-y-6">
@@ -131,7 +136,10 @@ export default function Profile() {
           >
             Account Settings
           </Button>
-          <Button className="px-3 py-2 text-sm">Logout</Button>
+          {/* ✅ Logout now works */}
+          <Button className="px-3 py-2 text-sm" onClick={handleLogout}>
+            Logout
+          </Button>
         </div>
       </div>
 
@@ -153,7 +161,6 @@ export default function Profile() {
               </div>
             </div>
 
-            {/* Stats (reviews reflect latest state) */}
             <div className="grid grid-cols-4 gap-6 text-right text-sm">
               <Stat value={computedStats.totalOrders} label="Total Orders" />
               <Stat value={money(computedStats.totalSpent)} label="Total Spent" />
