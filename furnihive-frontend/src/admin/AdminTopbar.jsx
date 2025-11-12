@@ -26,10 +26,10 @@ export default function AdminTopbar() {
   }, []);
 
   const logout = () => {
-    localStorage.removeItem("fh_token");
-    localStorage.removeItem("fh_user");
-    navigate("/login");
-  };
+  localStorage.removeItem("fh_token");
+  localStorage.removeItem("fh_user");
+  navigate("/admin/login");
+};
 
   const openNotification = (n) => {
     markRead(n.id);
