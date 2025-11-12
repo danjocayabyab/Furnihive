@@ -40,28 +40,24 @@ export default function SellerTopbar() {
         </Link>
 
         {/* Right: messages + account */}
-        <div className="flex items-center gap-3" ref={menuRef}>
-          {/* Messages */}
+        <div className="flex items-center gap-4" ref={menuRef}>
+          {/* ✅ Messages (text only) */}
           <button
             onClick={() => navigate("/seller/messages")}
-            className="relative grid h-9 w-9 place-items-center rounded-full hover:bg-[var(--cream-50)] text-[var(--orange-700)]"
+            className="relative text-sm font-medium text-[var(--orange-700)] hover:underline"
             title="Messages"
           >
-            💬
-            {unread > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--orange-600)] ring-2 ring-white" />
-            )}
+            ✉︎
+            
           </button>
 
-          {/* Account dropdown */}
+          {/* ✅ Account dropdown (text only) */}
           <div className="relative">
             <button
               onClick={() => setOpen((s) => !s)}
-              className="flex items-center gap-2 px-3 h-9 rounded-full hover:bg-[var(--cream-50)] text-[var(--orange-700)]"
+              className="flex items-center gap-1 px-3 h-9 rounded-full hover:bg-[var(--cream-50)] text-sm font-medium text-[var(--orange-700)]"
             >
-              <span>👤</span>
-              <span className="text-sm">Account</span>
-              <span className="text-[10px]">▾</span>
+              Account <span className="text-[10px]">▾</span>
             </button>
 
             {open && (
@@ -69,7 +65,7 @@ export default function SellerTopbar() {
                 <button
                   onClick={() => {
                     setOpen(false);
-                    navigate("/seller/settings"); 
+                    navigate("/seller/settings");
                   }}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--cream-50)]"
                 >

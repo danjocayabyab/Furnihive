@@ -209,7 +209,7 @@ export default function SellerMessages() {
               Customer Conversations
             </div>
             <div className="flex items-center gap-2 rounded-full border border-[var(--line-amber)] bg-[var(--cream-50)] px-3 py-2">
-              <span>🔎</span>
+              
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -267,26 +267,19 @@ export default function SellerMessages() {
         {/* right: thread */}
         <section className="rounded-2xl border border-[var(--line-amber)] bg-white flex flex-col">
           {/* thread header */}
-          <div className="p-4 border-b border-[var(--line-amber)] flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img
-                src={active?.avatar}
-                className="h-9 w-9 rounded-full object-cover border border-[var(--line-amber)]"
-              />
-              <div>
-                <div className="font-medium text-[var(--brown-700)] leading-tight">
-                  {active?.buyerName}
-                </div>
-                <div className="text-[11px] text-green-700">Online</div>
-              </div>
-            </div>
-            {/* quick actions (icons only UI) */}
-            <div className="flex items-center gap-3 text-[var(--orange-700)]">
-              <span title="Call">📞</span>
-              <span title="Open in CRM">🗂️</span>
-              <span title="More">⋯</span>
-            </div>
-          </div>
+<div className="p-4 border-b border-[var(--line-amber)] flex items-center gap-3">
+  <img
+    src={active?.avatar}
+    className="h-9 w-9 rounded-full object-cover border border-[var(--line-amber)]"
+  />
+  <div>
+    <div className="font-medium text-[var(--brown-700)] leading-tight">
+      {active?.buyerName}
+    </div>
+    <div className="text-[11px] text-green-700">Online</div>
+  </div>
+</div>
+
 
           {/* message list */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">

@@ -1,7 +1,13 @@
 import Stars from "./Stars.jsx";
 
 export default function ReviewCard({ r }) {
-  const initials = r.name.split(" ").map(n => n[0]).slice(0,2).join("").toUpperCase();
+  const initials = r.name
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   return (
     <div className="rounded-xl border border-[var(--line-amber)] bg-white p-4">
       <div className="flex items-start gap-3">
@@ -31,15 +37,7 @@ export default function ReviewCard({ r }) {
             {r.text}
           </p>
 
-          <div className="mt-3 flex items-center gap-3 text-xs">
-            <button
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-[var(--line-amber)] hover:bg-[var(--cream-50)]"
-              onClick={r.onHelpful}
-            >
-              👍 Helpful <span className="text-gray-600">({r.helpful})</span>
-            </button>
-            <button className="text-[var(--orange-600)] hover:underline">Reply</button>
-          </div>
+          {/* Removed Helpful & Reply buttons */}
         </div>
       </div>
     </div>

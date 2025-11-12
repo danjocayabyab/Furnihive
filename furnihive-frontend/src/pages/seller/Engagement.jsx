@@ -124,12 +124,12 @@ export default function SellerEngagement() {
 
       {/* KPI cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <KPI label="Total Reviews" value={kpis.totalReviews} icon="⭐" />
-        <KPI label="Inquiries" value={kpis.totalInquiries} icon="💬" />
+        <KPI label="Total Reviews" value={kpis.totalReviews}  />
+        <KPI label="Inquiries" value={kpis.totalInquiries}  />
         <KPI
           label="Unread"
           value={kpis.unread}
-          icon="❗"
+          
           accent="text-red-600"
         />
       </div>

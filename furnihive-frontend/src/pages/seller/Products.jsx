@@ -62,45 +62,47 @@ export default function SellerProducts() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-5 space-y-5">
-      {/* Back to dashboard */}
-      <button
-        onClick={() => navigate("/seller")}
-        className="inline-flex items-center gap-2 text-[var(--brown-700)] hover:text-[var(--orange-700)]"
-      >
-        <span className="text-xl leading-none">←</span>
-        <span className="font-semibold">Back to Dashboard</span>
-      </button>
+      {/* Header */}
+<div className="flex items-center justify-between">
+  <div className="flex items-center gap-3">
+    <button
+      onClick={() => navigate("/seller")}
+      className="h-9 w-9 rounded-lg border border-[var(--line-amber)] bg-white grid place-items-center hover:bg-[var(--amber-50)]"
+      title="Back to Dashboard"
+    >
+      ←
+    </button>
+    <div>
+      <h1 className="text-xl font-semibold text-[var(--brown-700)]">
+        Product Management
+      </h1>
+      <p className="text-sm text-gray-600">
+        Manage your product catalog
+      </p>
+    </div>
+  </div>
+  <button
+    onClick={() => setShowAdd(true)}
+    className="bg-[var(--orange-600)] hover:brightness-95 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-1"
+  >
+    <span className="text-lg leading-none">＋</span> Add Product
+  </button>
+</div>
 
-      {/* Header row */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm text-[var(--orange-700)]/80">
-            Manage your product catalog
-          </div>
-        <h1 className="text-2xl font-semibold text-[var(--brown-700)]">
-            Product Management
-          </h1>
-        </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-[var(--orange-600)] text-white px-4 py-2 font-semibold hover:brightness-95"
-        >
-          <span>＋</span> Add Product
-        </button>
-      </div>
+
 
       {/* Metric cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard icon="📦" label="Total Products" value={stats.total} />
-        <MetricCard icon="✅" label="Active" value={stats.active} />
-        <MetricCard icon="⚠️" label="Low Stock" value={stats.lowStock} />
-        <MetricCard icon="⭐" label="Featured" value={stats.featured} />
+        <MetricCard  label="Total Products" value={stats.total} />
+        <MetricCard  label="Active" value={stats.active} />
+        <MetricCard  label="Low Stock" value={stats.lowStock} />
+        <MetricCard  label="Featured" value={stats.featured} />
       </div>
 
       {/* Search */}
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-3">
         <div className="flex items-center gap-2 rounded-full border border-[var(--line-amber)] bg-[var(--cream-50)] px-3 py-2">
-          <span className="text-[var(--orange-700)]">🔎</span>
+          <span className="text-[var(--orange-700)]"></span>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}

@@ -33,6 +33,7 @@ import SellerSettings from "./pages/seller/Settings.jsx";
 
 /* ---------- Admin Layout + Pages ---------- */
 import AdminLayout from "./admin/AdminLayout";
+import AdminLogin from "./admin/AdminLogin";
 
 /* ---------- Role Protection ---------- */
 function RequireRole({ role, children }) {
@@ -104,7 +105,9 @@ export default function App() {
           </RequireRole>
         }
       />
+      <Route path="/admin/login" element={<AdminLogin />} />
 
+      
       {/* ---------- Fallback ---------- */}
       <Route path="*" element={<div className="p-8">Not Found</div>} />
     </Routes>

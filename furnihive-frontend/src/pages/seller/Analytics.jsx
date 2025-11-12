@@ -108,21 +108,21 @@ export default function SellerAnalytics() {
           label="Total Revenue"
           value={peso(snapshot.revenue)}
           delta={snapshot.revenueChangePct}
-          icon="📈"
+          
           accent="text-emerald-600"
         />
         <KPI
           label="Total Orders"
           value={snapshot.orders}
           delta={snapshot.ordersChangePct}
-          icon="🛒"
+          
           accent="text-emerald-600"
         />
         <KPI
           label="Store Visitors"
           value={prettyVisitors}
           delta={snapshot.visitorsChangePct}
-          icon="👁️"
+          
           accent="text-emerald-600"
           iconColor="text-blue-600"
         />
@@ -130,7 +130,7 @@ export default function SellerAnalytics() {
           label="Conversion Rate"
           value={`${snapshot.conversionRatePct}%`}
           delta={snapshot.conversionChangePct}
-          icon="👥"
+          
           accent={snapshot.conversionChangePct >= 0 ? "text-emerald-600" : "text-red-600"}
           iconColor="text-fuchsia-600"
         />
