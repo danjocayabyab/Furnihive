@@ -60,10 +60,10 @@ export default function AdminTopbar() {
           <div className="relative" ref={bellRef}>
             <button
               onClick={() => setOpenBell((s) => !s)}
-              className="relative grid h-9 w-30 place-items-center rounded-full hover:bg-[var(--cream-50)] text-black" // <-- changed to black
+              className="relative grid h-9 w-9 place-items-center rounded-full hover:bg-[var(--cream-50)] text-black" // <-- changed to black
               title="Notifications"
             >
-              ⩍(‿ɣ‿) Ɑ͞ ̶͞ ̶͞ ̶͞ لں͞
+              ⩍
               {unread > 0 && (
                 <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--orange-600)] ring-2 ring-white" />
               )}
