@@ -2,19 +2,15 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/Button.jsx";
 
-/* ------------------ Tabs ------------------ */
+/* ------------------ Tabs (security removed) ------------------ */
 const TABS = [
-  { key: "personal", label: "Personal",},
-  { key: "security", label: "Security",},
-  { key: "notifications", label: "Notifications",},
-  { key: "addresses", label: "Addresses",},
-  { key: "privacy", label: "Privacy" },
+  { key: "personal", label: "Personal" },
+  { key: "addresses", label: "Addresses" },
 ];
 
 /* ---------------- Mock user ---------------- */
 const mockUser = {
-  avatar:
-    "",
+  avatar: "",
   firstName: "Maria",
   lastName: "Santos",
   email: "maria.santos@email.com",
@@ -49,7 +45,6 @@ export default function AccountSettings() {
                 : "hover:bg-white"
             }`}
           >
-            <span>{t.icon}</span>
             {t.label}
           </button>
         ))}
@@ -57,10 +52,7 @@ export default function AccountSettings() {
 
       {/* Panels */}
       {tab === "personal" && <PersonalPanel />}
-      {tab === "security" && <SecurityPanel />}
-      {tab === "notifications" && <NotificationsPanel />}
       {tab === "addresses" && <AddressesPanel />}
-      {tab === "privacy" && <PrivacyPanel />}
     </div>
   );
 }
@@ -227,162 +219,6 @@ function PersonalPanel() {
 }
 
 /* =========================================================
-   SECURITY
-========================================================= */
-function SecurityPanel() {
-  const [form, setForm] = useState({ current: "", newPass: "", confirm: "" });
-  const [saving, setSaving] = useState(false);
-  const [twoFA, setTwoFA] = useState({ sms: false, email: false });
-
-  const inputCls =
-    "w-full rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-sm outline-none";
-
-  const onUpdate = async () => {
-    if (!form.current || !form.newPass || form.newPass !== form.confirm) {
-      alert("Please fill all fields and confirm password correctly.");
-      return;
-    }
-    setSaving(true);
-    // TODO: await api.post('/auth/change-password', form)
-    await new Promise((r) => setTimeout(r, 700));
-    setSaving(false);
-    alert("Password updated!");
-    setForm({ current: "", newPass: "", confirm: "" });
-  };
-
-  const Toggle = ({ checked, onChange }) => (
-    <label className="inline-flex items-center cursor-pointer">
-      <input type="checkbox" className="sr-only" checked={checked} onChange={onChange} />
-      <div className={`w-11 h-6 rounded-full transition ${checked ? "bg-[var(--orange-600)]" : "bg-gray-300"}`}>
-        <div className={`w-5 h-5 bg-white rounded-full shadow transform transition ${checked ? "translate-x-5" : "translate-x-0"}`} />
-      </div>
-    </label>
-  );
-
-  return (
-    <div className="space-y-6">
-      {/* Change password */}
-      <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <h3 className="text-[var(--brown-700)] font-semibold mb-4">Change Password</h3>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold mb-1">Current Password</label>
-            <input type="password" className={inputCls} value={form.current} onChange={(e) => setForm((f) => ({ ...f, current: e.target.value }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1">New Password</label>
-            <input type="password" className={inputCls} value={form.newPass} onChange={(e) => setForm((f) => ({ ...f, newPass: e.target.value }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1">Confirm New Password</label>
-            <input type="password" className={inputCls} value={form.confirm} onChange={(e) => setForm((f) => ({ ...f, confirm: e.target.value }))} />
-          </div>
-        </div>
-        <Button className="mt-4" onClick={onUpdate} disabled={saving}>
-          {saving ? "Updating..." : "Update Password"}
-        </Button>
-      </div>
-
-      {/* 2FA */}
-      <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <h3 className="text-[var(--brown-700)] font-semibold mb-4">Two-Factor Authentication</h3>
-        <div className="space-y-4">
-          <Row
-            title="SMS Authentication"
-            sub="Receive verification codes via SMS"
-            right={<Toggle checked={twoFA.sms} onChange={(e) => setTwoFA((f) => ({ ...f, sms: e.target.checked }))} />}
-          />
-          <Row
-            title="Email Authentication"
-            sub="Receive verification codes via email"
-            right={<Toggle checked={twoFA.email} onChange={(e) => setTwoFA((f) => ({ ...f, email: e.target.checked }))} />}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* =========================================================
-   NOTIFICATIONS
-========================================================= */
-function NotificationsPanel() {
-  const [orderNotifs, setOrderNotifs] = useState({
-    orderUpdates: true,
-    promos: true,
-    newProducts: false,
-    priceDrops: true,
-  });
-  const [channels, setChannels] = useState({
-    email: true,
-    sms: false,
-    push: true,
-  });
-
-  const Toggle = ({ checked, onChange }) => (
-    <label className="inline-flex items-center cursor-pointer">
-      <input type="checkbox" className="sr-only" checked={checked} onChange={onChange} />
-      <div className={`w-11 h-6 rounded-full transition ${checked ? "bg-[var(--orange-600)]" : "bg-gray-300"}`}>
-        <div className={`w-5 h-5 bg-white rounded-full shadow transform transition ${checked ? "translate-x-5" : "translate-x-0"}`} />
-      </div>
-    </label>
-  );
-
-  return (
-    <div className="space-y-6">
-      {/* Order & Account Notifications */}
-      <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <h3 className="text-[var(--brown-700)] font-semibold mb-4">Order & Account Notifications</h3>
-        <div className="space-y-5">
-          <Row
-            title="Order Updates"
-            sub="Updates about your order status and shipping"
-            right={<Toggle checked={orderNotifs.orderUpdates} onChange={(e) => setOrderNotifs((s) => ({ ...s, orderUpdates: e.target.checked }))} />}
-          />
-          <Row
-            title="Promotions & Deals"
-            sub="Special offers and promotional campaigns"
-            right={<Toggle checked={orderNotifs.promos} onChange={(e) => setOrderNotifs((s) => ({ ...s, promos: e.target.checked }))} />}
-          />
-          <Row
-            title="New Product Alerts"
-            sub="Notifications about new products in your favorite categories"
-            right={<Toggle checked={orderNotifs.newProducts} onChange={(e) => setOrderNotifs((s) => ({ ...s, newProducts: e.target.checked }))} />}
-          />
-          <Row
-            title="Price Drop Alerts"
-            sub="When items in your wishlist go on sale"
-            right={<Toggle checked={orderNotifs.priceDrops} onChange={(e) => setOrderNotifs((s) => ({ ...s, priceDrops: e.target.checked }))} />}
-          />
-        </div>
-      </div>
-
-      {/* Communication Preferences */}
-      <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <h3 className="text-[var(--brown-700)] font-semibold mb-4">Communication Preferences</h3>
-        <div className="space-y-5">
-          <Row
-            title="Email Notifications"
-            sub="Receive notifications via email"
-            right={<Toggle checked={channels.email} onChange={(e) => setChannels((c) => ({ ...c, email: e.target.checked }))} />}
-          />
-          <Row
-            title="SMS Notifications"
-            sub="Receive notifications via SMS"
-            right={<Toggle checked={channels.sms} onChange={(e) => setChannels((c) => ({ ...c, sms: e.target.checked }))} />}
-          />
-          <Row
-            title="Push Notifications"
-            sub="Receive push notifications on your device"
-            right={<Toggle checked={channels.push} onChange={(e) => setChannels((c) => ({ ...c, push: e.target.checked }))} />}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* =========================================================
    ADDRESSES
 ========================================================= */
 function AddressesPanel() {
@@ -473,6 +309,9 @@ function AddressesPanel() {
   );
 }
 
+/* =========================================================
+   Shared little bits
+========================================================= */
 function AddressCard({ addr, onEdit, onDelete, onSetDefault }) {
   return (
     <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-5 relative">
@@ -595,139 +434,6 @@ function AddressModal({ mode, initial, onClose, onSave }) {
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button onClick={save}>{mode === "add" ? "Add Address" : "Save Changes"}</Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* =========================================================
-   PRIVACY
-========================================================= */
-function PrivacyPanel() {
-  const [visibility, setVisibility] = useState("Public - Anyone can see your profile");
-  const [prefs, setPrefs] = useState({
-    showPurchase: false,
-    showWishlist: true,
-    personalized: true,
-  });
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  const Toggle = ({ checked, onChange }) => (
-    <label className="inline-flex items-center cursor-pointer">
-      <input type="checkbox" className="sr-only" checked={checked} onChange={onChange} />
-      <div className={`w-11 h-6 rounded-full transition ${checked ? "bg-[var(--orange-600)]" : "bg-gray-300"}`}>
-        <div className={`w-5 h-5 bg-white rounded-full shadow transform transition ${checked ? "translate-x-5" : "translate-x-0"}`} />
-      </div>
-    </label>
-  );
-
-  return (
-    <div className="space-y-6">
-      {/* Privacy settings */}
-      <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <h3 className="text-[var(--brown-700)] font-semibold mb-4">Profile Privacy</h3>
-
-        <div className="mb-4">
-          <label className="block text-xs font-semibold mb-1">Profile Visibility</label>
-          <select
-            className="w-full rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm"
-            value={visibility}
-            onChange={(e) => setVisibility(e.target.value)}
-          >
-            <option>Public - Anyone can see your profile</option>
-            <option>Friends Only - Only approved users can see your profile</option>
-            <option>Private - Only you can see your profile</option>
-          </select>
-        </div>
-
-        <div className="space-y-5">
-          <Row
-            title="Show Purchase History"
-            sub="Allow others to see your purchase history"
-            right={
-              <Toggle
-                checked={prefs.showPurchase}
-                onChange={(e) => setPrefs((p) => ({ ...p, showPurchase: e.target.checked }))}
-              />
-            }
-          />
-          <Row
-            title="Show Wishlist"
-            sub="Allow others to see your wishlist items"
-            right={
-              <Toggle
-                checked={prefs.showWishlist}
-                onChange={(e) => setPrefs((p) => ({ ...p, showWishlist: e.target.checked }))}
-              />
-            }
-          />
-          <Row
-            title="Personalized Recommendations"
-            sub="Use your data to provide personalized product recommendations"
-            right={
-              <Toggle
-                checked={prefs.personalized}
-                onChange={(e) => setPrefs((p) => ({ ...p, personalized: e.target.checked }))}
-              />
-            }
-          />
-        </div>
-      </div>
-
-      {/* Danger Zone */}
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
-        <h3 className="text-red-700 font-semibold mb-2">Danger Zone</h3>
-        <p className="text-sm text-red-700 mb-3">
-          Once you delete your account, there is no going back. Please be certain.
-        </p>
-        <Button onClick={() => setConfirmDelete(true)} className="bg-red-600 hover:bg-red-700">
-          🗑 Delete Account
-        </Button>
-      </div>
-
-      {confirmDelete && (
-        <ConfirmModal
-          title="Delete Account"
-          text="Are you absolutely sure? This action cannot be undone."
-          confirmText="Delete Permanently"
-          onCancel={() => setConfirmDelete(false)}
-          onConfirm={() => {
-            setConfirmDelete(false);
-            alert("Account deletion would be requested to the server here.");
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-/* =========================================================
-   Shared little bits
-========================================================= */
-function Row({ title, sub, right }) {
-  return (
-    <div className="flex items-center justify-between">
-      <div>
-        <div className="font-medium text-[var(--orange-600)]">{title}</div>
-        <div className="text-xs text-gray-600">{sub}</div>
-      </div>
-      {right}
-    </div>
-  );
-}
-
-function ConfirmModal({ title, text, confirmText, onCancel, onConfirm }) {
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 grid place-items-center p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white border border-[var(--line-amber)] p-5 space-y-4">
-        <h4 className="text-[var(--brown-700)] font-semibold">{title}</h4>
-        <p className="text-sm text-gray-700">{text}</p>
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onCancel}>Cancel</Button>
-          <Button className="bg-red-600 hover:bg-red-700" onClick={onConfirm}>
-            {confirmText}
-          </Button>
         </div>
       </div>
     </div>

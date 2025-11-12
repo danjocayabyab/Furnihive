@@ -11,16 +11,18 @@ export default function Cart() {
 
   const [promo, setPromo] = useState("");
   const [confirm, setConfirm] = useState(null); // { type:"delete"|"clear", id? }
+  const [selected, setSelected] = useState(items.map((i) => i.id)); // all selected by default
 
   const totals = useMemo(() => {
-    const subtotal = items.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0);
-    const discounts = items.reduce(
+    const selectedItems = items.filter((i) => selected.includes(i.id));
+    const subtotal = selectedItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0);
+    const discounts = selectedItems.reduce(
       (s, i) => s + ((i.oldPrice || i.price) - (i.price || 0)) * (i.qty || 1),
       0
     );
-    const shipping = subtotal >= 25000 || items.length === 0 ? 0 : 500;
+    const shipping = subtotal >= 25000 || selectedItems.length === 0 ? 0 : 500;
     return { subtotal, discounts, shipping, total: subtotal + shipping };
-  }, [items]);
+  }, [items, selected]);
 
   const changeQty = (id, delta) => {
     const item = items.find((i) => i.id === id);
@@ -28,35 +30,67 @@ export default function Cart() {
     updateQty(id, (item.qty || 1) + delta);
   };
 
+  const toggleSelect = (id) => {
+    setSelected((s) =>
+      s.includes(id) ? s.filter((i) => i !== id) : [...s, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.length === items.length) setSelected([]);
+    else setSelected(items.map((i) => i.id));
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
-        <Link to="/shop" className="text-sm text-[var(--orange-600)] hover:underline">
-          ← Continue Shopping
-        </Link>
-        <h1 className="flex items-center gap-2 text-xl font-semibold text-[var(--brown-700)]">
-           Shopping Cart
-          <span className="text-[var(--orange-600)] font-normal text-base">
-            ({items.length})
-          </span>
-        </h1>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/shop"
+            className="text-sm text-[var(--orange-600)] hover:underline"
+          >
+            ← Continue Shopping
+          </Link>
+          <h1 className="flex items-center gap-2 text-xl font-semibold text-[var(--brown-700)]">
+            Shopping Cart
+            <span className="text-[var(--orange-600)] font-normal text-base">
+              ({items.length})
+            </span>
+          </h1>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-[1fr,320px] gap-6">
         {/* Items */}
         <div className="space-y-5">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-[var(--brown-700)]">Your Items</h2>
-            {items.length > 0 && (
-              <button
-                onClick={() => setConfirm({ type: "clear" })}
-                className="text-sm text-red-600 hover:underline"
-              >
-                Clear Cart
-              </button>
-            )}
-          </div>
+  <h2 className="text-lg font-semibold text-[var(--brown-700)]">
+    Your Items
+  </h2>
+  <div className="flex items-center gap-4">
+    {items.length > 0 && (
+      <label className="flex items-center gap-1 text-sm text-[var(--brown-700)]">
+        <input
+          type="checkbox"
+          checked={selected.length === items.length}
+          onChange={toggleSelectAll}
+          className="w-4 h-4 accent-[var(--orange-600)]"
+        />
+        Select All
+      </label>
+    )}
+    {items.length > 0 && (
+      <button
+        onClick={() => setConfirm({ type: "clear" })}
+        className="text-sm text-red-600 hover:underline"
+      >
+        Clear Cart
+      </button>
+    )}
+  </div>
+</div>
+
 
           {items.length === 0 && (
             <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-6 text-center text-gray-600">
@@ -69,11 +103,24 @@ export default function Cart() {
               key={item.id}
               className="rounded-2xl border border-[var(--line-amber)] bg-white p-4 flex gap-4"
             >
+              {/* Checkbox */}
+              <div className="flex flex-col justify-center">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(item.id)}
+                  onChange={() => toggleSelect(item.id)}
+                  className="w-5 h-5 accent-[var(--orange-600)]"
+                />
+              </div>
+
               {/* Image */}
               <div className="relative">
                 {item.oldPrice > item.price && (
                   <span className="absolute left-2 top-2 text-[11px] rounded-md bg-[var(--red-500)] text-white px-2 py-0.5">
-                    {Math.round(((item.oldPrice - item.price) / item.oldPrice) * 100)}% OFF
+                    {Math.round(
+                      ((item.oldPrice - item.price) / item.oldPrice) * 100
+                    )}
+                    % OFF
                   </span>
                 )}
                 <img
@@ -85,9 +132,13 @@ export default function Cart() {
 
               {/* Details */}
               <div className="flex-1 space-y-1">
-                <h3 className="font-semibold text-[var(--brown-700)]">{item.title}</h3>
+                <h3 className="font-semibold text-[var(--brown-700)]">
+                  {item.title}
+                </h3>
                 <p className="text-sm text-gray-600">by {item.seller}</p>
-                <p className="text-sm text-gray-600">Color: {item.color || "Default"}</p>
+                <p className="text-sm text-gray-600">
+                  Color: {item.color || "Default"}
+                </p>
                 <div className="text-sm text-yellow-600">⭐ {item.rating}</div>
 
                 <div className="mt-2 flex items-center gap-3">
@@ -147,7 +198,7 @@ export default function Cart() {
           <h3 className="font-semibold text-[var(--brown-700)]">Order Summary</h3>
           <div className="text-sm space-y-1">
             <div className="flex justify-between">
-              <span>Subtotal ({items.length} items)</span>
+              <span>Subtotal ({selected.length} items)</span>
               <span>{peso(totals.subtotal)}</span>
             </div>
             <div className="flex justify-between text-green-600">
@@ -166,9 +217,11 @@ export default function Cart() {
           </div>
 
           <button
-            onClick={() => navigate("/checkout")}
+            onClick={() =>
+              navigate("/checkout", { state: { selectedItems: selected } })
+            }
             className="w-full rounded-lg bg-[var(--orange-600)] px-4 py-3 text-white font-medium hover:brightness-95 disabled:opacity-50"
-            disabled={items.length === 0}
+            disabled={selected.length === 0}
           >
             Proceed to Checkout
           </button>
@@ -184,6 +237,7 @@ export default function Cart() {
             if (confirm.type === "clear") clearCart();
             else removeItem(confirm.id);
             setConfirm(null);
+            setSelected(items.map((i) => i.id)); // reset selection
           }}
         />
       )}
@@ -195,7 +249,6 @@ function ConfirmModal({ type, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 grid place-items-center p-4">
       <div className="bg-white rounded-2xl border border-[var(--line-amber)] max-w-sm w-full p-6 text-center space-y-4">
-        <div className="text-4xl">{type === "clear" ? "🧹" : "🗑"}</div>
         <h2 className="font-semibold text-[var(--brown-700)] text-lg">
           {type === "clear" ? "Clear Cart?" : "Remove Item?"}
         </h2>

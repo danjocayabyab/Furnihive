@@ -44,7 +44,9 @@ export default function Shop() {
   }, [products, priceMax, inStockOnly, checkedCats, sort]);
 
   const toggleCat = (c) =>
-    setCheckedCats((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+    setCheckedCats((prev) =>
+      prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]
+    );
 
   const clearAll = () => {
     setCheckedCats([]);
@@ -56,11 +58,34 @@ export default function Shop() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       {/* Page heading */}
-      <div className="flex items-center gap-3 mb-6">
-        <Link to="/home" className="text-sm text-[var(--orange-600)] hover:underline">
-          ← Back to Home
-        </Link>
-        <h1 className="text-xl font-semibold text-[var(--brown-700)]">Shop</h1>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Link
+            to="/home"
+            className="text-sm text-[var(--orange-600)] hover:underline"
+          >
+            ← Back to Home
+          </Link>
+          <h1 className="text-xl font-semibold text-[var(--brown-700)]">
+            Shop
+          </h1>
+        </div>
+
+        {/* Right side: product count + sort */}
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-[var(--brown-700)] whitespace-nowrap">
+            {filtered.length} products found
+          </div>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            className="rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-sm"
+          >
+            <option value="featured">Featured</option>
+            <option value="priceLow">Price: Low to High</option>
+            <option value="priceHigh">Price: High to Low</option>
+          </select>
+        </div>
       </div>
 
       {/* MAIN LAYOUT: flex with fixed left sidebar */}
@@ -69,15 +94,20 @@ export default function Shop() {
         <aside className="w-[260px] shrink-0 sticky top-20 self-start">
           <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
             <h3 className="flex items-center gap-2 text-[var(--brown-700)] font-semibold">
-               Filters
+              Filters
             </h3>
 
             {/* Categories */}
             <div className="mt-5">
-              <p className="text-xs font-medium text-gray-600 mb-2">Categories</p>
+              <p className="text-xs font-medium text-gray-600 mb-2">
+                Categories
+              </p>
               <div className="space-y-2">
                 {CATS.map((c) => (
-                  <label key={c} className="flex items-center gap-2 text-sm text-gray-800">
+                  <label
+                    key={c}
+                    className="flex items-center gap-2 text-sm text-gray-800"
+                  >
                     <input
                       type="checkbox"
                       className="h-4 w-4 rounded border-gray-300"
@@ -94,7 +124,9 @@ export default function Shop() {
 
             {/* Price Range */}
             <div>
-              <p className="text-xs font-medium text-gray-600 mb-2">Price Range</p>
+              <p className="text-xs font-medium text-gray-600 mb-2">
+                Price Range
+              </p>
               <input
                 type="range"
                 min={0}
@@ -134,23 +166,6 @@ export default function Shop() {
 
         {/* RIGHT: Products */}
         <section className="min-w-0 flex-1">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-            <div className="text-sm text-[var(--brown-700)]">
-              {filtered.length} products found
-            </div>
-            <div>
-              <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value)}
-                className="rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-sm"
-              >
-                <option value="featured">Featured</option>
-                <option value="priceLow">Price: Low to High</option>
-                <option value="priceHigh">Price: High to Low</option>
-              </select>
-            </div>
-          </div>
-
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {filtered.map((p) => (
               <ProductCard key={p.id} product={p} />

@@ -1,7 +1,6 @@
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useMemo, useState } from "react";
 import Button from "../../components/ui/Button.jsx";
-import ProductCard from "../../components/ProductCard.jsx";
 
 /* ---------- Mock data (swap with API later) ---------- */
 const user = {
@@ -11,7 +10,6 @@ const user = {
   location: "Quezon City, Metro Manila",
   avatar:
     "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=400&auto=format&fit=crop",
-  stats: { totalOrders: 15, totalSpent: 425000, wishlist: 8, reviews: 12 },
 };
 
 const initialOrders = [
@@ -67,6 +65,7 @@ const STATUS_STYLES = {
   Shipped: "bg-sky-100 text-sky-700 border border-sky-200",
   Processing: "bg-amber-100 text-amber-700 border border-amber-200",
 };
+
 /* ----------------------------------------------------- */
 
 export default function Profile() {
@@ -76,8 +75,6 @@ export default function Profile() {
   const setTab = (t) => setSp({ tab: t });
 
   const [orders] = useState(initialOrders);
-
-  // Reviews live here so both Overview/Orders panels can add, and Reviews tab can display.
   const [reviews, setReviews] = useState([]);
 
   // Modals
@@ -86,7 +83,6 @@ export default function Profile() {
 
   const money = (n) => `₱${Number(n).toLocaleString()}`;
 
-  // submit new review (frontend only)
   const handleSubmitReview = ({ orderId, product, rating, text }) => {
     const newReview = {
       id: `rev-${Date.now()}`,
@@ -101,16 +97,6 @@ export default function Profile() {
     setTab("reviews");
   };
 
-  // Derived counters for header stats
-  const computedStats = useMemo(
-    () => ({
-      ...user.stats,
-      reviews: reviews.length,
-    }),
-    [reviews]
-  );
-
-  // ✅ Logout function (added)
   const handleLogout = () => {
     localStorage.removeItem("fh_user");
     localStorage.removeItem("fh_token");
@@ -136,7 +122,6 @@ export default function Profile() {
           >
             Account Settings
           </Button>
-          {/* ✅ Logout now works */}
           <Button className="px-3 py-2 text-sm" onClick={handleLogout}>
             Logout
           </Button>
@@ -145,27 +130,18 @@ export default function Profile() {
 
       {/* Header card */}
       <div className="rounded-2xl overflow-hidden border border-[var(--line-amber)]">
-        <div className="bg-gradient-to-r from-[var(--amber-500)] to-[var(--orange-600)] p-5 text-white">
-          <div className="flex items-center gap-4">
-            <img
-              src={user.avatar}
-              alt={user.name}
-              className="h-16 w-16 rounded-full object-cover ring-2 ring-white/80"
-            />
-            <div className="flex-1">
-              <div className="text-xl font-bold">{user.name}</div>
-              <div className="text-sm opacity-95">{user.email}</div>
-              <div className="text-xs opacity-90 mt-1 flex items-center gap-3">
-                <span>🪪 {user.joined}</span>
-                <span>📍 {user.location}</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-4 gap-6 text-right text-sm">
-              <Stat value={computedStats.totalOrders} label="Total Orders" />
-              <Stat value={money(computedStats.totalSpent)} label="Total Spent" />
-              <Stat value={computedStats.wishlist} label="Wishlist Items" />
-              <Stat value={computedStats.reviews} label="Reviews Written" />
+        <div className="bg-gradient-to-r from-[var(--amber-500)] to-[var(--orange-600)] p-5 text-white flex items-center gap-4">
+          <img
+            src={user.avatar}
+            alt={user.name}
+            className="h-16 w-16 rounded-full object-cover ring-2 ring-white/80"
+          />
+          <div>
+            <div className="text-xl font-bold">{user.name}</div>
+            <div className="text-sm opacity-95">{user.email}</div>
+            <div className="text-xs opacity-90 mt-1 flex items-center gap-3">
+              <span>🪪 {user.joined}</span>
+              <span>📍 {user.location}</span>
             </div>
           </div>
         </div>
@@ -178,9 +154,6 @@ export default function Profile() {
             </TabButton>
             <TabButton active={tab === "orders"} onClick={() => setTab("orders")}>
               Order History
-            </TabButton>
-            <TabButton active={tab === "wishlist"} onClick={() => setTab("wishlist")}>
-              Wishlist
             </TabButton>
             <TabButton active={tab === "reviews"} onClick={() => setTab("reviews")}>
               Reviews
@@ -206,7 +179,6 @@ export default function Profile() {
           onWriteReview={setReviewFor}
         />
       )}
-      {tab === "wishlist" && <WishlistPanel />}
       {tab === "reviews" && <ReviewsPanel reviews={reviews} />}
 
       {/* Modals */}
@@ -225,11 +197,9 @@ export default function Profile() {
 }
 
 /* ---------- Panels ---------- */
-
 function OverviewPanel({ money, orders, onViewDetails, onWriteReview }) {
   return (
     <div className="grid lg:grid-cols-[1fr,360px] gap-6">
-      {/* Recent orders */}
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white">
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--line-amber)]">
           <h3 className="font-semibold text-[var(--brown-700)]">Recent Orders</h3>
@@ -254,25 +224,7 @@ function OverviewPanel({ money, orders, onViewDetails, onWriteReview }) {
             </li>
           ))}
         </ul>
-
-        {/* Achievements */}
-        <div className="grid sm:grid-cols-3 gap-4 p-5">
-          <Badge icon="👑" title="VIP Customer" sub="Earned after 10+ orders" />
-          <Badge icon="⭐" title="Top Reviewer" sub="10+ helpful reviews written" />
-          <Badge icon="👁️" title="Early Adopter" sub="Joined in the first year" />
-        </div>
       </div>
-
-      {/* Quick actions */}
-      <aside className="rounded-2xl border border-[var(--line-amber)] bg-white h-fit p-5">
-        <h3 className="font-semibold text-[var(--brown-700)] mb-3">Quick Actions</h3>
-        <div className="space-y-3">
-          <ActionButton label="Track Orders" to="/profile?tab=orders" />
-          <ActionButton label="View Wishlist" to="/profile?tab=wishlist" />
-          <ActionButton label="Write Review" to="/profile?tab=reviews" />
-          <ActionButton label="Payment Methods" to="/profile/settings" />
-        </div>
-      </aside>
     </div>
   );
 }
@@ -320,54 +272,6 @@ function OrdersPanel({ money, orders, onViewDetails, onWriteReview }) {
   );
 }
 
-function WishlistPanel() {
-  // Mock wishlist items (replace with GET /wishlist later)
-  const wishlist = [
-    {
-      id: "p1",
-      title: "Executive Office Desk",
-      price: 22500,
-      oldPrice: 28000,
-      image:
-        "https://images.unsplash.com/photo-1580489944761-15a19d654956?q=80&w=800&auto=format&fit=crop",
-      seller: "Metro Office Solutions",
-      rating: 4.6,
-      reviews: 156,
-    },
-    {
-      id: "p2",
-      title: "Modern Bookshelf",
-      price: 15500,
-      oldPrice: 18500,
-      image:
-        "https://images.unsplash.com/photo-1589820296156-f03f61d5c3c9?q=80&w=800&auto=format&fit=crop",
-      seller: "Palawan Design Co.",
-      rating: 4.6,
-      reviews: 134,
-    },
-    {
-      id: "p3",
-      title: "Glass Coffee Table",
-      price: 12500,
-      oldPrice: 15000,
-      image:
-        "https://images.unsplash.com/photo-1598300053650-943ff61ad3f6?q=80&w=800&auto=format&fit=crop",
-      seller: "QC Home Essentials",
-      rating: 4.3,
-      reviews: 67,
-      outOfStock: true,
-    },
-  ];
-
-  return (
-    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-      {wishlist.map((p) => (
-        <ProductCard key={p.id} product={p} />
-      ))}
-    </div>
-  );
-}
-
 function ReviewsPanel({ reviews }) {
   if (!reviews.length) {
     return (
@@ -400,7 +304,6 @@ function ReviewsPanel({ reviews }) {
 }
 
 /* ---------- UI bits ---------- */
-
 function TabButton({ active, onClick, children }) {
   return (
     <button
@@ -413,37 +316,6 @@ function TabButton({ active, onClick, children }) {
     >
       {children}
     </button>
-  );
-}
-
-function Stat({ value, label }) {
-  return (
-    <div>
-      <div className="text-2xl font-extrabold">{value}</div>
-      <div className="opacity-90">{label}</div>
-    </div>
-  );
-}
-
-function Badge({ icon, title, sub }) {
-  return (
-    <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-4 text-center">
-      <div className="text-2xl">{icon}</div>
-      <div className="mt-1 font-semibold text-[var(--brown-700)]">{title}</div>
-      <div className="text-xs text-gray-600">{sub}</div>
-    </div>
-  );
-}
-
-function ActionButton({ label, to }) {
-  return (
-    <Link
-      to={to}
-      className="w-full text-left px-3 py-2 rounded-lg border border-[var(--line-amber)] hover:bg-[var(--cream-50)] flex items-center gap-2 text-sm"
-    >
-      <span className="text-[var(--orange-600)]">•</span>
-      <span>{label}</span>
-    </Link>
   );
 }
 
@@ -472,6 +344,8 @@ function OrderRow({ o, money }) {
 /* ---------- Modals ---------- */
 
 function OrderDetailsModal({ order, onClose, money }) {
+  const statuses = ["Processing", "Shipped", "Delivered"];
+
   return (
     <div className="fixed inset-0 bg-black/40 z-50 grid place-items-center p-4">
       <div className="w-full max-w-2xl rounded-2xl bg-white border border-[var(--line-amber)] p-5 space-y-4">
@@ -503,6 +377,25 @@ function OrderDetailsModal({ order, onClose, money }) {
           </div>
         </div>
 
+        {/* Basic order tracking */}
+        <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-3 space-y-2">
+          <div className="text-xs font-semibold text-[var(--brown-700)] mb-1">Order Tracking</div>
+          <div className="flex items-center gap-2">
+            {statuses.map((s, i) => (
+              <div key={i} className="flex-1 text-center">
+                <div
+                  className={`w-6 h-6 mx-auto rounded-full ${
+                    s === order.status || statuses.indexOf(s) < statuses.indexOf(order.status)
+                      ? "bg-[var(--orange-600)]"
+                      : "bg-gray-300"
+                  }`}
+                />
+                <div className="text-[10px] mt-1">{s}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-3">
           <div className="text-xs font-semibold text-[var(--brown-700)] mb-1">Shipping Address</div>
           <div className="text-sm text-gray-700">
@@ -520,6 +413,7 @@ function OrderDetailsModal({ order, onClose, money }) {
   );
 }
 
+/* ---------- Write Review Modal ---------- */
 function WriteReviewModal({ order, onClose, onSubmit }) {
   const [rating, setRating] = useState(5);
   const [text, setText] = useState("");
@@ -557,7 +451,7 @@ function WriteReviewModal({ order, onClose, onSubmit }) {
         <div>
           <label className="block text-xs font-semibold mb-1 text-[var(--brown-700)]">Rating</label>
           <div className="flex items-center gap-1">
-            {[1,2,3,4,5].map((n) => (
+            {[1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
                 onClick={() => setRating(n)}

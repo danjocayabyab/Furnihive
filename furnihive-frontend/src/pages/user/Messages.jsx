@@ -114,7 +114,7 @@ export default function Messages() {
             ← Back to Home
           </Link>
           <div className="flex items-center gap-2">
-            <span className="text-lg">💬</span>
+            
             <h1 className="text-xl font-semibold text-[var(--brown-700)]">Messages</h1>
             <span className="grid h-5 min-w-[20px] place-items-center rounded-full bg-[var(--orange-600)] px-1.5 text-[11px] font-semibold text-white">
               {threads.reduce((n, t) => n + t.unread, 0)}
@@ -128,12 +128,12 @@ export default function Messages() {
         {/* Left: conversations */}
         <aside className="rounded-2xl border border-[var(--line-amber)] bg-white">
           <div className="flex items-center gap-2 border-b border-[var(--line-amber)] px-4 py-3">
-            <span>🗨️</span>
+          
             <div className="font-medium text-[var(--brown-700)]">Conversations</div>
           </div>
           <div className="p-3">
             <div className="flex items-center gap-2 rounded-full border border-[var(--line-amber)] bg-[var(--cream-50)] px-3 py-2">
-              <span className="text-[var(--orange-700)]">🔎</span>
+              <span className="text-[var(--orange-700)]"></span>
               <input
                 className="w-full bg-transparent text-sm outline-none"
                 placeholder="Search conversations..."
