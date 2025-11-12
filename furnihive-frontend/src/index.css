@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/* ---- Theme tokens ---- */
+:root {
+  --amber-500: #f59e0b;
+  --amber-400: #fbbf24;
+  --orange-600: #e66100;
+  --brown-700: #8b4b24;
+  --cream-50: #fff7e6;
+  --line-amber: #f1c680;
+}
+
+/* Background */
+.bg-hive {
+  background:
+    radial-gradient(circle at 0 0, rgba(0,0,0,0.03) 8px, transparent 9px) 0 0/24px 24px,
+    radial-gradient(circle at 12px 14px, rgba(0,0,0,0.03) 8px, transparent 9px) 0 0/24px 24px;
+  background-color: var(--cream-50);
+}
+
+/* Card */
+.shadow-card {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+}
+
+/* Tabs */
+.tab-bg {
+  background-color: #fff1c7;
+}
+
+/* Fonts */
+@layer base {
+  body {
+    font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+  }
+}

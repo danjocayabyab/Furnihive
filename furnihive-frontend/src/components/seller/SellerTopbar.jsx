@@ -1,0 +1,94 @@
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+
+export default function SellerTopbar() {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [unread, setUnread] = useState(1); // mock; wire to backend later
+  const menuRef = useRef(null);
+
+  // close dropdown on outside click
+  useEffect(() => {
+    const onClick = (e) => {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  const logout = () => {
+    // clear your auth/session as needed
+    localStorage.removeItem("fh_token");
+    navigate("/login");
+  };
+
+  return (
+    <header className="sticky top-0 z-40 w-full bg-white border-b border-[var(--line-amber)]">
+      <div className="mx-auto max-w-6xl px-4 h-[58px] flex items-center justify-between">
+        {/* Left: logo + label */}
+        <Link to="/seller" className="flex items-center gap-3">
+          <div className="h-8 w-8 grid place-items-center rounded-md bg-[var(--orange-600)] text-white font-bold">
+            F
+          </div>
+          <div className="leading-tight">
+            <div className="font-semibold text-[var(--brown-700)]">FurniHive</div>
+            <div className="text-[11px] text-[var(--orange-700)]/90 -mt-0.5">
+              Seller Dashboard
+            </div>
+          </div>
+        </Link>
+
+        {/* Right: messages + account */}
+        <div className="flex items-center gap-3" ref={menuRef}>
+          {/* Messages */}
+          <button
+            onClick={() => navigate("/seller/messages")}
+            className="relative grid h-9 w-9 place-items-center rounded-full hover:bg-[var(--cream-50)] text-[var(--orange-700)]"
+            title="Messages"
+          >
+            💬
+            {unread > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--orange-600)] ring-2 ring-white" />
+            )}
+          </button>
+
+          {/* Account dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setOpen((s) => !s)}
+              className="flex items-center gap-2 px-3 h-9 rounded-full hover:bg-[var(--cream-50)] text-[var(--orange-700)]"
+            >
+              <span>👤</span>
+              <span className="text-sm">Account</span>
+              <span className="text-[10px]">▾</span>
+            </button>
+
+            {open && (
+              <div className="absolute right-0 mt-1 w-56 rounded-xl border border-[var(--line-amber)] bg-white shadow-card overflow-hidden">
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    navigate("/seller/settings"); 
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--cream-50)]"
+                >
+                  <span>Account Settings</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    logout();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50"
+                >
+                  <span>Logout</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
