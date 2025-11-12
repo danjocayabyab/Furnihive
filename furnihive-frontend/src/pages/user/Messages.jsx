@@ -177,35 +177,33 @@ export default function Messages() {
 
         {/* Right: chat */}
         <section className="rounded-2xl border border-[var(--line-amber)] bg-white grid grid-rows-[auto,1fr,auto]">
-          {/* Chat header */}
-          <div className="flex items-center justify-between border-b border-[var(--line-amber)] px-4 py-3">
-            <div className="flex items-center gap-3">
-              <img
-                src={active.avatar}
-                alt={active.name}
-                className="h-9 w-9 rounded-full object-cover border border-[var(--line-amber)]"
-              />
-              <div>
-                <div className="flex items-center gap-2">
-                  <div className="font-medium text-[var(--brown-700)]">{active.name}</div>
-                  <span className="rounded-full border border-[var(--line-amber)] bg-[var(--amber-50)] px-1.5 text-[10px] text-[var(--orange-700)]">
-                    {active.role}
-                  </span>
-                  {active.online && (
-                    <span className="flex items-center gap-1 text-xs text-emerald-600">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500" /> Online
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-3 text-[var(--orange-700)]">
-              <button title="Call" className="hover:opacity-80">📞</button>
-              <button title="Video" className="hover:opacity-80">🎥</button>
-              <button title="More" className="hover:opacity-80">⋯</button>
-            </div>
-          </div>
+          {/* Chat header */}
+<div className="flex items-center justify-between border-b border-[var(--line-amber)] px-4 py-3">
+  <div className="flex items-center gap-3">
+    <img
+      src={active.avatar}
+      alt={active.name}
+      className="h-9 w-9 rounded-full object-cover border border-[var(--line-amber)]"
+    />
+    <div>
+      <div className="flex items-center gap-2">
+        <div className="font-medium text-[var(--brown-700)]">{active.name}</div>
+        <span className="rounded-full border border-[var(--line-amber)] bg-[var(--amber-50)] px-1.5 text-[10px] text-[var(--orange-700)]">
+          {active.role}
+        </span>
+        {active.online && (
+          <span className="flex items-center gap-1 text-xs text-emerald-600">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" /> Online
+          </span>
+        )}
+      </div>
+    </div>
+  </div>
+
+  
+</div>
+
 
           {/* Chat body */}
           <div className="h-[60vh] overflow-y-auto p-4">
@@ -263,3 +261,5 @@ function MessageBubble({ mine, text, time }) {
     </div>
   );
 }
+
+
