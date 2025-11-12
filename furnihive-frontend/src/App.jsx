@@ -28,6 +28,12 @@ import SellerAnalytics from "./pages/seller/Analytics.jsx";
 import SellerEngagement from "./pages/seller/Engagement.jsx";
 import SellerMessages from "./pages/seller/Messages.jsx";
 import SellerSettings from "./pages/seller/Settings.jsx";
+
+
+
+/* ---------- Admin Layout + Pages ---------- */
+import AdminLayout from "./admin/AdminLayout";
+
 /* ---------- Role Protection ---------- */
 function RequireRole({ role, children }) {
   let user = null;
@@ -87,6 +93,17 @@ export default function App() {
         <Route path="/seller/messages" element={<SellerMessages />} />
         <Route path="/seller/settings" element={<SellerSettings />} />
       </Route>
+
+
+      {/* ---------- Admin Routes ---------- */}
+      <Route
+        path="/admin"
+        element={
+          <RequireRole role="admin">
+            <AdminLayout />
+          </RequireRole>
+        }
+      />
 
       {/* ---------- Fallback ---------- */}
       <Route path="*" element={<div className="p-8">Not Found</div>} />
