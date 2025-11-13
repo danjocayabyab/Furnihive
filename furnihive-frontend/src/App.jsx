@@ -64,6 +64,16 @@ function LogoutRoute() {
 function RequireRole({ role, children }) {
   const { loading, user, profile } = useAuth();
   if (loading) return <div className="p-8">Loading...</div>;
+  // Allow demo admin access via localStorage token/user set by AdminLogin
+  if (role === "admin") {
+    const adminToken = typeof window !== "undefined" ? localStorage.getItem("fh_token") : null;
+    const adminUser = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("fh_user") || "null") : null;
+    if (adminToken && adminUser?.role === "admin") {
+      return children;
+    }
+    // If no authenticated user and no admin token, send to admin login
+    if (!user) return <Navigate to="/admin/login" replace />;
+  }
   if (!user) return <Navigate to="/login" replace />;
   const effectiveRole = user?.user_metadata?.role || profile?.role || "buyer";
   if (role && effectiveRole !== role) {
