@@ -11,6 +11,8 @@ import Input from "../../components/ui/Input.jsx";
 import PasswordInput from "../../components/ui/PasswordInput.jsx";
 import Button from "../../components/ui/Button.jsx";
 import LogoHex from "../../components/LogoHex.jsx";
+import { signup as signupApi } from "../../lib/auth.js";
+import Modal from "../../components/ui/Modal.jsx";
 
 /* ---------- Validation ---------- */
 const baseSchema = z.object({
@@ -35,7 +37,8 @@ const schema = baseSchema
   .and(
     z.discriminatedUnion("role", [
       z.object({ role: z.literal("buyer") }),
-      z.object({ role: z.literal("seller") }).and(sellerExtras),
+      // Keep option as ZodObject by merging seller extras instead of intersecting
+      z.object({ role: z.literal("seller") }).merge(sellerExtras),
     ])
   )
   .refine((d) => d.password === d.confirmPassword, {
@@ -47,6 +50,8 @@ const schema = baseSchema
 export default function Signup() {
   const [role, setRole] = useState("buyer");
   const navigate = useNavigate();
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [nextPath, setNextPath] = useState("/home");
 
   const {
     register,
@@ -74,13 +79,17 @@ export default function Signup() {
   useEffect(() => setValue("role", role), [role, setValue]);
 
   const onSubmit = async (values) => {
-    // TEMP mock submit; replace with API call later
-    await new Promise((r) => setTimeout(r, 700));
-    toast.success(role === "seller" ? "Seller account submitted!" : "Account created!");
-    navigate("/home");
+    try {
+      const { user, session } = await signupApi(values);
+      setNextPath("/login");
+      setSuccessOpen(true);
+    } catch (e) {
+      toast.error(e?.message || "Sign up failed");
+    }
   };
 
   return (
+    <>
     <AuthLayout>
       {/* Header */}
       <div className="flex flex-col items-center text-center">
@@ -192,11 +201,6 @@ export default function Signup() {
               <Input id="phone" placeholder="+63 912 345 6789" {...register("phone")} />
               {errors.phone && <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>}
             </div>
-
-            {/* Review note */}
-            <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] px-4 py-3 text-[13px] text-[var(--brown-700)]/90">
-              <strong>Seller Account:</strong> Your account will be reviewed by our team before activation (24–48 hours).
-            </div>
           </>
         )}
 
@@ -219,5 +223,27 @@ export default function Signup() {
         </p>
       </form>
     </AuthLayout>
+    <Modal
+      open={successOpen}
+      onClose={() => {
+        setSuccessOpen(false);
+        navigate(nextPath, { replace: true });
+      }}
+    >
+      <h2 className="text-lg font-semibold text-[var(--brown-700)]">Account created successfully</h2>
+      <p className="mt-2 text-sm text-[var(--brown-700)]/80">Your account has been created.</p>
+      <div className="mt-4 flex justify-end">
+        <button
+          className="rounded-lg bg-[var(--orange-600)] px-4 py-2 text-white hover:brightness-110"
+          onClick={() => {
+            setSuccessOpen(false);
+            navigate(nextPath, { replace: true });
+          }}
+        >
+          Continue
+        </button>
+      </div>
+    </Modal>
+    </>
   );
 }
