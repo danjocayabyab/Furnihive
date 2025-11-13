@@ -78,6 +78,7 @@ export default function Inventory() {
   const [view, setView] = useState(null); // product object
   const [edit, setEdit] = useState(null); // product object
   const [confirm, setConfirm] = useState(null); // id to delete
+  const [add, setAdd] = useState(false); // new add modal
 
   useEffect(() => {
     const close = (e) => {
@@ -120,40 +121,44 @@ export default function Inventory() {
   const removeItem = (id) =>
     setItems((prev) => prev.filter((i) => i.id !== id));
 
+  const addItem = (data) => {
+    const newItem = { id: `p-${Date.now()}`, views: 0, sold: 0, active: true, ...data };
+    setItems((prev) => [newItem, ...prev]);
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
-     {/* Header + back */}
-<div className="flex items-center gap-3">
-  <button
-    onClick={() => navigate("/seller")}
-    className="rounded-lg border border-[var(--line-amber)] bg-white w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
-    aria-label="Back"
-    title="Back to Dashboard"
-  >
-    ←
-  </button>
-  <div>
-    <h1 className="text-xl font-semibold text-[var(--brown-700)]">
-      Inventory Management
-    </h1>
-    <p className="text-xs text-gray-600">
-      Track stock levels and manage inventory alerts
-    </p>
-  </div>
-</div>
+      {/* Header + back */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigate("/seller")}
+          className="rounded-lg border border-[var(--line-amber)] bg-white w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
+          aria-label="Back"
+          title="Back to Dashboard"
+        >
+          ←
+        </button>
+        <div>
+          <h1 className="text-xl font-semibold text-[var(--brown-700)]">
+            Inventory Management
+          </h1>
+          <p className="text-xs text-gray-600">
+            Track stock levels and manage inventory alerts
+          </p>
+        </div>
+      </div>
 
       {/* Metric cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Metric  label="Total Products" value={stats.total} />
-        <Metric  label="Active" value={stats.active} />
-        <Metric  label="Low Stock" value={stats.low} />
-        <Metric  label="Out of Stock" value={stats.oos} />
+        <Metric label="Total Products" value={stats.total} />
+        <Metric label="Active" value={stats.active} />
+        <Metric label="Low Stock" value={stats.low} />
+        <Metric label="Out of Stock" value={stats.oos} />
       </div>
 
       {/* Search + filters */}
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2 rounded-full border border-[var(--line-amber)] bg-[var(--cream-50)] px-3 py-2 flex-1">
-          
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -173,22 +178,24 @@ export default function Inventory() {
               </option>
             ))}
           </select>
-          <button
-            className="rounded-xl border border-[var(--line-amber)] bg-white px-3 py-2 text-sm hover:bg-[var(--cream-50)]"
-            title="Filters"
-          >
-            Filters
-          </button>
         </div>
       </div>
 
       {/* Product list */}
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white">
-        <div className="px-5 py-4 border-b border-[var(--line-amber)]">
-          <div className="font-semibold text-[var(--brown-700)]">Product List</div>
-          <div className="text-sm text-gray-600">
-            Manage your furniture inventory
+        <div className="px-5 py-4 border-b border-[var(--line-amber)] flex justify-between items-center">
+          <div>
+            <div className="font-semibold text-[var(--brown-700)]">Product List</div>
+            <div className="text-sm text-gray-600">
+              Manage your furniture inventory
+            </div>
           </div>
+          <button
+            onClick={() => setAdd(true)}
+            className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95"
+          >
+            + Add Product
+          </button>
         </div>
 
         <ul className="divide-y divide-[var(--line-amber)]/70">
@@ -211,12 +218,6 @@ export default function Inventory() {
                   <Info label="Stock" value={`${p.stock} ${p.stock === 1 ? "unit" : "units"}`} />
                   <Info label="Views" value={p.views} />
                   <Info label="Sold" value={p.sold} />
-                </div>
-
-                <div className="hidden sm:flex flex-col items-end gap-2">
-                  <Status color={p.stock === 0 ? "red" : p.stock <= 2 ? "amber" : "green"}>
-                    {p.stock === 0 ? "Out of Stock" : p.stock <= 2 ? "Low Stock" : "Active"}
-                  </Status>
                 </div>
 
                 {/* 3-dots menu */}
@@ -269,12 +270,6 @@ export default function Inventory() {
               <Field label="Stock" value={`${view.stock} units`} />
               <Field label="Views" value={view.views} />
               <Field label="Total Sold" value={view.sold} />
-              <div className="col-span-2">
-                <div className="text-xs text-gray-600 mb-1">Status</div>
-                <Status color={view.stock === 0 ? "red" : view.stock <= 2 ? "amber" : "green"}>
-                  {view.stock === 0 ? "Out of Stock" : view.stock <= 2 ? "Low Stock" : "Active"}
-                </Status>
-              </div>
             </div>
             <div className="flex justify-end gap-2">
               <button
@@ -302,6 +297,26 @@ export default function Inventory() {
           onSave={(updated) => {
             updateItem(edit.id, updated);
             setEdit(null);
+          }}
+        />
+      )}
+
+      {/* Add product modal */}
+      {add && (
+        <EditModal
+          item={{
+            title: "",
+            category: "Living Room",
+            price: 0,
+            stock: 0,
+            length: 0,
+            width: 0,
+            height: 0,
+          }}
+          onCancel={() => setAdd(false)}
+          onSave={(newItem) => {
+            addItem(newItem);
+            setAdd(false);
           }}
         />
       )}
@@ -436,28 +451,44 @@ function Confirm({ title, body, onCancel, onConfirm }) {
 
 function EditModal({ item, onCancel, onSave }) {
   const [form, setForm] = useState({
-    title: item.title,
-    category: item.category,
-    condition: "Brand New",
-    description: "",
-    price: item.price,
-    stock: item.stock,
-    sku: "SKU-001",
-    length: 0,
-    width: 0,
-    height: 0,
-    image: item.image,
+    title: item.title || "",
+    category: item.category || "Living Room",
+    description: item.description || "",
+    price: item.price || 0,
+    stock: item.stock || 0,
+    sku: item.sku || "SKU-001",
+    length: item.length || 0,
+    width: item.width || 0,
+    height: item.height || 0,
+    image: item.image || "", // <-- add image
   });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+  const handleImage = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => set("image", reader.result); // store base64
+    reader.readAsDataURL(file);
+  };
+
   const submit = (e) => {
     e.preventDefault();
+    if (!form.image) {
+      alert("Please upload an image for the product.");
+      return;
+    }
     onSave({
       title: form.title,
       category: form.category,
       price: Number(form.price) || 0,
       stock: Number(form.stock) || 0,
+      length: Number(form.length) || 0,
+      width: Number(form.width) || 0,
+      height: Number(form.height) || 0,
+      sku: form.sku,
+      description: form.description,
       image: form.image,
     });
   };
@@ -465,24 +496,41 @@ function EditModal({ item, onCancel, onSave }) {
   return (
     <Modal onClose={onCancel} maxWidth="720px">
       <form onSubmit={submit} className="space-y-4">
-        <h3 className="text-lg font-semibold text-[var(--brown-700)]">Edit Product</h3>
+        <h3 className="text-lg font-semibold text-[var(--brown-700)]">
+          {item.title ? "Edit Product" : "Add Product"}
+        </h3>
 
-        {/* Images (demo placeholders) */}
-        <div className="grid grid-cols-4 gap-3">
-          {[form.image, null, null, null].map((src, i) => (
-            <div
-              key={i}
-              className="aspect-[4/3] rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] grid place-items-center overflow-hidden"
-            >
-              {src ? (
-                <img src={src} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-sm text-gray-500">Add</span>
-              )}
-            </div>
-          ))}
-        </div>
+        {/* Image Upload */}
+<div>
+  <label className="text-xs text-gray-600 mb-1 block">Product Image</label>
+  <div className="w-full h-40 rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] flex items-center justify-center overflow-hidden relative">
+    {form.image ? (
+      <img
+        src={form.image}
+        alt="Preview"
+        className="w-full h-full object-cover"
+      />
+    ) : (
+      <span className="text-gray-500 text-sm">Choose File</span>
+    )}
+    <input
+      type="file"
+      accept="image/*"
+      onChange={(e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onloadend = () => set("image", reader.result);
+        reader.readAsDataURL(file);
+      }}
+      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+    />
+  </div>
+</div>
 
+
+
+        {/* Name & Category */}
         <div className="grid md:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-gray-600">Product Name</label>
@@ -492,18 +540,6 @@ function EditModal({ item, onCancel, onSave }) {
               onChange={(e) => set("title", e.target.value)}
               required
             />
-          </div>
-          <div>
-            <label className="text-xs text-gray-600">Condition</label>
-            <select
-              className="w-full rounded-xl border border-[var(--line-amber)] px-3 py-2"
-              value={form.condition}
-              onChange={(e) => set("condition", e.target.value)}
-            >
-              <option>Brand New</option>
-              <option>Like New</option>
-              <option>Used</option>
-            </select>
           </div>
           <div>
             <label className="text-xs text-gray-600">Category</label>
@@ -518,16 +554,9 @@ function EditModal({ item, onCancel, onSave }) {
               <option>Office</option>
             </select>
           </div>
-          <div>
-            <label className="text-xs text-gray-600">SKU (Optional)</label>
-            <input
-              className="w-full rounded-xl border border-[var(--line-amber)] px-3 py-2"
-              value={form.sku}
-              onChange={(e) => set("sku", e.target.value)}
-            />
-          </div>
         </div>
 
+        {/* Description */}
         <div>
           <label className="text-xs text-gray-600">Description</label>
           <textarea
@@ -539,6 +568,7 @@ function EditModal({ item, onCancel, onSave }) {
           />
         </div>
 
+        {/* Price, Stock, SKU */}
         <div className="grid md:grid-cols-3 gap-3">
           <div>
             <label className="text-xs text-gray-600">Price (₱)</label>
@@ -561,21 +591,23 @@ function EditModal({ item, onCancel, onSave }) {
             />
           </div>
           <div>
-            <label className="text-xs text-gray-600">Image URL (demo)</label>
+            <label className="text-xs text-gray-600">SKU (Optional)</label>
             <input
               className="w-full rounded-xl border border-[var(--line-amber)] px-3 py-2"
-              value={form.image}
-              onChange={(e) => set("image", e.target.value)}
+              value={form.sku}
+              onChange={(e) => set("sku", e.target.value)}
             />
           </div>
         </div>
 
+        {/* Dimensions */}
         <div className="grid md:grid-cols-3 gap-3">
           <DimInput label="Length (cm)" value={form.length} onChange={(v) => set("length", v)} />
           <DimInput label="Width (cm)" value={form.width} onChange={(v) => set("width", v)} />
           <DimInput label="Height (cm)" value={form.height} onChange={(v) => set("height", v)} />
         </div>
 
+        {/* Buttons */}
         <div className="flex justify-end gap-2">
           <button
             type="button"
@@ -588,13 +620,14 @@ function EditModal({ item, onCancel, onSave }) {
             type="submit"
             className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95"
           >
-            Save Changes
+            {item.title ? "Save Changes" : "Add Product"}
           </button>
         </div>
       </form>
     </Modal>
   );
 }
+
 
 function DimInput({ label, value, onChange }) {
   return (
@@ -607,5 +640,5 @@ function DimInput({ label, value, onChange }) {
         onChange={(e) => onChange(e.target.value)}
       />
     </div>
-    );
+  );
 }

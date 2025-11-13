@@ -20,7 +20,6 @@ import Checkout, { CheckoutSuccess } from "./pages/user/Checkout.jsx";
 /* ---------- Seller Layout + Pages ---------- */
 import SellerLayout from "./layouts/SellerLayout.jsx";
 import SellerDashboard from "./pages/seller/Dashboard.jsx";
-import SellerProducts from "./pages/seller/Products.jsx";
 import Inventory from "./pages/seller/Inventory.jsx"; 
 import SellerOrders from "./pages/seller/Orders.jsx";
 import SellerPromotions from "./pages/seller/Promotions.jsx"; 
@@ -114,7 +113,6 @@ export default function App() {
         }
       >
         <Route index element={<SellerDashboard />} />
-        <Route path="products" element={<SellerProducts />} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="orders" element={<SellerOrders />} />
         <Route path="promotions" element={<SellerPromotions />} />
