@@ -1,5 +1,5 @@
 // src/lib/auth.js
-import { api } from "./apiClient";
+import { supabase } from "../lib/supabaseClient";
 
 // Storage keys
 const USER_KEY = "fh_user";
@@ -27,6 +27,10 @@ export function getToken() {
 }
 
 export function logout() {
+  try {
+    // Clear Supabase session
+    supabase.auth.signOut();
+  } catch {}
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(TOKEN_KEY);
 }
@@ -38,49 +42,92 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
  *   const { data } = await api.post('/auth/login', { email, password });
  *   setToken(data.token); setUser(data.user);
  */
-export async function login({ email, password, roleHint }) {
-  await delay(500);
-
+export async function login({ email, password }) {
+  await delay(150);
   if (!email || !password || password.length < 6) {
     throw new Error("Invalid credentials");
   }
-
-  // Demo routing rules
-  let role = "buyer";
-  if (email.toLowerCase() === "seller@demo.ph" || roleHint === "seller") {
-    role = "seller";
-  } else if (email.toLowerCase() === "buyer@demo.ph" || roleHint === "buyer") {
-    role = "buyer";
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.error("[Auth] login failed", { code: error.code, message: error.message });
+    throw new Error(error.message);
   }
-
-  const user = {
-    id: "u-" + Date.now(),
-    email,
-    name: role === "seller" ? "Demo Seller" : "Demo Buyer",
-    role,
-  };
-
-  const token = "dev-token-" + Date.now();
-
-  setToken(token);
+  const sess = data.session;
+  const u = data.user;
+  // Load profile/role
+  let { data: profile, error: profileErr } = await supabase
+    .from("profiles")
+    .select("id, role, first_name, last_name")
+    .eq("id", u.id)
+    .maybeSingle();
+  if ((!profile || profileErr) && u) {
+    const md = u.user_metadata || {};
+    const candidate = {
+      id: u.id,
+      role: md.role || "buyer",
+      first_name: md.first_name || null,
+      last_name: md.last_name || null,
+      store_name: md.store_name || null,
+      phone: md.phone || null,
+    };
+    const { data: upserted } = await supabase
+      .from("profiles")
+      .upsert(candidate, { onConflict: "id" })
+      .select("id, role, first_name, last_name")
+      .maybeSingle();
+    if (upserted) profile = upserted;
+  }
+  const fullName = profile?.first_name || profile?.last_name
+    ? `${profile?.first_name ?? ""} ${profile?.last_name ?? ""}`.trim()
+    : u.email;
+  const role = (u.user_metadata?.role) || profile?.role || "buyer";
+  const user = { id: u.id, email: u.email, name: fullName, role };
+  // Optionally mirror for legacy callers
+  setToken(sess?.access_token || "");
   setUser(user);
-
-  return { token, user };
+  return { token: sess?.access_token || "", user };
 }
 
 /**
  * Mock signup. Replace with POST /auth/signup later.
  */
 export async function signup(payload) {
-  await delay(600);
-  const role = payload.role || "buyer";
-  const user = {
-    id: "u-" + Date.now(),
-    email: payload.email,
-    name: `${payload.firstName} ${payload.lastName}`.trim() || "New User",
-    role,
-  };
-  setToken("dev-token-" + Date.now());
+  await delay(150);
+  const { email, password, firstName, lastName } = payload;
+  if (!email || !password) throw new Error("Missing email or password");
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        first_name: firstName,
+        last_name: lastName,
+        role: payload.role || "buyer",
+        store_name: payload.role === "seller" ? (payload.storeName || null) : null,
+        phone: payload.role === "seller" ? (payload.phone || null) : null,
+      },
+    },
+  });
+  if (error) throw new Error(error.message);
+  const u = data.user;
+  if (u) {
+    // Create or update profile with role and optional seller fields
+    const prof = {
+      id: u.id,
+      role: payload.role || "buyer",
+      first_name: firstName,
+      last_name: lastName,
+    };
+    if (payload.role === "seller") {
+      prof.store_name = payload.storeName || null;
+      prof.phone = payload.phone || null;
+    }
+    await supabase.from("profiles").upsert(prof, { onConflict: "id" });
+  }
+  // Some projects require email confirmation -> session may be null.
+  const name = `${payload.firstName ?? ""} ${payload.lastName ?? ""}`.trim() || payload.email;
+  const user = { id: u?.id || "", email: payload.email, name, role: payload.role || "buyer" };
   setUser(user);
-  return { user };
+  return { user, session: data.session || null };
 }

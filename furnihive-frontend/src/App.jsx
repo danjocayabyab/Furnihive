@@ -36,21 +36,39 @@ import AdminLayout from "./admin/AdminLayout";
 import AdminLogin from "./admin/AdminLogin";
 
 /* ---------- Role Protection ---------- */
-function RequireRole({ role, children }) {
-  let user = null;
-  try {
-    user = JSON.parse(localStorage.getItem("fh_user"));
-  } catch {
-    user = null;
-  }
+import { useAuth } from "./components/contexts/AuthContext.jsx";
 
+function RequireAuth({ children }) {
+  const { loading, user } = useAuth();
+  if (loading) return <div className="p-8">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
+  return children;
+}
 
-  if (role && user.role !== role) {
-    // redirect if logged in but wrong role
-    return <Navigate to={user.role === "seller" ? "/seller" : "/home"} replace />;
+function LogoutRoute() {
+  // Lightweight route component to clear session and send user to login
+  return (
+    <RequireAuth>
+      {(() => {
+        // Side-effect inside IIFE to avoid hooks
+        try {
+          // Call our logout util via a dynamic import to avoid circular deps
+          import("./lib/auth.js").then(({ logout }) => logout());
+        } catch {}
+        return <Navigate to="/login" replace />;
+      })()}
+    </RequireAuth>
+  );
+}
+
+function RequireRole({ role, children }) {
+  const { loading, user, profile } = useAuth();
+  if (loading) return <div className="p-8">Loading...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  const effectiveRole = user?.user_metadata?.role || profile?.role || "buyer";
+  if (role && effectiveRole !== role) {
+    return <Navigate to={effectiveRole === "seller" ? "/seller" : "/home"} replace />;
   }
-
   return children;
 }
 
@@ -61,6 +79,7 @@ export default function App() {
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/logout" element={<LogoutRoute />} />
 
       {/* ---------- Buyer (User) Routes ---------- */}
       <Route element={<UserLayout />}>
@@ -84,15 +103,15 @@ export default function App() {
           </RequireRole>
         }
       >
-        <Route index element={<SellerDashboard />} />                       {/* /seller */}
-        <Route path="products" element={<SellerProducts />} />              {/* /seller/products */}
-        <Route path="inventory" element={<Inventory />} />                  {/* /seller/inventory */}
-        <Route path="/seller/orders" element={<SellerOrders />} />
-        <Route path="/seller/promotions" element={<SellerPromotions />} />
-        <Route path="/seller/analytics" element={<SellerAnalytics />} />
-        <Route path="/seller/engagement" element={<SellerEngagement />} />
-        <Route path="/seller/messages" element={<SellerMessages />} />
-        <Route path="/seller/settings" element={<SellerSettings />} />
+        <Route index element={<SellerDashboard />} />
+        <Route path="products" element={<SellerProducts />} />
+        <Route path="inventory" element={<Inventory />} />
+        <Route path="orders" element={<SellerOrders />} />
+        <Route path="promotions" element={<SellerPromotions />} />
+        <Route path="analytics" element={<SellerAnalytics />} />
+        <Route path="engagement" element={<SellerEngagement />} />
+        <Route path="messages" element={<SellerMessages />} />
+        <Route path="settings" element={<SellerSettings />} />
       </Route>
 
 
