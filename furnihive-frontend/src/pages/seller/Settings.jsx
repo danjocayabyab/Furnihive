@@ -3,23 +3,20 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 /**
- * Seller Settings with 5 tabs:
- * - Overview  ✅ (new)
- * - Store Info
+ * Seller Settings
+ * Tabs:
+ * - Overview ✅
+ * - Store Info ✅ (with Verification section)
  * - Profile
- * - Notifications
- * - Security
- *
- * All inputs are still mocked and ready to be wired to your API later.
  */
 
 export default function SellerSettings() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState("overview"); // <-- default to the new Overview tab
+  const [tab, setTab] = useState("overview"); // Default tab
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
-      {/* Header + back */}
+      {/* Header */}
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate("/seller")}
@@ -42,12 +39,10 @@ export default function SellerSettings() {
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-3">
         <div className="flex flex-wrap gap-2">
           {[
-            ["overview", "Overview", "🏠"],
-            ["store", "Store Info", "🏬"],
-            ["profile", "Profile", "👤"],
-            ["notifications", "Notifications", "🔔"],
-            ["security", "Security", "🔒"],
-          ].map(([key, label, icon]) => (
+            ["overview", "Overview"],
+            ["store", "Store Info"],
+            ["profile", "Profile"],
+          ].map(([key, label]) => (
             <button
               key={key}
               onClick={() => setTab(key)}
@@ -57,38 +52,32 @@ export default function SellerSettings() {
                   : "border-[var(--line-amber)] hover:bg-[var(--cream-50)]"
               }`}
             >
-              <span className="text-base leading-none">{icon}</span>
               {label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Tab bodies */}
+      {/* Tab Content */}
       {tab === "overview" && <OverviewTab />}
       {tab === "store" && <StoreInfoTab />}
       {tab === "profile" && <ProfileTab />}
-      {tab === "notifications" && <NotificationsTab />}
-      {tab === "security" && <SecurityTab />}
     </div>
   );
 }
 
-/* ---------------------- TABS ---------------------- */
+/* ---------------------- OVERVIEW TAB ---------------------- */
 
 function OverviewTab() {
   return (
     <div className="space-y-5">
-      {/* Store Information snapshot */}
+      {/* Store Snapshot */}
       <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <span>🏬</span>
-          <h3 className="font-semibold text-[var(--brown-700)]">
-            Store Information
-          </h3>
-        </div>
+        <h3 className="font-semibold text-[var(--brown-700)] mb-1">
+          Store Information
+        </h3>
         <p className="text-sm text-gray-600 mb-4">
-          Quick view of your store details
+          Quick overview of your store details
         </p>
 
         <div className="flex items-start gap-4">
@@ -131,42 +120,353 @@ function OverviewTab() {
         </div>
       </section>
 
-      {/* Owner snapshot */}
+      {/* Owner Snapshot */}
       <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <span>🧑‍💼</span>
-          <h3 className="font-semibold text-[var(--brown-700)]">
-            Personal Information
-          </h3>
-        </div>
-        <p className="text-sm text-gray-600 mb-4">
-          Account owner details
-        </p>
+        <h3 className="font-semibold text-[var(--brown-700)] mb-1">
+          Personal Information
+        </h3>
+        <p className="text-sm text-gray-600 mb-4">Account owner details</p>
 
         <div className="grid sm:grid-cols-2 gap-4 text-sm">
-          <OverviewRow icon="🧾" label="Full Name">
-            Juan Santos
-          </OverviewRow>
-          <OverviewRow icon="✉️" label="Email">
-            juan.santos@email.com
-          </OverviewRow>
-          <OverviewRow icon="📱" label="Mobile Number">
-            +63 912 345 6789
-          </OverviewRow>
-          <OverviewRow icon="⭐" label="Account Type">
-            Premium Seller
-          </OverviewRow>
+          <OverviewRow label="Full Name">Juan Santos</OverviewRow>
+          <OverviewRow label="Email">juan.santos@email.com</OverviewRow>
+          <OverviewRow label="Mobile Number">+63 912 345 6789</OverviewRow>
+          <OverviewRow label="Account Type">Premium Seller</OverviewRow>
         </div>
       </section>
     </div>
   );
 }
 
+/* ---------------------- STORE TAB (with Verification) ---------------------- */
+
+function StoreInfoTab() {
+  const [store, setStore] = useState({
+    name: "Manila Furniture Co.",
+    description:
+      "We offer high-quality, locally-made furniture for every room in your home. Family-owned business serving Metro Manila since 2015.",
+    phone: "+63 912 345 6789",
+    email: "contact@manilafurniture.ph",
+    address: "123 Furniture St, Quezon City, Metro Manila, 1100",
+    hoursWeekday: ["9:00 AM", "6:00 PM"],
+    hoursWeekend: ["10:00 AM", "5:00 PM"],
+    logo: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=300&auto=format&fit=crop",
+  });
+
+  const [files, setFiles] = useState([]);
+  const [verified, setVerified] = useState(false);
+
+  const handleChange = (field, value) => {
+    setStore((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Logo Upload
+  const handleLogoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setStore((prev) => ({ ...prev, logo: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Verification files
+  const handleFileChange = (e) => {
+    const newFiles = Array.from(e.target.files);
+    setFiles((prev) => [...prev, ...newFiles]);
+  };
+
+  const handleRemoveFile = (index) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmitVerification = () => {
+    alert(
+      "Your verification documents have been sent to the admin for review. You’ll be notified once approved."
+    );
+    // TODO: connect to Supabase upload + verification table
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Store Information */}
+      <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5 space-y-4">
+        <h3 className="font-semibold text-[var(--brown-700)]">Store Information</h3>
+
+        <div className="flex items-center gap-4">
+          <img
+            src={store.logo}
+            alt="Store logo"
+            className="h-16 w-16 rounded-full object-cover border border-[var(--line-amber)]"
+          />
+          <label className="rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm hover:bg-[var(--cream-50)] cursor-pointer">
+            Upload New Logo
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleLogoChange}
+              className="hidden"
+            />
+          </label>
+        </div>
+
+        <LabeledInput
+          label="Store Name"
+          value={store.name}
+          onChange={(e) => handleChange("name", e.target.value)}
+        />
+        <LabeledTextarea
+          label="Store Description"
+          value={store.description}
+          onChange={(e) => handleChange("description", e.target.value)}
+        />
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          <LabeledInput
+            label="Phone Number"
+            value={store.phone}
+            onChange={(e) => handleChange("phone", e.target.value)}
+          />
+          <LabeledInput
+            label="Store Email"
+            value={store.email}
+            onChange={(e) => handleChange("email", e.target.value)}
+          />
+        </div>
+
+        <LabeledInput
+          label="Store Address"
+          value={store.address}
+          onChange={(e) => handleChange("address", e.target.value)}
+        />
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">
+              Business Hours (Mon–Fri)
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                value={store.hoursWeekday[0]}
+                onChange={(e) =>
+                  handleChange("hoursWeekday", [
+                    e.target.value,
+                    store.hoursWeekday[1],
+                  ])
+                }
+              />
+              <Input
+                value={store.hoursWeekday[1]}
+                onChange={(e) =>
+                  handleChange("hoursWeekday", [
+                    store.hoursWeekday[0],
+                    e.target.value,
+                  ])
+                }
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">
+              Business Hours (Sat–Sun)
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                value={store.hoursWeekend[0]}
+                onChange={(e) =>
+                  handleChange("hoursWeekend", [
+                    e.target.value,
+                    store.hoursWeekend[1],
+                  ])
+                }
+              />
+              <Input
+                value={store.hoursWeekend[1]}
+                onChange={(e) =>
+                  handleChange("hoursWeekend", [
+                    store.hoursWeekend[0],
+                    e.target.value,
+                  ])
+                }
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-2">
+          <button className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95">
+            Save Changes
+          </button>
+        </div>
+      </section>
+
+      {/* Verification Section */}
+      <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
+        <h3 className="font-semibold text-[var(--brown-700)] mb-1">
+          Store Verification
+        </h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Upload official business documents for verification. Accepted files:
+          <b> PDF, JPG, PNG, DOCX</b>.
+        </p>
+
+        {verified ? (
+          <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-700 flex items-center gap-2">
+            ✅ Your account is verified. Thank you for submitting your documents!
+          </div>
+        ) : (
+          <>
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              onChange={handleFileChange}
+              className="block w-full border border-[var(--line-amber)] rounded-lg px-3 py-2 text-sm bg-white"
+            />
+
+            {files.length > 0 && (
+              <div className="mt-3 space-y-1">
+                <h4 className="text-sm font-medium text-[var(--brown-700)]">
+                  Files to upload:
+                </h4>
+                <ul className="text-sm list-disc pl-5 text-gray-700 space-y-1">
+                  {files.map((f, i) => (
+                    <li key={i} className="flex justify-between items-center">
+                      <span>
+                        {f.name}{" "}
+                        <span className="text-gray-500 text-xs">
+                          ({(f.size / 1024).toFixed(1)} KB)
+                        </span>
+                      </span>
+                      <button
+                        onClick={() => handleRemoveFile(i)}
+                        className="text-red-500 text-xs ml-2 hover:text-red-700"
+                      >
+                        ❌
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="pt-3">
+              <button
+                onClick={handleSubmitVerification}
+                disabled={files.length === 0}
+                className={`rounded-lg px-4 py-2 text-sm text-white ${
+                  files.length === 0
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-[var(--orange-600)] hover:brightness-95"
+                }`}
+              >
+                Submit for Verification
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+/* ---------------------- PROFILE TAB ---------------------- */
+
+function ProfileTab() {
+  const [profile, setProfile] = useState({
+    firstName: "Juan",
+    lastName: "Santos",
+    email: "juan.santos@email.com",
+    mobile: "+63 912 345 6789",
+    bankName: "",
+    accountName: "",
+    accountNumber: "",
+  });
+
+  const handleChange = (field, value) => {
+    setProfile((prev) => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Personal Info */}
+      <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
+        <h3 className="font-semibold text-[var(--brown-700)] mb-4">
+          Personal Information
+        </h3>
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          <LabeledInput
+            label="First Name"
+            value={profile.firstName}
+            onChange={(e) => handleChange("firstName", e.target.value)}
+          />
+          <LabeledInput
+            label="Last Name"
+            value={profile.lastName}
+            onChange={(e) => handleChange("lastName", e.target.value)}
+          />
+          <LabeledInput
+            label="Email Address"
+            value={profile.email}
+            onChange={(e) => handleChange("email", e.target.value)}
+          />
+          <LabeledInput
+            label="Mobile Number"
+            value={profile.mobile}
+            onChange={(e) => handleChange("mobile", e.target.value)}
+          />
+        </div>
+
+        <div className="pt-3">
+          <button className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95">
+            Update Profile
+          </button>
+        </div>
+      </section>
+
+      {/* Bank Info */}
+      <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
+        <h3 className="font-semibold text-[var(--brown-700)] mb-4">
+          Bank Account
+        </h3>
+        <div className="grid gap-4">
+          <LabeledInput
+            label="Bank Name"
+            value={profile.bankName}
+            onChange={(e) => handleChange("bankName", e.target.value)}
+          />
+          <LabeledInput
+            label="Account Name"
+            value={profile.accountName}
+            onChange={(e) => handleChange("accountName", e.target.value)}
+          />
+          <LabeledInput
+            label="Account Number"
+            value={profile.accountNumber}
+            onChange={(e) => handleChange("accountNumber", e.target.value)}
+          />
+          <div className="pt-2">
+            <button className="rounded-lg border border-[var(--line-amber)] px-4 py-2 text-sm hover:bg-[var(--cream-50)]">
+              Save Bank Details
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/* ---------------------- UI COMPONENTS ---------------------- */
+
 function OverviewRow({ icon, label, children }) {
   return (
     <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] px-3 py-2">
       <div className="text-gray-600 flex items-center gap-2">
-        <span className="shrink-0">{icon}</span>
+        {icon && <span>{icon}</span>}
         <span>{label}</span>
       </div>
       <div className="mt-0.5 font-medium text-[var(--brown-700)]">
@@ -188,190 +488,6 @@ function Badge({ color = "gray", children }) {
     </span>
   );
 }
-
-/* ---------- Existing tabs below (unchanged content) ---------- */
-
-function StoreInfoTab() {
-  return (
-    <div className="space-y-5">
-      <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <span>🏬</span>
-          <h3 className="font-semibold text-[var(--brown-700)]">Store Information</h3>
-        </div>
-
-        <div className="grid gap-4">
-          <div className="flex items-center gap-4">
-            <img
-              src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=300&auto=format&fit=crop"
-              alt="Store logo"
-              className="h-16 w-16 rounded-full object-cover border border-[var(--line-amber)]"
-            />
-            <button className="rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm hover:bg-[var(--cream-50)]">
-              Upload New Logo
-            </button>
-          </div>
-
-          <LabeledInput label="Store Name" defaultValue="Manila Furniture Co." />
-          <LabeledTextarea
-            label="Store Description"
-            defaultValue="We offer high-quality, locally-made furniture for every room in your home. Family-owned business serving Metro Manila since 2015."
-          />
-
-          <div className="grid sm:grid-cols-2 gap-4">
-            <LabeledInput label="Phone Number" defaultValue="+63 912 345 6789" />
-            <LabeledInput label="Store Email" defaultValue="contact@manilafurniture.ph" />
-          </div>
-
-          <LabeledInput
-            label="Store Address"
-            defaultValue="123 Furniture St, Quezon City, Metro Manila, 1100"
-          />
-
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Business Hours (Mon–Fri)</label>
-              <div className="grid grid-cols-2 gap-2">
-                <Input defaultValue="9:00 AM" />
-                <Input defaultValue="6:00 PM" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Business Hours (Sat–Sun)</label>
-              <div className="grid grid-cols-2 gap-2">
-                <Input defaultValue="10:00 AM" />
-                <Input defaultValue="5:00 PM" />
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <button className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95">
-              Save Changes
-            </button>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function ProfileTab() {
-  return (
-    <div className="space-y-5">
-      <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <span>👤</span>
-          <h3 className="font-semibold text-[var(--brown-700)]">Personal Information</h3>
-        </div>
-
-        <div className="grid sm:grid-cols-2 gap-4">
-          <LabeledInput label="First Name" defaultValue="Juan" />
-          <LabeledInput label="Last Name" defaultValue="Santos" />
-          <LabeledInput label="Email Address" defaultValue="juan.santos@email.com" />
-          <LabeledInput label="Mobile Number" defaultValue="+63 912 345 6789" />
-        </div>
-
-        <div className="pt-3">
-          <button className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95">
-            Update Profile
-          </button>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <h3 className="font-semibold text-[var(--brown-700)] mb-4">Bank Account</h3>
-        <div className="grid gap-4">
-          <LabeledInput label="Bank Name" placeholder="e.g., BDO, BPI, Metrobank" />
-          <LabeledInput label="Account Name" placeholder="Account holder name" />
-          <LabeledInput label="Account Number" placeholder="Enter account number" />
-          <div className="pt-2">
-            <button className="rounded-lg border border-[var(--line-amber)] px-4 py-2 text-sm hover:bg-[var(--cream-50)]">
-              Save Bank Details
-            </button>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function NotificationsTab() {
-  return (
-    <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <span>🔔</span>
-        <h3 className="font-semibold text-[var(--brown-700)]">Notification Preferences</h3>
-      </div>
-
-      <div className="space-y-4">
-        {[
-          ["Email Notifications", "Receive notifications via email"],
-          ["Push Notifications", "Receive push notifications on your device"],
-          ["Order Updates", "Get notified about new orders and updates"],
-          ["Promotions & Tips", "Receive tips to grow your business"],
-        ].map(([title, desc], i) => (
-          <ToggleRow key={i} title={title} desc={desc} defaultOn={i < 3} />
-        ))}
-      </div>
-
-      <div className="pt-4">
-        <button className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95">
-          Save Preferences
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function SecurityTab() {
-  return (
-    <div className="space-y-5">
-      <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <span>🔒</span>
-          <h3 className="font-semibold text-[var(--brown-700)]">Change Password</h3>
-        </div>
-        <div className="grid gap-3">
-          <LabeledInput label="Current Password" type="password" />
-          <LabeledInput label="New Password" type="password" />
-          <LabeledInput label="Confirm New Password" type="password" />
-          <div className="pt-2">
-            <button className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95">
-              Update Password
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <h3 className="font-semibold text-[var(--brown-700)] mb-3">
-          Two-Factor Authentication
-        </h3>
-        <p className="text-sm text-gray-700 mb-3">
-          Two-factor authentication is currently disabled
-        </p>
-        <button className="rounded-lg border border-[var(--line-amber)] px-4 py-2 text-sm hover:bg-[var(--cream-50)]">
-          Enable
-        </button>
-      </section>
-
-      <section className="rounded-2xl border border-red-200 bg-red-50 p-5">
-        <h3 className="font-semibold text-red-700 mb-3">Danger Zone</h3>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <button className="rounded-lg border border-red-300 text-red-700 px-4 py-2 text-sm hover:bg-red-100">
-            Deactivate
-          </button>
-          <button className="rounded-lg border border-red-300 text-red-700 px-4 py-2 text-sm hover:bg-red-100">
-            Delete
-          </button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-/* ---------------------- UI bits ---------------------- */
 
 function LabeledInput({ label, type = "text", ...props }) {
   return (
@@ -401,30 +517,5 @@ function Input(props) {
       className="w-full rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm outline-none bg-white"
       {...props}
     />
-  );
-}
-
-function ToggleRow({ title, desc, defaultOn }) {
-  const [on, setOn] = useState(!!defaultOn);
-  return (
-    <div className="flex items-center justify-between rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] px-3 py-2">
-      <div>
-        <div className="font-medium text-[var(--brown-700)]">{title}</div>
-        <div className="text-xs text-gray-600">{desc}</div>
-      </div>
-      <button
-        onClick={() => setOn((v) => !v)}
-        className={`h-6 w-11 rounded-full transition-colors ${
-          on ? "bg-[var(--orange-600)]" : "bg-gray-300"
-        } relative`}
-        aria-label={`${title} toggle`}
-      >
-        <span
-          className={`absolute top-0.5 transition-all h-5 w-5 rounded-full bg-white ${
-            on ? "right-0.5" : "left-0.5"
-          }`}
-        />
-      </button>
-    </div>
   );
 }
