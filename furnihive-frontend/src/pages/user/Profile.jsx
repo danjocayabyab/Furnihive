@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect } from "react";
 import Button from "../../components/ui/Button.jsx";
 import { logout } from "../../lib/auth.js";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
+import { supabase } from "../../lib/supabaseClient";
 
 /* ---------- Mock data (swap with API later) ---------- */
 // replaced by AuthContext values
@@ -69,12 +70,36 @@ export default function Profile() {
   const tab = sp.get("tab") ?? "overview";
   const setTab = (t) => setSp({ tab: t });
   const { user: authUser, profile, refreshProfile } = useAuth();
+  const [avatarSrc, setAvatarSrc] = useState("");
 
   useEffect(() => {
     // ensure freshest profile after navigating from settings
     refreshProfile?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const md = authUser?.user_metadata || {};
+    const publicUrl = profile?.avatar_url || md.avatar_url || "";
+    const path = profile?.avatar_path || md.avatar_path || "";
+    let cancelled = false;
+    async function load() {
+      if (publicUrl) {
+        setAvatarSrc(publicUrl);
+        return;
+      }
+      if (path) {
+        const { data, error } = await supabase.storage.from("avatars").createSignedUrl(path, 3600);
+        if (!cancelled) setAvatarSrc(data?.signedUrl || "");
+        return;
+      }
+      setAvatarSrc("");
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, profile]);
 
   const [orders] = useState(initialOrders);
   const [reviews, setReviews] = useState([]);
@@ -140,10 +165,12 @@ export default function Profile() {
               .filter(Boolean)
               .join(" ")
               .trim() || md.full_name || "";
+            const avatar = avatarSrc || null;
             const seed = fullName || authUser?.email || "User";
+            const src = avatar || ("https://api.dicebear.com/7.x/initials/svg?seed=" + encodeURIComponent(seed));
             return (
               <img
-                src={"https://api.dicebear.com/7.x/initials/svg?seed=" + encodeURIComponent(seed)}
+                src={src}
                 alt={fullName || authUser?.email || "User"}
                 className="h-16 w-16 rounded-full object-cover ring-2 ring-white/80 bg-white"
               />

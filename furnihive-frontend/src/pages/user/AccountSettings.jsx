@@ -85,7 +85,9 @@ function PersonalPanel({ authUser, profile }) {
   const [storeName, setStoreName] = useState(init.storeName);
   const [birthDate, setBirthDate] = useState(init.birthDate);
   const [gender, setGender] = useState(init.gender);
-  const [preview, setPreview] = useState(mockUser.avatar);
+  const [preview, setPreview] = useState(profile?.avatar_url || authUser?.user_metadata?.avatar_url || "");
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [photoSaving, setPhotoSaving] = useState(false);
   const { refreshProfile, refreshUser } = useAuth();
   const initializedRef = useRef(false);
   const [formKey, setFormKey] = useState(0);
@@ -98,6 +100,7 @@ function PersonalPanel({ authUser, profile }) {
     if (!file) return;
     const url = URL.createObjectURL(file);
     setPreview(url);
+    setSelectedFile(file);
   };
 
   const onSave = async () => {
@@ -107,6 +110,7 @@ function PersonalPanel({ authUser, profile }) {
       const ln = lastNameRef.current?.value ?? "";
       const ph = phoneRef.current?.value ?? "";
       const sn = storeNameRef.current?.value ?? "";
+
       const update = {
         first_name: fn,
         last_name: ln,
@@ -121,7 +125,7 @@ function PersonalPanel({ authUser, profile }) {
         .from("profiles")
         .update(update)
         .eq("id", authUser?.id)
-        .select("id, first_name, last_name, phone, store_name, birth_date, gender")
+        .select("id, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path")
         .single();
       if (error) throw error;
       if (!updatedRow) {
@@ -162,6 +166,41 @@ function PersonalPanel({ authUser, profile }) {
     }
   };
 
+  const onSavePhoto = async () => {
+    if (!selectedFile) return;
+    try {
+      setPhotoSaving(true);
+      const ext = (selectedFile.name?.split(".").pop() || "jpg").toLowerCase();
+      const path = `${authUser?.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("avatars").upload(path, selectedFile, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: selectedFile.type || undefined,
+      });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+      const avatarUrl = pub?.publicUrl || null;
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({ avatar_url: avatarUrl, avatar_path: path })
+        .eq("id", authUser?.id);
+      if (error) throw error;
+      try {
+        await supabase.auth.updateUser({ data: { avatar_url: avatarUrl, avatar_path: path } });
+      } catch {}
+      await refreshUser?.();
+      await refreshProfile();
+      if (avatarUrl) setPreview(avatarUrl);
+      setSelectedFile(null);
+      toast.success("Photo updated");
+    } catch (e) {
+      toast.error(e?.message || "Failed to save photo");
+    } finally {
+      setPhotoSaving(false);
+    }
+  };
+
   const onCancel = () => {
     const seeded = buildInit(authUser, profile);
     setFirstName(seeded.firstName);
@@ -192,8 +231,8 @@ function PersonalPanel({ authUser, profile }) {
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
         <div className="flex items-center justify-between">
           <div className="text-[var(--brown-700)] font-semibold">Profile Picture</div>
-          <Button variant="secondary" className="text-sm" onClick={() => setIsEditing(true)} disabled={isEditing}>
-            Change Photo
+          <Button variant="secondary" className="text-sm" onClick={onSavePhoto} disabled={!selectedFile || photoSaving}>
+            {photoSaving ? "Saving..." : "Save Photo"}
           </Button>
         </div>
 
@@ -207,17 +246,9 @@ function PersonalPanel({ authUser, profile }) {
             Upload a new profile picture. JPG, PNG or GIF. Max size 5MB.
             <div className="mt-2">
               <label className="inline-block">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={!isEditing}
-                  onChange={(e) => onChoosePhoto(e.target.files?.[0])}
-                />
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => onChoosePhoto(e.target.files?.[0])} />
                 <span
-                  className={`inline-flex items-center rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm ${
-                    !isEditing ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-[var(--cream-50)]"
-                  }`}
+                  className={`inline-flex items-center rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm cursor-pointer hover:bg-[var(--cream-50)]`}
                 >
                   Upload New Photo
                 </span>

@@ -16,7 +16,7 @@ export function AuthProvider({ children }) {
     }
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, role, seller_approved, first_name, last_name, phone, store_name, birth_date, gender")
+      .select("id, role, seller_approved, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path")
       .eq("id", u.id)
       .single();
     if (!error && data) {
@@ -37,7 +37,7 @@ export function AuthProvider({ children }) {
     const { error: upsertErr, data: upserted } = await supabase
       .from("profiles")
       .upsert(candidate, { onConflict: "id" })
-      .select("id, role, seller_approved, first_name, last_name, phone, store_name, birth_date, gender")
+      .select("id, role, seller_approved, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path")
       .single();
     if (!upsertErr && upserted) setProfile(upserted);
     else setProfile(null);
