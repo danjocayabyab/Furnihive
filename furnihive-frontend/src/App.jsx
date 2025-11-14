@@ -1,8 +1,6 @@
 // src/App.jsx
 import { Routes, Route, Navigate } from "react-router-dom";
-//danjo
-//almacena
-//almacen
+
 /* ---------- Auth Pages ---------- */
 import Login from "./pages/auth/Login.jsx";
 import Signup from "./pages/auth/Signup.jsx";
