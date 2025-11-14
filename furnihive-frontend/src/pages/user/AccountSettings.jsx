@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/Button.jsx";
+import toast from "react-hot-toast";
+import { supabase } from "../../lib/supabaseClient";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
 
 /* ------------------ Tabs (security removed) ------------------ */
 const TABS = [
@@ -22,6 +25,7 @@ const mockUser = {
 export default function AccountSettings() {
   const [sp, setSp] = useSearchParams();
   const tab = sp.get("tab") || "personal";
+  const { user: authUser, profile } = useAuth();
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 space-y-6">
@@ -51,7 +55,7 @@ export default function AccountSettings() {
       </div>
 
       {/* Panels */}
-      {tab === "personal" && <PersonalPanel />}
+      {tab === "personal" && <PersonalPanel authUser={authUser} profile={profile} />}
       {tab === "addresses" && <AddressesPanel />}
     </div>
   );
@@ -60,30 +64,161 @@ export default function AccountSettings() {
 /* =========================================================
    PERSONAL
 ========================================================= */
-function PersonalPanel() {
+function PersonalPanel({ authUser, profile }) {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [values, setValues] = useState({ ...mockUser });
-  const [preview, setPreview] = useState(mockUser.avatar);
+  const buildInit = (au, p) => ({
+    avatar: "",
+    firstName: p?.first_name || au?.user_metadata?.first_name || "",
+    lastName: p?.last_name || au?.user_metadata?.last_name || "",
+    email: au?.email || "",
+    phone: p?.phone || au?.user_metadata?.phone || "",
+    birthDate: p?.birth_date || au?.user_metadata?.birth_date || "",
+    gender: p?.gender || au?.user_metadata?.gender || "",
+    storeName: p?.store_name || au?.user_metadata?.store_name || "",
+  });
+  const init = buildInit(authUser, profile);
+  const [firstName, setFirstName] = useState(init.firstName);
+  const [lastName, setLastName] = useState(init.lastName);
+  const [email, setEmail] = useState(init.email);
+  const [phone, setPhone] = useState(init.phone);
+  const [storeName, setStoreName] = useState(init.storeName);
+  const [birthDate, setBirthDate] = useState(init.birthDate);
+  const [gender, setGender] = useState(init.gender);
+  const [preview, setPreview] = useState(profile?.avatar_url || authUser?.user_metadata?.avatar_url || "");
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [photoSaving, setPhotoSaving] = useState(false);
+  const { refreshProfile, refreshUser } = useAuth();
+  const initializedRef = useRef(false);
+  const [formKey, setFormKey] = useState(0);
+  const firstNameRef = useRef(null);
+  const lastNameRef = useRef(null);
+  const phoneRef = useRef(null);
+  const storeNameRef = useRef(null);
 
   const onChoosePhoto = (file) => {
     if (!file) return;
     const url = URL.createObjectURL(file);
     setPreview(url);
+    setSelectedFile(file);
   };
 
   const onSave = async () => {
-    setSaving(true);
-    // TODO: await api.put('/me', values)
-    await new Promise((r) => setTimeout(r, 600));
-    setSaving(false);
-    setIsEditing(false);
+    try {
+      setSaving(true);
+      const fn = firstNameRef.current?.value ?? "";
+      const ln = lastNameRef.current?.value ?? "";
+      const ph = phoneRef.current?.value ?? "";
+      const sn = storeNameRef.current?.value ?? "";
+      const phoneOk = /^((\+?63)|0)9\d{9}$/.test(ph.replace(/\s|-/g, ""));
+      if (ph && !phoneOk) {
+        toast.error("Please enter a valid PH mobile number (e.g., 09171234567 or +639171234567).");
+        setSaving(false);
+        return;
+      }
+
+      const update = {
+        first_name: fn,
+        last_name: ln,
+        phone: ph,
+        birth_date: birthDate || null,
+        gender: gender || null,
+      };
+      if (profile?.role === "seller") {
+        update.store_name = sn || null;
+      }
+      const { error, data: updatedRow } = await supabase
+        .from("profiles")
+        .update(update)
+        .eq("id", authUser?.id)
+        .select("id, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path")
+        .single();
+      if (error) throw error;
+      if (!updatedRow) {
+        console.warn("Profile update returned no row. Check RLS.");
+      }
+      // Also update Supabase Auth user metadata so the Auth display name reflects changes
+      const fullName = `${fn || ""} ${ln || ""}`.trim();
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            first_name: fn || null,
+            last_name: ln || null,
+            full_name: fullName || null,
+            name: fullName || null,
+            phone: ph || null,
+            birth_date: birthDate || null,
+            gender: gender || null,
+          },
+        });
+        await refreshUser?.();
+      } catch (metaErr) {
+        console.warn("Auth metadata update failed (non-fatal):", metaErr);
+      }
+
+      await refreshProfile();
+      // Sync local states to what was saved
+      setFirstName(fn);
+      setLastName(ln);
+      setPhone(ph);
+      setStoreName(sn);
+      setFormKey((k) => k + 1);
+      toast.success("Profile updated");
+      setIsEditing(false);
+    } catch (e) {
+      toast.error(e?.message || "Failed to save profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onSavePhoto = async () => {
+    if (!selectedFile) return;
+    try {
+      setPhotoSaving(true);
+      const ext = (selectedFile.name?.split(".").pop() || "jpg").toLowerCase();
+      const path = `${authUser?.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("avatars").upload(path, selectedFile, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: selectedFile.type || undefined,
+      });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+      const avatarUrl = pub?.publicUrl || null;
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({ avatar_url: avatarUrl, avatar_path: path })
+        .eq("id", authUser?.id);
+      if (error) throw error;
+      try {
+        await supabase.auth.updateUser({ data: { avatar_url: avatarUrl, avatar_path: path } });
+      } catch {}
+      await refreshUser?.();
+      await refreshProfile();
+      if (avatarUrl) setPreview(avatarUrl);
+      setSelectedFile(null);
+      toast.success("Photo updated");
+    } catch (e) {
+      toast.error(e?.message || "Failed to save photo");
+    } finally {
+      setPhotoSaving(false);
+    }
   };
 
   const onCancel = () => {
-    setValues({ ...mockUser });
-    setPreview(mockUser.avatar);
+    const seeded = buildInit(authUser, profile);
+    setFirstName(seeded.firstName);
+    setLastName(seeded.lastName);
+    setEmail(seeded.email);
+    setPhone(seeded.phone);
+    setStoreName(seeded.storeName);
+    setBirthDate(seeded.birthDate);
+    setGender(seeded.gender);
+    setPreview("");
     setIsEditing(false);
+    setFormKey((k) => k + 1);
   };
 
   const Field = ({ label, children, col = false }) => (
@@ -102,8 +237,8 @@ function PersonalPanel() {
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
         <div className="flex items-center justify-between">
           <div className="text-[var(--brown-700)] font-semibold">Profile Picture</div>
-          <Button variant="secondary" className="text-sm" onClick={() => setIsEditing(true)} disabled={isEditing}>
-            Change Photo
+          <Button variant="secondary" className="text-sm" onClick={onSavePhoto} disabled={!selectedFile || photoSaving}>
+            {photoSaving ? "Saving..." : "Save Photo"}
           </Button>
         </div>
 
@@ -117,17 +252,9 @@ function PersonalPanel() {
             Upload a new profile picture. JPG, PNG or GIF. Max size 5MB.
             <div className="mt-2">
               <label className="inline-block">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={!isEditing}
-                  onChange={(e) => onChoosePhoto(e.target.files?.[0])}
-                />
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => onChoosePhoto(e.target.files?.[0])} />
                 <span
-                  className={`inline-flex items-center rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm ${
-                    !isEditing ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-[var(--cream-50)]"
-                  }`}
+                  className={`inline-flex items-center rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm cursor-pointer hover:bg-[var(--cream-50)]`}
                 >
                   Upload New Photo
                 </span>
@@ -142,7 +269,21 @@ function PersonalPanel() {
         <div className="flex items-center justify-between mb-4">
           <div className="text-[var(--brown-700)] font-semibold">Personal Information</div>
           {!isEditing ? (
-            <Button variant="secondary" className="text-sm" onClick={() => setIsEditing(true)}>
+            <Button
+              variant="secondary"
+              className="text-sm"
+              onClick={() => {
+                const seeded = buildInit(authUser, profile);
+                setFirstName(seeded.firstName);
+                setLastName(seeded.lastName);
+                setEmail(seeded.email);
+                setPhone(seeded.phone);
+                setStoreName(seeded.storeName);
+                setBirthDate(seeded.birthDate);
+                setGender(seeded.gender);
+                setIsEditing(true);
+              }}
+            >
               Edit
             </Button>
           ) : (
@@ -157,55 +298,65 @@ function PersonalPanel() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div key={formKey} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="First Name">
             <input
               className={inputCls}
-              value={values.firstName}
+              defaultValue={firstName}
+              ref={firstNameRef}
               disabled={!isEditing}
-              onChange={(e) => setValues((v) => ({ ...v, firstName: e.target.value }))}
             />
           </Field>
           <Field label="Last Name">
             <input
               className={inputCls}
-              value={values.lastName}
+              defaultValue={lastName}
+              ref={lastNameRef}
               disabled={!isEditing}
-              onChange={(e) => setValues((v) => ({ ...v, lastName: e.target.value }))}
             />
           </Field>
+          {profile?.role === "seller" && (
+            <Field label="Store Name" col>
+              <input
+                className={inputCls}
+                defaultValue={storeName}
+                ref={storeNameRef}
+                disabled={!isEditing}
+              />
+            </Field>
+          )}
           <Field label="Email Address" col>
             <input
               type="email"
               className={inputCls}
-              value={values.email}
-              disabled={!isEditing}
-              onChange={(e) => setValues((v) => ({ ...v, email: e.target.value }))}
+              value={email}
+              disabled
+              onChange={(e) => setEmail(e.target.value)}
             />
           </Field>
           <Field label="Phone Number" col>
             <input
               className={inputCls}
-              value={values.phone}
+              defaultValue={phone}
+              ref={phoneRef}
               disabled={!isEditing}
-              onChange={(e) => setValues((v) => ({ ...v, phone: e.target.value }))}
             />
           </Field>
           <Field label="Birth Date">
             <input
               type="date"
               className={inputCls}
-              value={values.birthDate}
+              value={birthDate}
               disabled={!isEditing}
-              onChange={(e) => setValues((v) => ({ ...v, birthDate: e.target.value }))}
+              onChange={(e) => setBirthDate(e.target.value)}
             />
           </Field>
           <Field label="Gender">
             <select
               className={inputCls}
-              value={values.gender}
+              value={gender}
               disabled={!isEditing}
-              onChange={(e) => setValues((v) => ({ ...v, gender: e.target.value }))}
+              onChange={(e) => setGender(e.target.value)}
             >
               <option>Female</option>
               <option>Male</option>
@@ -222,36 +373,52 @@ function PersonalPanel() {
    ADDRESSES
 ========================================================= */
 function AddressesPanel() {
-  const [addresses, setAddresses] = useState([
-    {
-      id: "addr-1",
-      label: "Home Address",
-      name: "Maria Santos",
-      lines: ["123 Katipunan Ave, Loyola Heights", "Quezon City, Metro Manila 1108"],
-      phone: "+63 912 345 6789",
-      isDefault: true,
-    },
-    {
-      id: "addr-2",
-      label: "Work Address",
-      name: "Maria Santos",
-      lines: ["456 Ayala Ave, Makati CBD", "Makati, Metro Manila 1226"],
-      phone: "+63 912 345 6789",
-      isDefault: false,
-    },
-  ]);
-
+  const { user: authUser } = useAuth();
+  const [addresses, setAddresses] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState({ open: false, mode: "add", data: null });
+
+  useEffect(() => {
+    if (!authUser?.id) return;
+    (async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("addresses")
+        .select("id,label,name,line1,line2,postal_code,province,city,phone,is_default,deleted_at")
+        .eq("user_id", authUser.id)
+        .is("deleted_at", null)
+        .order("is_default", { ascending: false })
+        .order("created_at", { ascending: true });
+      if (!error) {
+        const normalized = (data || []).map((r) => ({
+          id: r.id,
+          label: r.label || "Home Address",
+          name: r.name || "",
+          street: r.line1 || "",
+          postalCode: r.postal_code || "",
+          province: r.province || "",
+          city: r.city || "",
+          phone: r.phone || "",
+          isDefault: !!r.is_default,
+        }));
+        setAddresses(normalized);
+      }
+      setLoading(false);
+    })();
+  }, [authUser?.id]);
 
   const openAdd = () =>
     setModal({
       open: true,
       mode: "add",
       data: {
-        id: `addr-${Date.now()}`,
+        id: null,
         label: "Home Address",
         name: "",
-        lines: ["", ""],
+        street: "",
+        postalCode: "",
+        province: "",
+        city: "",
         phone: "",
         isDefault: addresses.length === 0,
       },
@@ -260,21 +427,71 @@ function AddressesPanel() {
   const openEdit = (addr) => setModal({ open: true, mode: "edit", data: { ...addr } });
   const closeModal = () => setModal({ open: false, mode: "add", data: null });
 
-  const saveAddress = (data) => {
-    setAddresses((prev) => {
-      let list = [];
-      const exists = prev.some((a) => a.id === data.id);
-      if (data.isDefault) {
-        list = prev.map((a) => ({ ...a, isDefault: a.id === data.id }));
-      } else list = [...prev];
-      if (exists) return list.map((a) => (a.id === data.id ? data : a));
-      return [...list, data];
-    });
+  const saveAddress = async (addr) => {
+    if (!authUser?.id) return;
+    const cleanPhone = (addr.phone || "").replace(/\s|-/g, "");
+    const phoneOk = /^((\+?63)|0)9\d{9}$/.test(cleanPhone);
+    if (addr.phone && !phoneOk) {
+      toast.error("Invalid phone. Use 09171234567 or +639171234567.");
+      return;
+    }
+    const payload = {
+      user_id: authUser.id,
+      label: addr.label,
+      name: addr.name,
+      line1: addr.street || "",
+      line2: "",
+      postal_code: addr.postalCode || null,
+      province: addr.province || null,
+      city: addr.city || null,
+      phone: addr.phone || null,
+      is_default: !!addr.isDefault,
+    };
+    if (addr.isDefault) {
+      // unset others
+      await supabase.from("addresses").update({ is_default: false }).eq("user_id", authUser.id);
+    }
+    if (addr.id) {
+      const { error } = await supabase.from("addresses").update(payload).eq("id", addr.id);
+      if (error) return;
+    } else {
+      const { data, error } = await supabase.from("addresses").insert(payload).select("id").single();
+      if (error) return;
+      addr.id = data.id;
+    }
+    // reload list
+    const { data: list } = await supabase
+      .from("addresses")
+      .select("id,label,name,line1,line2,postal_code,province,city,phone,is_default")
+      .eq("user_id", authUser.id)
+      .is("deleted_at", null)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: true });
+    const normalized = (list || []).map((r) => ({
+      id: r.id,
+      label: r.label || "Home Address",
+      name: r.name || "",
+      street: r.line1 || "",
+      postalCode: r.postal_code || "",
+      province: r.province || "",
+      city: r.city || "",
+      phone: r.phone || "",
+      isDefault: !!r.is_default,
+    }));
+    setAddresses(normalized);
     closeModal();
   };
 
-  const deleteAddress = (id) => setAddresses((prev) => prev.filter((a) => a.id !== id));
-  const setDefault = (id) => setAddresses((prev) => prev.map((a) => ({ ...a, isDefault: a.id === id })));
+  const deleteAddress = async (id) => {
+    await supabase.from("addresses").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+    setAddresses((prev) => prev.filter((a) => a.id !== id));
+  };
+  const setDefault = async (id) => {
+    if (!authUser?.id) return;
+    await supabase.from("addresses").update({ is_default: false }).eq("user_id", authUser.id);
+    await supabase.from("addresses").update({ is_default: true }).eq("id", id);
+    setAddresses((prev) => prev.map((a) => ({ ...a, isDefault: a.id === id })));
+  };
 
   return (
     <div className="space-y-4">
@@ -331,9 +548,10 @@ function AddressCard({ addr, onEdit, onDelete, onSetDefault }) {
       <div className="font-semibold text-[var(--brown-700)] mb-2">{addr.label}</div>
       <div className="text-sm text-[var(--brown-700)]">{addr.name}</div>
       <div className="text-sm text-gray-700">
-        {addr.lines.map((l, i) => (
-          <div key={i}>{l}</div>
-        ))}
+        {addr.street && <div>{addr.street}</div>}
+        <div>
+          {([addr.city, addr.province].filter(Boolean).join(", ") + (addr.postalCode ? ` ${addr.postalCode}` : "")).trim()}
+        </div>
       </div>
       <div className="text-sm text-gray-700">{addr.phone}</div>
 
@@ -356,8 +574,14 @@ function AddressModal({ mode, initial, onClose, onSave }) {
   const input = "w-full rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm";
 
   const save = () => {
-    if (!form.name || !form.lines[0] || !form.phone) {
-      alert("Please complete name, address line 1 and phone.");
+    if (!form.name || !form.street || !form.phone) {
+      alert("Please complete name, street and phone.");
+      return;
+    }
+    const clean = (form.phone || "").replace(/\s|-/g, "");
+    const ok = /^((\+?63)|0)9\d{9}$/.test(clean);
+    if (!ok) {
+      alert("Invalid phone. Use 09171234567 or +639171234567.");
       return;
     }
     onSave(form);
@@ -393,22 +617,38 @@ function AddressModal({ mode, initial, onClose, onSave }) {
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-xs font-semibold mb-1">Address Line 1</label>
+            <label className="block text-xs font-semibold mb-1">Street</label>
             <input
               className={input}
-              value={form.lines[0]}
-              onChange={(e) => setForm((f) => ({ ...f, lines: [e.target.value, f.lines[1] || ""] }))}
+              value={form.street}
+              onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))}
               placeholder="Street, barangay"
             />
           </div>
 
-          <div className="md:col-span-2">
-            <label className="block text-xs font-semibold mb-1">Address Line 2 (optional)</label>
+          <div>
+            <label className="block text-xs font-semibold mb-1">City / Municipality</label>
             <input
               className={input}
-              value={form.lines[1]}
-              onChange={(e) => setForm((f) => ({ ...f, lines: [f.lines[0], e.target.value] }))}
-              placeholder="City, province / postal"
+              value={form.city}
+              onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1">Province</label>
+            <input
+              className={input}
+              value={form.province}
+              onChange={(e) => setForm((f) => ({ ...f, province: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1">Postal Code</label>
+            <input
+              className={input}
+              value={form.postalCode}
+              onChange={(e) => setForm((f) => ({ ...f, postalCode: e.target.value }))}
+              placeholder="e.g. 1109"
             />
           </div>
 
