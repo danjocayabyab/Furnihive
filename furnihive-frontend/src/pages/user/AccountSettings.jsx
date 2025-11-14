@@ -367,33 +367,42 @@ function PersonalPanel({ authUser, profile }) {
    ADDRESSES
 ========================================================= */
 function AddressesPanel() {
-  const [addresses, setAddresses] = useState([
-    {
-      id: "addr-1",
-      label: "Home Address",
-      name: "Maria Santos",
-      lines: ["123 Katipunan Ave, Loyola Heights", "Quezon City, Metro Manila 1108"],
-      phone: "+63 912 345 6789",
-      isDefault: true,
-    },
-    {
-      id: "addr-2",
-      label: "Work Address",
-      name: "Maria Santos",
-      lines: ["456 Ayala Ave, Makati CBD", "Makati, Metro Manila 1226"],
-      phone: "+63 912 345 6789",
-      isDefault: false,
-    },
-  ]);
-
+  const { user: authUser } = useAuth();
+  const [addresses, setAddresses] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState({ open: false, mode: "add", data: null });
+
+  useEffect(() => {
+    if (!authUser?.id) return;
+    (async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("addresses")
+        .select("id,label,name,line1,line2,phone,is_default")
+        .eq("user_id", authUser.id)
+        .order("is_default", { ascending: false })
+        .order("created_at", { ascending: true });
+      if (!error) {
+        const normalized = (data || []).map((r) => ({
+          id: r.id,
+          label: r.label || "Home Address",
+          name: r.name || "",
+          lines: [r.line1 || "", r.line2 || ""],
+          phone: r.phone || "",
+          isDefault: !!r.is_default,
+        }));
+        setAddresses(normalized);
+      }
+      setLoading(false);
+    })();
+  }, [authUser?.id]);
 
   const openAdd = () =>
     setModal({
       open: true,
       mode: "add",
       data: {
-        id: `addr-${Date.now()}`,
+        id: null,
         label: "Home Address",
         name: "",
         lines: ["", ""],
@@ -405,21 +414,58 @@ function AddressesPanel() {
   const openEdit = (addr) => setModal({ open: true, mode: "edit", data: { ...addr } });
   const closeModal = () => setModal({ open: false, mode: "add", data: null });
 
-  const saveAddress = (data) => {
-    setAddresses((prev) => {
-      let list = [];
-      const exists = prev.some((a) => a.id === data.id);
-      if (data.isDefault) {
-        list = prev.map((a) => ({ ...a, isDefault: a.id === data.id }));
-      } else list = [...prev];
-      if (exists) return list.map((a) => (a.id === data.id ? data : a));
-      return [...list, data];
-    });
+  const saveAddress = async (addr) => {
+    if (!authUser?.id) return;
+    const payload = {
+      user_id: authUser.id,
+      label: addr.label,
+      name: addr.name,
+      line1: addr.lines?.[0] || "",
+      line2: addr.lines?.[1] || "",
+      phone: addr.phone,
+      is_default: !!addr.isDefault,
+    };
+    if (addr.isDefault) {
+      // unset others
+      await supabase.from("addresses").update({ is_default: false }).eq("user_id", authUser.id);
+    }
+    if (addr.id) {
+      const { error } = await supabase.from("addresses").update(payload).eq("id", addr.id);
+      if (error) return;
+    } else {
+      const { data, error } = await supabase.from("addresses").insert(payload).select("id").single();
+      if (error) return;
+      addr.id = data.id;
+    }
+    // reload list
+    const { data: list } = await supabase
+      .from("addresses")
+      .select("id,label,name,line1,line2,phone,is_default")
+      .eq("user_id", authUser.id)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: true });
+    const normalized = (list || []).map((r) => ({
+      id: r.id,
+      label: r.label || "Home Address",
+      name: r.name || "",
+      lines: [r.line1 || "", r.line2 || ""],
+      phone: r.phone || "",
+      isDefault: !!r.is_default,
+    }));
+    setAddresses(normalized);
     closeModal();
   };
 
-  const deleteAddress = (id) => setAddresses((prev) => prev.filter((a) => a.id !== id));
-  const setDefault = (id) => setAddresses((prev) => prev.map((a) => ({ ...a, isDefault: a.id === id })));
+  const deleteAddress = async (id) => {
+    await supabase.from("addresses").delete().eq("id", id);
+    setAddresses((prev) => prev.filter((a) => a.id !== id));
+  };
+  const setDefault = async (id) => {
+    if (!authUser?.id) return;
+    await supabase.from("addresses").update({ is_default: false }).eq("user_id", authUser.id);
+    await supabase.from("addresses").update({ is_default: true }).eq("id", id);
+    setAddresses((prev) => prev.map((a) => ({ ...a, isDefault: a.id === id })));
+  };
 
   return (
     <div className="space-y-4">

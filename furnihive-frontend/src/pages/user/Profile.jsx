@@ -71,6 +71,7 @@ export default function Profile() {
   const setTab = (t) => setSp({ tab: t });
   const { user: authUser, profile, refreshProfile } = useAuth();
   const [avatarSrc, setAvatarSrc] = useState("");
+  const [defaultAddress, setDefaultAddress] = useState("");
 
   useEffect(() => {
     // ensure freshest profile after navigating from settings
@@ -100,6 +101,29 @@ export default function Profile() {
       cancelled = true;
     };
   }, [authUser, profile]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadDefaultAddress() {
+      if (!authUser?.id) return setDefaultAddress("");
+      const { data, error } = await supabase
+        .from("addresses")
+        .select("line1,line2,is_default")
+        .eq("user_id", authUser.id)
+        .order("is_default", { ascending: false })
+        .order("created_at", { ascending: true })
+        .limit(1);
+      if (!cancelled) {
+        const a = data?.[0];
+        const text = a ? `${a.line1 || ""}${a.line2 ? ", " + a.line2 : ""}`.trim() : "";
+        setDefaultAddress(text);
+      }
+    }
+    loadDefaultAddress();
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id]);
 
   const [orders] = useState(initialOrders);
   const [reviews, setReviews] = useState([]);
@@ -197,7 +221,7 @@ export default function Profile() {
             })()}
             <div className="text-xs opacity-90 mt-1 flex items-center gap-3">
               <span>🪪 Member</span>
-              <span>📍 —</span>
+              <span>📍 {defaultAddress || "—"}</span>
             </div>
           </div>
         </div>
