@@ -1,17 +1,11 @@
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Button from "../../components/ui/Button.jsx";
 import { logout } from "../../lib/auth.js";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
 
 /* ---------- Mock data (swap with API later) ---------- */
-const user = {
-  name: "Maria Santos",
-  email: "maria.santos@email.com",
-  joined: "Joined August 2023",
-  location: "Quezon City, Metro Manila",
-  avatar:
-    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=400&auto=format&fit=crop",
-};
+// replaced by AuthContext values
 
 const initialOrders = [
   {
@@ -74,6 +68,13 @@ export default function Profile() {
   const navigate = useNavigate();
   const tab = sp.get("tab") ?? "overview";
   const setTab = (t) => setSp({ tab: t });
+  const { user: authUser, profile, refreshProfile } = useAuth();
+
+  useEffect(() => {
+    // ensure freshest profile after navigating from settings
+    refreshProfile?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [orders] = useState(initialOrders);
   const [reviews, setReviews] = useState([]);
@@ -130,17 +131,46 @@ export default function Profile() {
       {/* Header card */}
       <div className="rounded-2xl overflow-hidden border border-[var(--line-amber)]">
         <div className="bg-gradient-to-r from-[var(--amber-500)] to-[var(--orange-600)] p-5 text-white flex items-center gap-4">
-          <img
-            src={user.avatar}
-            alt={user.name}
-            className="h-16 w-16 rounded-full object-cover ring-2 ring-white/80"
-          />
+          {(() => {
+            const md = authUser?.user_metadata || {};
+            const fullName = [
+              profile?.first_name || md.first_name,
+              profile?.last_name || md.last_name,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .trim() || md.full_name || "";
+            const seed = fullName || authUser?.email || "User";
+            return (
+              <img
+                src={"https://api.dicebear.com/7.x/initials/svg?seed=" + encodeURIComponent(seed)}
+                alt={fullName || authUser?.email || "User"}
+                className="h-16 w-16 rounded-full object-cover ring-2 ring-white/80 bg-white"
+              />
+            );
+          })()}
           <div>
-            <div className="text-xl font-bold">{user.name}</div>
-            <div className="text-sm opacity-95">{user.email}</div>
+            {(() => {
+              const md = authUser?.user_metadata || {};
+              const fullName = [
+                profile?.first_name || md.first_name,
+                profile?.last_name || md.last_name,
+              ]
+                .filter(Boolean)
+                .join(" ")
+                .trim() || md.full_name || "";
+              const title = fullName || authUser?.email || "User";
+              const showEmail = !!authUser?.email && title !== authUser.email;
+              return (
+                <>
+                  <div className="text-xl font-bold">{title}</div>
+                  {showEmail && <div className="text-sm opacity-95">{authUser.email}</div>}
+                </>
+              );
+            })()}
             <div className="text-xs opacity-90 mt-1 flex items-center gap-3">
-              <span>🪪 {user.joined}</span>
-              <span>📍 {user.location}</span>
+              <span>🪪 Member</span>
+              <span>📍 —</span>
             </div>
           </div>
         </div>

@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import Button from "../../components/ui/Button.jsx";
+import toast from "react-hot-toast";
+import { supabase } from "../../lib/supabaseClient";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
 
 /* ------------------ Tabs (security removed) ------------------ */
 const TABS = [
@@ -22,6 +25,7 @@ const mockUser = {
 export default function AccountSettings() {
   const [sp, setSp] = useSearchParams();
   const tab = sp.get("tab") || "personal";
+  const { user: authUser, profile } = useAuth();
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 space-y-6">
@@ -51,7 +55,7 @@ export default function AccountSettings() {
       </div>
 
       {/* Panels */}
-      {tab === "personal" && <PersonalPanel />}
+      {tab === "personal" && <PersonalPanel authUser={authUser} profile={profile} />}
       {tab === "addresses" && <AddressesPanel />}
     </div>
   );
@@ -60,11 +64,35 @@ export default function AccountSettings() {
 /* =========================================================
    PERSONAL
 ========================================================= */
-function PersonalPanel() {
+function PersonalPanel({ authUser, profile }) {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [values, setValues] = useState({ ...mockUser });
+  const buildInit = (au, p) => ({
+    avatar: "",
+    firstName: p?.first_name || au?.user_metadata?.first_name || "",
+    lastName: p?.last_name || au?.user_metadata?.last_name || "",
+    email: au?.email || "",
+    phone: p?.phone || au?.user_metadata?.phone || "",
+    birthDate: p?.birth_date || au?.user_metadata?.birth_date || "",
+    gender: p?.gender || au?.user_metadata?.gender || "",
+    storeName: p?.store_name || au?.user_metadata?.store_name || "",
+  });
+  const init = buildInit(authUser, profile);
+  const [firstName, setFirstName] = useState(init.firstName);
+  const [lastName, setLastName] = useState(init.lastName);
+  const [email, setEmail] = useState(init.email);
+  const [phone, setPhone] = useState(init.phone);
+  const [storeName, setStoreName] = useState(init.storeName);
+  const [birthDate, setBirthDate] = useState(init.birthDate);
+  const [gender, setGender] = useState(init.gender);
   const [preview, setPreview] = useState(mockUser.avatar);
+  const { refreshProfile, refreshUser } = useAuth();
+  const initializedRef = useRef(false);
+  const [formKey, setFormKey] = useState(0);
+  const firstNameRef = useRef(null);
+  const lastNameRef = useRef(null);
+  const phoneRef = useRef(null);
+  const storeNameRef = useRef(null);
 
   const onChoosePhoto = (file) => {
     if (!file) return;
@@ -73,17 +101,79 @@ function PersonalPanel() {
   };
 
   const onSave = async () => {
-    setSaving(true);
-    // TODO: await api.put('/me', values)
-    await new Promise((r) => setTimeout(r, 600));
-    setSaving(false);
-    setIsEditing(false);
+    try {
+      setSaving(true);
+      const fn = firstNameRef.current?.value ?? "";
+      const ln = lastNameRef.current?.value ?? "";
+      const ph = phoneRef.current?.value ?? "";
+      const sn = storeNameRef.current?.value ?? "";
+      const update = {
+        first_name: fn,
+        last_name: ln,
+        phone: ph,
+        birth_date: birthDate || null,
+        gender: gender || null,
+      };
+      if (profile?.role === "seller") {
+        update.store_name = sn || null;
+      }
+      const { error, data: updatedRow } = await supabase
+        .from("profiles")
+        .update(update)
+        .eq("id", authUser?.id)
+        .select("id, first_name, last_name, phone, store_name, birth_date, gender")
+        .single();
+      if (error) throw error;
+      if (!updatedRow) {
+        console.warn("Profile update returned no row. Check RLS.");
+      }
+      // Also update Supabase Auth user metadata so the Auth display name reflects changes
+      const fullName = `${fn || ""} ${ln || ""}`.trim();
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            first_name: fn || null,
+            last_name: ln || null,
+            full_name: fullName || null,
+            name: fullName || null,
+            phone: ph || null,
+            birth_date: birthDate || null,
+            gender: gender || null,
+          },
+        });
+        await refreshUser?.();
+      } catch (metaErr) {
+        console.warn("Auth metadata update failed (non-fatal):", metaErr);
+      }
+
+      await refreshProfile();
+      // Sync local states to what was saved
+      setFirstName(fn);
+      setLastName(ln);
+      setPhone(ph);
+      setStoreName(sn);
+      setFormKey((k) => k + 1);
+      toast.success("Profile updated");
+      setIsEditing(false);
+    } catch (e) {
+      toast.error(e?.message || "Failed to save profile");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const onCancel = () => {
-    setValues({ ...mockUser });
-    setPreview(mockUser.avatar);
+    const seeded = buildInit(authUser, profile);
+    setFirstName(seeded.firstName);
+    setLastName(seeded.lastName);
+    setEmail(seeded.email);
+    setPhone(seeded.phone);
+    setStoreName(seeded.storeName);
+    setBirthDate(seeded.birthDate);
+    setGender(seeded.gender);
+    setPreview("");
     setIsEditing(false);
+    setFormKey((k) => k + 1);
   };
 
   const Field = ({ label, children, col = false }) => (
@@ -142,7 +232,21 @@ function PersonalPanel() {
         <div className="flex items-center justify-between mb-4">
           <div className="text-[var(--brown-700)] font-semibold">Personal Information</div>
           {!isEditing ? (
-            <Button variant="secondary" className="text-sm" onClick={() => setIsEditing(true)}>
+            <Button
+              variant="secondary"
+              className="text-sm"
+              onClick={() => {
+                const seeded = buildInit(authUser, profile);
+                setFirstName(seeded.firstName);
+                setLastName(seeded.lastName);
+                setEmail(seeded.email);
+                setPhone(seeded.phone);
+                setStoreName(seeded.storeName);
+                setBirthDate(seeded.birthDate);
+                setGender(seeded.gender);
+                setIsEditing(true);
+              }}
+            >
               Edit
             </Button>
           ) : (
@@ -157,55 +261,65 @@ function PersonalPanel() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div key={formKey} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="First Name">
             <input
               className={inputCls}
-              value={values.firstName}
+              defaultValue={firstName}
+              ref={firstNameRef}
               disabled={!isEditing}
-              onChange={(e) => setValues((v) => ({ ...v, firstName: e.target.value }))}
             />
           </Field>
           <Field label="Last Name">
             <input
               className={inputCls}
-              value={values.lastName}
+              defaultValue={lastName}
+              ref={lastNameRef}
               disabled={!isEditing}
-              onChange={(e) => setValues((v) => ({ ...v, lastName: e.target.value }))}
             />
           </Field>
+          {profile?.role === "seller" && (
+            <Field label="Store Name" col>
+              <input
+                className={inputCls}
+                defaultValue={storeName}
+                ref={storeNameRef}
+                disabled={!isEditing}
+              />
+            </Field>
+          )}
           <Field label="Email Address" col>
             <input
               type="email"
               className={inputCls}
-              value={values.email}
-              disabled={!isEditing}
-              onChange={(e) => setValues((v) => ({ ...v, email: e.target.value }))}
+              value={email}
+              disabled
+              onChange={(e) => setEmail(e.target.value)}
             />
           </Field>
           <Field label="Phone Number" col>
             <input
               className={inputCls}
-              value={values.phone}
+              defaultValue={phone}
+              ref={phoneRef}
               disabled={!isEditing}
-              onChange={(e) => setValues((v) => ({ ...v, phone: e.target.value }))}
             />
           </Field>
           <Field label="Birth Date">
             <input
               type="date"
               className={inputCls}
-              value={values.birthDate}
+              value={birthDate}
               disabled={!isEditing}
-              onChange={(e) => setValues((v) => ({ ...v, birthDate: e.target.value }))}
+              onChange={(e) => setBirthDate(e.target.value)}
             />
           </Field>
           <Field label="Gender">
             <select
               className={inputCls}
-              value={values.gender}
+              value={gender}
               disabled={!isEditing}
-              onChange={(e) => setValues((v) => ({ ...v, gender: e.target.value }))}
+              onChange={(e) => setGender(e.target.value)}
             >
               <option>Female</option>
               <option>Male</option>
