@@ -45,31 +45,6 @@ export default function Login() {
         <p className="mt-1 text-sm text-[var(--orange-600)]/90">Welcome back</p>
       </div>
 
-      {/* Role selector */}
-      <div className="mt-5 grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() => setRole("buyer")}
-          className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
-            role === "buyer"
-              ? "bg-[var(--orange-600)] text-white border-[var(--orange-600)]"
-              : "border-[var(--line-amber)] text-[var(--brown-700)] bg-white hover:bg-[var(--cream-50)]"
-          }`}
-        >
-           Buy furniture
-        </button>
-        <button
-          type="button"
-          onClick={() => setRole("seller")}
-          className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
-            role === "seller"
-              ? "bg-[var(--orange-600)] text-white border-[var(--orange-600)]"
-              : "border-[var(--line-amber)] text-[var(--brown-700)] bg-white hover:bg-[var(--cream-50)]"
-          }`}
-        >
-           Sell furniture
-        </button>
-      </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
         <div>
