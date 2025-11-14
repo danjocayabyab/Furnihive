@@ -3,24 +3,41 @@ import { useNavigate, Link } from "react-router-dom";
 
 export default function SellerTopbar() {
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-  const [unread, setUnread] = useState(1); // mock; wire to backend later
-  const menuRef = useRef(null);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState([
+    { id: 1, text: "New order received", read: false },
+    { id: 2, text: "Product approved", read: false },
+    { id: 3, text: "Verification completed", read: false },
+  ]);
 
-  // close dropdown on outside click
+  const accountRef = useRef(null);
+  const notifRef = useRef(null);
+
+  // Close dropdowns on outside click
   useEffect(() => {
-    const onClick = (e) => {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(e.target)) setOpen(false);
+    const handleClick = (e) => {
+      if (accountRef.current && !accountRef.current.contains(e.target)) {
+        setAccountOpen(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setNotifOpen(false);
+      }
     };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
   const logout = () => {
-    // clear your auth/session as needed
     localStorage.removeItem("fh_token");
     navigate("/login");
+  };
+
+  // Mark notifications as read
+  const markAsRead = (id) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
   };
 
   return (
@@ -39,46 +56,78 @@ export default function SellerTopbar() {
           </div>
         </Link>
 
-        {/* Right: messages + account */}
-        <div className="flex items-center gap-4" ref={menuRef}>
-          {/* ✅ Messages (text only) */}
+        {/* Right: notifications + messages + account */}
+        <div className="flex items-center gap-4">
+          {/* Notifications */}
+          <div className="relative" ref={notifRef}>
+            <button
+              onClick={() => setNotifOpen((s) => !s)}
+              className="relative flex items-center gap-1 px-3 h-9 rounded-full hover:bg-[var(--cream-50)] text-sm font-medium text-[var(--orange-700)]"
+              title="Notifications"
+            >
+              ⩍
+            </button>
+
+            {notifOpen && (
+              <div className="absolute right-0 mt-1 w-64 rounded-xl border border-[var(--line-amber)] bg-white shadow-card overflow-hidden z-50">
+                {notifications.length === 0 ? (
+                  <div className="p-3 text-sm text-gray-500">No notifications</div>
+                ) : (
+                  <ul>
+                    {notifications.map((n) => (
+                      <li
+                        key={n.id}
+                        className={`px-4 py-3 text-sm cursor-pointer hover:bg-[var(--cream-50)] ${
+                          !n.read ? "font-medium bg-[var(--cream-50)]" : ""
+                        }`}
+                        onClick={() => markAsRead(n.id)}
+                      >
+                        {n.text}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Messages */}
           <button
             onClick={() => navigate("/seller/messages")}
-            className="relative text-sm font-medium text-[var(--orange-700)] hover:underline"
+            className="text-sm font-medium text-[var(--orange-700)] hover:underline"
             title="Messages"
           >
             ✉︎
-            
           </button>
 
-          {/* ✅ Account dropdown (text only) */}
-          <div className="relative">
+          {/* Account dropdown */}
+          <div className="relative" ref={accountRef}>
             <button
-              onClick={() => setOpen((s) => !s)}
+              onClick={() => setAccountOpen((s) => !s)}
               className="flex items-center gap-1 px-3 h-9 rounded-full hover:bg-[var(--cream-50)] text-sm font-medium text-[var(--orange-700)]"
             >
               Account <span className="text-[10px]">▾</span>
             </button>
 
-            {open && (
-              <div className="absolute right-0 mt-1 w-56 rounded-xl border border-[var(--line-amber)] bg-white shadow-card overflow-hidden">
+            {accountOpen && (
+              <div className="absolute right-0 mt-1 w-56 rounded-xl border border-[var(--line-amber)] bg-white shadow-card overflow-hidden z-50">
                 <button
                   onClick={() => {
-                    setOpen(false);
+                    setAccountOpen(false);
                     navigate("/seller/settings");
                   }}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--cream-50)]"
                 >
-                  <span>Account Settings</span>
+                  Account Settings
                 </button>
                 <button
                   onClick={() => {
-                    setOpen(false);
+                    setAccountOpen(false);
                     logout();
                   }}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50"
                 >
-                  <span>Logout</span>
+                  Logout
                 </button>
               </div>
             )}

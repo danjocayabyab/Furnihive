@@ -50,11 +50,7 @@ export default function SellerDashboard() {
 
       {/* Navigation Cards (with hover) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <NavButton
-          label="Products"
-          
-          onClick={() => navigate("/seller/products")}
-        />
+        
         {/* ✅ Added navigation for Inventory */}
         <NavButton
           label="Inventory"

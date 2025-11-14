@@ -20,7 +20,6 @@ import Checkout, { CheckoutSuccess } from "./pages/user/Checkout.jsx";
 /* ---------- Seller Layout + Pages ---------- */
 import SellerLayout from "./layouts/SellerLayout.jsx";
 import SellerDashboard from "./pages/seller/Dashboard.jsx";
-import SellerProducts from "./pages/seller/Products.jsx";
 import Inventory from "./pages/seller/Inventory.jsx"; 
 import SellerOrders from "./pages/seller/Orders.jsx";
 import SellerPromotions from "./pages/seller/Promotions.jsx"; 
@@ -64,6 +63,16 @@ function LogoutRoute() {
 function RequireRole({ role, children }) {
   const { loading, user, profile } = useAuth();
   if (loading) return <div className="p-8">Loading...</div>;
+  // Allow demo admin access via localStorage token/user set by AdminLogin
+  if (role === "admin") {
+    const adminToken = typeof window !== "undefined" ? localStorage.getItem("fh_token") : null;
+    const adminUser = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("fh_user") || "null") : null;
+    if (adminToken && adminUser?.role === "admin") {
+      return children;
+    }
+    // If no authenticated user and no admin token, send to admin login
+    if (!user) return <Navigate to="/admin/login" replace />;
+  }
   if (!user) return <Navigate to="/login" replace />;
   const effectiveRole = user?.user_metadata?.role || profile?.role || "buyer";
   if (role && effectiveRole !== role) {
@@ -104,7 +113,6 @@ export default function App() {
         }
       >
         <Route index element={<SellerDashboard />} />
-        <Route path="products" element={<SellerProducts />} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="orders" element={<SellerOrders />} />
         <Route path="promotions" element={<SellerPromotions />} />
