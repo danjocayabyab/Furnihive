@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useNotifications from "./lib/useNotifications";
+import { logout } from "../lib/auth.js";
 
 export default function AdminTopbar() {
   const navigate = useNavigate();
@@ -25,11 +26,10 @@ export default function AdminTopbar() {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  const logout = () => {
-  localStorage.removeItem("fh_token");
-  localStorage.removeItem("fh_user");
-  navigate("/admin/login");
-};
+  const handleLogout = () => {
+    logout();
+    navigate("/admin/login");
+  };
 
   const openNotification = (n) => {
     markRead(n.id);
@@ -134,7 +134,7 @@ export default function AdminTopbar() {
                   Dashboard
                 </button>
                 <button
-                  onClick={logout}
+                  onClick={handleLogout}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50"
                 >
                   Logout
