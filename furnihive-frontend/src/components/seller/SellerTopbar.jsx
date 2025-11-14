@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { logout } from "../../lib/auth.js";
 
 export default function SellerTopbar() {
   const navigate = useNavigate();
@@ -28,8 +29,8 @@ export default function SellerTopbar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const logout = () => {
-    localStorage.removeItem("fh_token");
+  const handleLogout = () => {
+    logout();
     navigate("/login");
   };
 
@@ -123,7 +124,7 @@ export default function SellerTopbar() {
                 <button
                   onClick={() => {
                     setAccountOpen(false);
-                    logout();
+                    handleLogout();
                   }}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50"
                 >

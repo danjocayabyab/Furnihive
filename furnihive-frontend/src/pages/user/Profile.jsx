@@ -1,6 +1,7 @@
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useMemo, useState } from "react";
 import Button from "../../components/ui/Button.jsx";
+import { logout } from "../../lib/auth.js";
 
 /* ---------- Mock data (swap with API later) ---------- */
 const user = {
@@ -98,9 +99,7 @@ export default function Profile() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("fh_user");
-    localStorage.removeItem("fh_token");
-    sessionStorage.clear();
+    logout();
     navigate("/login");
   };
 
