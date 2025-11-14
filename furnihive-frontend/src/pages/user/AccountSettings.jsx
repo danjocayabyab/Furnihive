@@ -110,6 +110,12 @@ function PersonalPanel({ authUser, profile }) {
       const ln = lastNameRef.current?.value ?? "";
       const ph = phoneRef.current?.value ?? "";
       const sn = storeNameRef.current?.value ?? "";
+      const phoneOk = /^((\+?63)|0)9\d{9}$/.test(ph.replace(/\s|-/g, ""));
+      if (ph && !phoneOk) {
+        toast.error("Please enter a valid PH mobile number (e.g., 09171234567 or +639171234567).");
+        setSaving(false);
+        return;
+      }
 
       const update = {
         first_name: fn,
@@ -378,8 +384,9 @@ function AddressesPanel() {
       setLoading(true);
       const { data, error } = await supabase
         .from("addresses")
-        .select("id,label,name,line1,line2,phone,is_default")
+        .select("id,label,name,line1,line2,postal_code,province,city,phone,is_default,deleted_at")
         .eq("user_id", authUser.id)
+        .is("deleted_at", null)
         .order("is_default", { ascending: false })
         .order("created_at", { ascending: true });
       if (!error) {
@@ -387,7 +394,10 @@ function AddressesPanel() {
           id: r.id,
           label: r.label || "Home Address",
           name: r.name || "",
-          lines: [r.line1 || "", r.line2 || ""],
+          street: r.line1 || "",
+          postalCode: r.postal_code || "",
+          province: r.province || "",
+          city: r.city || "",
           phone: r.phone || "",
           isDefault: !!r.is_default,
         }));
@@ -405,7 +415,10 @@ function AddressesPanel() {
         id: null,
         label: "Home Address",
         name: "",
-        lines: ["", ""],
+        street: "",
+        postalCode: "",
+        province: "",
+        city: "",
         phone: "",
         isDefault: addresses.length === 0,
       },
@@ -416,13 +429,22 @@ function AddressesPanel() {
 
   const saveAddress = async (addr) => {
     if (!authUser?.id) return;
+    const cleanPhone = (addr.phone || "").replace(/\s|-/g, "");
+    const phoneOk = /^((\+?63)|0)9\d{9}$/.test(cleanPhone);
+    if (addr.phone && !phoneOk) {
+      toast.error("Invalid phone. Use 09171234567 or +639171234567.");
+      return;
+    }
     const payload = {
       user_id: authUser.id,
       label: addr.label,
       name: addr.name,
-      line1: addr.lines?.[0] || "",
-      line2: addr.lines?.[1] || "",
-      phone: addr.phone,
+      line1: addr.street || "",
+      line2: "",
+      postal_code: addr.postalCode || null,
+      province: addr.province || null,
+      city: addr.city || null,
+      phone: addr.phone || null,
       is_default: !!addr.isDefault,
     };
     if (addr.isDefault) {
@@ -440,15 +462,19 @@ function AddressesPanel() {
     // reload list
     const { data: list } = await supabase
       .from("addresses")
-      .select("id,label,name,line1,line2,phone,is_default")
+      .select("id,label,name,line1,line2,postal_code,province,city,phone,is_default")
       .eq("user_id", authUser.id)
+      .is("deleted_at", null)
       .order("is_default", { ascending: false })
       .order("created_at", { ascending: true });
     const normalized = (list || []).map((r) => ({
       id: r.id,
       label: r.label || "Home Address",
       name: r.name || "",
-      lines: [r.line1 || "", r.line2 || ""],
+      street: r.line1 || "",
+      postalCode: r.postal_code || "",
+      province: r.province || "",
+      city: r.city || "",
       phone: r.phone || "",
       isDefault: !!r.is_default,
     }));
@@ -457,7 +483,7 @@ function AddressesPanel() {
   };
 
   const deleteAddress = async (id) => {
-    await supabase.from("addresses").delete().eq("id", id);
+    await supabase.from("addresses").update({ deleted_at: new Date().toISOString() }).eq("id", id);
     setAddresses((prev) => prev.filter((a) => a.id !== id));
   };
   const setDefault = async (id) => {
@@ -522,9 +548,10 @@ function AddressCard({ addr, onEdit, onDelete, onSetDefault }) {
       <div className="font-semibold text-[var(--brown-700)] mb-2">{addr.label}</div>
       <div className="text-sm text-[var(--brown-700)]">{addr.name}</div>
       <div className="text-sm text-gray-700">
-        {addr.lines.map((l, i) => (
-          <div key={i}>{l}</div>
-        ))}
+        {addr.street && <div>{addr.street}</div>}
+        <div>
+          {([addr.city, addr.province].filter(Boolean).join(", ") + (addr.postalCode ? ` ${addr.postalCode}` : "")).trim()}
+        </div>
       </div>
       <div className="text-sm text-gray-700">{addr.phone}</div>
 
@@ -547,8 +574,14 @@ function AddressModal({ mode, initial, onClose, onSave }) {
   const input = "w-full rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm";
 
   const save = () => {
-    if (!form.name || !form.lines[0] || !form.phone) {
-      alert("Please complete name, address line 1 and phone.");
+    if (!form.name || !form.street || !form.phone) {
+      alert("Please complete name, street and phone.");
+      return;
+    }
+    const clean = (form.phone || "").replace(/\s|-/g, "");
+    const ok = /^((\+?63)|0)9\d{9}$/.test(clean);
+    if (!ok) {
+      alert("Invalid phone. Use 09171234567 or +639171234567.");
       return;
     }
     onSave(form);
@@ -584,22 +617,38 @@ function AddressModal({ mode, initial, onClose, onSave }) {
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-xs font-semibold mb-1">Address Line 1</label>
+            <label className="block text-xs font-semibold mb-1">Street</label>
             <input
               className={input}
-              value={form.lines[0]}
-              onChange={(e) => setForm((f) => ({ ...f, lines: [e.target.value, f.lines[1] || ""] }))}
+              value={form.street}
+              onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))}
               placeholder="Street, barangay"
             />
           </div>
 
-          <div className="md:col-span-2">
-            <label className="block text-xs font-semibold mb-1">Address Line 2 (optional)</label>
+          <div>
+            <label className="block text-xs font-semibold mb-1">City / Municipality</label>
             <input
               className={input}
-              value={form.lines[1]}
-              onChange={(e) => setForm((f) => ({ ...f, lines: [f.lines[0], e.target.value] }))}
-              placeholder="City, province / postal"
+              value={form.city}
+              onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1">Province</label>
+            <input
+              className={input}
+              value={form.province}
+              onChange={(e) => setForm((f) => ({ ...f, province: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1">Postal Code</label>
+            <input
+              className={input}
+              value={form.postalCode}
+              onChange={(e) => setForm((f) => ({ ...f, postalCode: e.target.value }))}
+              placeholder="e.g. 1109"
             />
           </div>
 

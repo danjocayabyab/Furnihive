@@ -108,14 +108,18 @@ export default function Profile() {
       if (!authUser?.id) return setDefaultAddress("");
       const { data, error } = await supabase
         .from("addresses")
-        .select("line1,line2,is_default")
+        .select("line1,postal_code,province,city,is_default,deleted_at")
         .eq("user_id", authUser.id)
+        .is("deleted_at", null)
         .order("is_default", { ascending: false })
         .order("created_at", { ascending: true })
         .limit(1);
       if (!cancelled) {
         const a = data?.[0];
-        const text = a ? `${a.line1 || ""}${a.line2 ? ", " + a.line2 : ""}`.trim() : "";
+        const cityProv = [a?.city, a?.province].filter(Boolean).join(", ");
+        const withPostal = [cityProv, a?.postal_code].filter(Boolean).join(" ");
+        const parts = [a?.line1, withPostal].filter((p) => !!p && String(p).trim().length > 0);
+        const text = a ? parts.join(" · ") : "";
         setDefaultAddress(text);
       }
     }
