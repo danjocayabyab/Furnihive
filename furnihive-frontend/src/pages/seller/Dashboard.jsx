@@ -1,15 +1,46 @@
 // src/pages/seller/Dashboard.jsx
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../../lib/supabaseClient";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
 
 export default function SellerDashboard() {
   const navigate = useNavigate();
+  const { user: authUser, profile } = useAuth();
+  const [storeName, setStoreName] = useState(profile?.store_name || "your store");
+
+  useEffect(() => {
+    if (!authUser?.id) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("stores")
+          .select("name")
+          .eq("owner_id", authUser.id)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!cancelled && data?.name) {
+          setStoreName(data.name);
+        }
+      } catch (e) {
+        console.error("Failed to load store for dashboard", e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id]);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-xl font-semibold text-[var(--brown-700)]">
-          Welcome back, Manila Furniture Co.! 
+          Welcome back, {storeName}!
         </h1>
         <p className="text-sm text-gray-600">
           Here’s what’s happening with your store today.
