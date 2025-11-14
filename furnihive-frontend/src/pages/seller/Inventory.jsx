@@ -41,6 +41,7 @@ export default function Inventory() {
           .from("products")
           .select(
             `id, seller_id, name, description, category, base_price, status,
+             sku, length_cm, width_cm, height_cm,
              product_images ( url, is_primary, position ),
              inventory_items ( quantity_on_hand )`
           )
@@ -61,9 +62,13 @@ export default function Inventory() {
             stock: p.inventory_items?.[0]?.quantity_on_hand ?? 0,
             views: 0,
             sold: 0,
+            sku: p.sku || "",
             active: p.status === "active",
             image: primary?.url || "",
             images: imgs.map((i) => i.url),
+            length: p.length_cm ?? 0,
+            width: p.width_cm ?? 0,
+            height: p.height_cm ?? 0,
           };
         });
         if (!cancelled) setItems(mapped);
@@ -114,6 +119,10 @@ export default function Inventory() {
         description: changes.description,
         category: changes.category,
         base_price: changes.price,
+        sku: changes.sku,
+        length_cm: changes.length,
+        width_cm: changes.width,
+        height_cm: changes.height,
       };
       const { error: prodErr } = await supabase
         .from("products")
@@ -235,9 +244,13 @@ export default function Inventory() {
           description: data.description,
           category: data.category,
           base_price: data.price,
+          sku: data.sku,
+          length_cm: data.length,
+          width_cm: data.width,
+          height_cm: data.height,
           status: "active",
         })
-        .select("id, name, description, category, base_price, status")
+        .select("id, name, description, category, base_price, status, sku, length_cm, width_cm, height_cm")
         .single();
       if (prodErr) throw prodErr;
 
@@ -295,9 +308,13 @@ export default function Inventory() {
         stock: invRow.quantity_on_hand ?? 0,
         views: 0,
         sold: 0,
+        sku: product.sku || "",
         active: product.status === "active",
         image: imageUrls[0] || "",
         images: imageUrls,
+        length: product.length_cm ?? 0,
+        width: product.width_cm ?? 0,
+        height: product.height_cm ?? 0,
       };
       setItems((prev) => [newItem, ...prev]);
       toast.success("Product added.");
@@ -383,23 +400,29 @@ export default function Inventory() {
           {filtered.map((p) => (
             <li key={p.id} className="px-5 py-3">
               <div className="flex items-center gap-4">
-                <img
-                  src={p.image}
-                  alt={p.title}
-                  className="h-16 w-24 object-cover rounded-lg border border-[var(--line-amber)]"
-                />
-                <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-y-1 gap-x-4">
-                  <div className="col-span-2">
-                    <div className="font-medium text-[var(--brown-700)]">
-                      {p.title}
+                <button
+                  type="button"
+                  onClick={() => setView(p)}
+                  className="flex flex-1 items-center gap-4 text-left hover:bg-[var(--cream-50)] rounded-xl px-2 py-1 -mx-2"
+                >
+                  <img
+                    src={p.image}
+                    alt={p.title}
+                    className="h-16 w-24 object-cover rounded-lg border border-[var(--line-amber)] flex-shrink-0"
+                  />
+                  <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-y-1 gap-x-4">
+                    <div className="col-span-2">
+                      <div className="font-medium text-[var(--brown-700)]">
+                        {p.title}
+                      </div>
+                      <div className="text-xs text-gray-600">{p.category}</div>
                     </div>
-                    <div className="text-xs text-gray-600">{p.category}</div>
+                    <Info label="Price" value={<b>{peso(p.price)}</b>} />
+                    <Info label="Stock" value={`${p.stock} ${p.stock === 1 ? "unit" : "units"}`} />
+                    <Info label="SKU" value={p.sku || "—"} />
+                    <Info label="Sold" value={p.sold} />
                   </div>
-                  <Info label="Price" value={<b>{peso(p.price)}</b>} />
-                  <Info label="Stock" value={`${p.stock} ${p.stock === 1 ? "unit" : "units"}`} />
-                  <Info label="Views" value={p.views} />
-                  <Info label="Sold" value={p.sold} />
-                </div>
+                </button>
 
                 {/* 3-dots menu */}
                 <div className="relative">
@@ -412,9 +435,6 @@ export default function Inventory() {
                   </button>
                   {menu === p.id && (
                     <Menu onClose={() => setMenu(null)}>
-                      <MenuItem onClick={() => { setView(p); setMenu(null); }}>
-                        View details
-                      </MenuItem>
                       <MenuItem onClick={() => { setEdit(p); setMenu(null); }}>
                         Edit product
                       </MenuItem>
@@ -497,39 +517,83 @@ function ViewProductDetails({ view, onClose, onEdit }) {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <img
-          src={mainImage}
-          alt={view.title}
-          className="w-full h-56 object-cover rounded-xl border border-[var(--line-amber)]"
-        />
-        {images.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto pt-1">
-            {images.map((img, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => setMainIndex(idx)}
-                className={`h-16 w-20 rounded-lg border ${
-                  idx === mainIndex
-                    ? "border-[var(--orange-600)]"
-                    : "border-[var(--line-amber)] opacity-80"
-                } overflow-hidden flex-shrink-0`}
-              >
-                <img src={img} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
-              </button>
-            ))}
+      {/* Image + basic header */}
+      <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-start">
+        <div className="space-y-2">
+          <div className="rounded-xl border border-[var(--line-amber)] overflow-hidden bg-[var(--cream-50)]">
+            <img
+              src={mainImage}
+              alt={view.title}
+              className="w-full h-56 object-cover"
+            />
           </div>
-        )}
+          {images.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pt-1">
+              {images.map((img, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setMainIndex(idx)}
+                  className={`h-14 w-20 rounded-lg border ${
+                    idx === mainIndex
+                      ? "border-[var(--orange-600)]"
+                      : "border-[var(--line-amber)] opacity-80"
+                  } overflow-hidden flex-shrink-0 bg-white`}
+                >
+                  <img
+                    src={img}
+                    alt={`Thumb ${idx + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--brown-700)]">
+              {view.title}
+            </h2>
+            <p className="text-xs text-gray-600 mt-0.5">{view.category}</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-lg border border-[var(--line-amber)] bg-[var(--cream-50)] p-3">
+              <div className="text-xs text-gray-600">Price</div>
+              <div className="mt-1 text-[var(--brown-700)] font-semibold">{peso(view.price)}</div>
+            </div>
+            <div className="rounded-lg border border-[var(--line-amber)] bg-[var(--cream-50)] p-3">
+              <div className="text-xs text-gray-600">Stock</div>
+              <div className="mt-1 text-[var(--brown-700)] font-semibold">{view.stock} units</div>
+            </div>
+            <div className="rounded-lg border border-[var(--line-amber)] bg-white p-3">
+              <div className="text-xs text-gray-600">SKU</div>
+              <div className="mt-1 text-[var(--brown-700)] font-semibold">{view.sku || "—"}</div>
+            </div>
+            <div className="rounded-lg border border-[var(--line-amber)] bg-white p-3">
+              <div className="text-xs text-gray-600">Total Sold</div>
+              <div className="mt-1 text-[var(--brown-700)] font-semibold">{view.sold}</div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <Field label="Product Name" value={view.title} />
-        <Field label="Category" value={view.category} />
-        <Field label="Price" value={peso(view.price)} />
-        <Field label="Stock" value={`${view.stock} units`} />
-        <Field label="Views" value={view.views} />
-        <Field label="Total Sold" value={view.sold} />
+      {/* Details grid */}
+      <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-4 space-y-3 text-sm">
+        <div className="grid md:grid-cols-3 gap-3">
+          <Field label="Length (cm)" value={view.length != null ? `${view.length}` : "-"} />
+          <Field label="Width (cm)" value={view.width != null ? `${view.width}` : "-"} />
+          <Field label="Height (cm)" value={view.height != null ? `${view.height}` : "-"} />
+        </div>
+
+        <div className="mt-2">
+          <div className="text-xs text-gray-600 mb-1">Description</div>
+          <div className="text-sm text-[var(--brown-700)] whitespace-pre-line">
+            {view.description || "No description provided."}
+          </div>
+        </div>
       </div>
 
       <div className="flex justify-end gap-2">
