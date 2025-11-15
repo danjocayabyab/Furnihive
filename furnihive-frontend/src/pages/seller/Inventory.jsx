@@ -158,14 +158,16 @@ export default function Inventory() {
         }
       }
 
-      let newImages = null;
-      if (Array.isArray(changes.files) && changes.files.length) {
-        await supabase
-          .from("product_images")
-          .delete()
-          .eq("product_id", id);
+      // Handle images: keep selected existing ones and append any newly uploaded files
+      let finalImages = null;
+      const keptExisting = Array.isArray(changes.existingImages)
+        ? changes.existingImages.filter(Boolean)
+        : [];
+      const newFiles = Array.isArray(changes.files) ? changes.files.filter(Boolean) : [];
 
-        const uploads = changes.files.map(async (file, index) => {
+      if (keptExisting.length || newFiles.length) {
+        // Upload any new files
+        const uploads = newFiles.map(async (file, index) => {
           const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
           const path = `${authUser.id}/${id}/${Date.now()}-${index}-${safeName}`;
           const { error: uploadErr } = await supabase
@@ -179,22 +181,57 @@ export default function Inventory() {
           const { data: pub } = supabase.storage.from("product-images").getPublicUrl(path);
           const url = pub?.publicUrl || null;
           if (!url) throw new Error("Failed to get public URL for image.");
-          return { url, index };
+          return url;
         });
 
-        const uploaded = await Promise.all(uploads);
-        newImages = uploaded.map((u) => u.url);
+        const uploadedUrls = uploads.length ? await Promise.all(uploads) : [];
+        finalImages = [...keptExisting, ...uploadedUrls];
 
-        const rows = uploaded.map((u) => ({
-          product_id: id,
-          url: u.url,
-          is_primary: u.index === 0,
-          position: u.index,
-        }));
-        const { error: imgInsErr } = await supabase
+        // Sync product_images table to match finalImages set
+        const { data: currentRows, error: currentErr } = await supabase
           .from("product_images")
-          .insert(rows);
-        if (imgInsErr) throw imgInsErr;
+          .select("id, url")
+          .eq("product_id", id);
+        if (currentErr) throw currentErr;
+
+        const currentByUrl = new Map((currentRows || []).map((r) => [r.url, r]));
+        const keepSet = new Set(finalImages);
+
+        // Delete rows that are no longer referenced
+        const toDeleteIds = (currentRows || [])
+          .filter((r) => !keepSet.has(r.url))
+          .map((r) => r.id);
+        if (toDeleteIds.length) {
+          const { error: delErr } = await supabase
+            .from("product_images")
+            .delete()
+            .in("id", toDeleteIds);
+          if (delErr) throw delErr;
+        }
+
+        // Ensure each image in finalImages has the right position and primary flag
+        for (let index = 0; index < finalImages.length; index++) {
+          const url = finalImages[index];
+          const is_primary = index === 0;
+          const existing = currentByUrl.get(url);
+          if (existing) {
+            const { error: updErr } = await supabase
+              .from("product_images")
+              .update({ is_primary, position: index })
+              .eq("id", existing.id);
+            if (updErr) throw updErr;
+          } else {
+            const { error: insErr } = await supabase
+              .from("product_images")
+              .insert({
+                product_id: id,
+                url,
+                is_primary,
+                position: index,
+              });
+            if (insErr) throw insErr;
+          }
+        }
       }
 
       setItems((prev) =>
@@ -203,8 +240,8 @@ export default function Inventory() {
             ? {
                 ...i,
                 ...changes,
-                image: newImages ? newImages[0] : i.image,
-                images: newImages || i.images,
+                image: finalImages ? finalImages[0] : i.image,
+                images: finalImages || i.images,
               }
             : i
         )
@@ -219,14 +256,28 @@ export default function Inventory() {
   const removeItem = async (id) => {
     if (!authUser?.id) return;
     try {
-      const { error } = await supabase
+      // First remove related inventory and images, then delete the product
+      const { error: invErr } = await supabase
+        .from("inventory_items")
+        .delete()
+        .eq("product_id", id)
+        .eq("seller_id", authUser.id);
+      if (invErr) throw invErr;
+
+      const { error: imgErr } = await supabase
+        .from("product_images")
+        .delete()
+        .eq("product_id", id);
+      if (imgErr) throw imgErr;
+
+      const { error: prodErr } = await supabase
         .from("products")
-        .update({ status: "archived" })
+        .delete()
         .eq("id", id)
         .eq("seller_id", authUser.id);
-      if (error) throw error;
+      if (prodErr) throw prodErr;
       setItems((prev) => prev.filter((i) => i.id !== id));
-      toast.success("Product archived.");
+      toast.success("Product deleted.");
     } catch (e) {
       console.error("Archive product failed", e);
       toast.error(e?.message || "Failed to delete product.");
@@ -457,7 +508,7 @@ export default function Inventory() {
 
       {/* View details modal */}
       {view && (
-        <Modal onClose={() => setView(null)} maxWidth="560px">
+        <Modal onClose={() => setView(null)} maxWidth="880px">
           <ViewProductDetails view={view} onClose={() => setView(null)} onEdit={(v) => { setEdit(v); setView(null); }} />
         </Modal>
       )}
@@ -518,13 +569,13 @@ function ViewProductDetails({ view, onClose, onEdit }) {
   return (
     <div className="space-y-4">
       {/* Image + basic header */}
-      <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-start">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,2.2fr)_minmax(0,3fr)] items-start">
         <div className="space-y-2">
-          <div className="rounded-xl border border-[var(--line-amber)] overflow-hidden bg-[var(--cream-50)]">
+          <div className="rounded-xl border border-[var(--line-amber)] overflow-hidden bg-[var(--cream-50)] flex items-center justify-center">
             <img
               src={mainImage}
               alt={view.title}
-              className="w-full h-56 object-cover"
+              className="max-h-96 w-auto max-w-full object-contain"
             />
           </div>
           {images.length > 1 && (
@@ -741,8 +792,12 @@ function EditModal({ item, onCancel, onSave }) {
       const imgs = item.images || (item.image ? [item.image] : []);
       return imgs.slice(0, 4);
     })(),
-    files: [],
+    files: [null, null, null, null],
   });
+
+  const initialExistingImagesRef = useRef(
+    (item.images || (item.image ? [item.image] : [])).slice(0, 4)
+  );
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -762,13 +817,37 @@ function EditModal({ item, onCancel, onSave }) {
     reader.readAsDataURL(file);
   };
 
+  const removeImageAtIndex = (index) => {
+    setForm((prev) => {
+      const images = [...(prev.images || [])];
+      const files = [...(prev.files || [])];
+      images[index] = null;
+      files[index] = null;
+      return { ...prev, images, files };
+    });
+  };
+
   const submit = (e) => {
     e.preventDefault();
-    if (!form.images || !form.images.length) {
-      alert("Please upload at least one image for the product.");
+    const initialExisting = initialExistingImagesRef.current || [];
+    const keptExisting = [];
+
+    (form.images || []).forEach((img, idx) => {
+      if (!img) return;
+      const file = (form.files || [])[idx];
+      if (!file && initialExisting.includes(img)) {
+        keptExisting.push(img);
+      }
+    });
+
+    const allFiles = (form.files || []).filter(Boolean);
+    const spaceLeft = Math.max(0, 4 - keptExisting.length);
+    const validFiles = allFiles.slice(0, spaceLeft);
+
+    if (!keptExisting.length && !validFiles.length) {
+      alert("Please keep or upload at least one image for the product.");
       return;
     }
-    const validFiles = (form.files || []).filter(Boolean).slice(0, 4);
     onSave({
       title: form.title,
       category: form.category,
@@ -779,6 +858,7 @@ function EditModal({ item, onCancel, onSave }) {
       height: Number(form.height) || 0,
       sku: form.sku,
       description: form.description,
+      existingImages: keptExisting,
       files: validFiles,
     });
   };
@@ -801,11 +881,24 @@ function EditModal({ item, onCancel, onSave }) {
                   className="relative h-28 rounded-lg border border-dashed border-[var(--line-amber)] bg-white flex items-center justify-center cursor-pointer overflow-hidden"
                 >
                   {form.images && form.images[idx] ? (
-                    <img
-                      src={form.images[idx]}
-                      alt={`Preview ${idx + 1}`}
-                      className="w-full h-full object-cover"
-                    />
+                    <>
+                      <img
+                        src={form.images[idx]}
+                        alt={`Preview ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white text-xs flex items-center justify-center"
+                        onClick={(ev) => {
+                          ev.preventDefault();
+                          ev.stopPropagation();
+                          removeImageAtIndex(idx);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </>
                   ) : (
                     <span className="text-xs text-gray-500">Choose file</span>
                   )}
