@@ -88,6 +88,7 @@ export default function ProductDetail() {
 
         const mapped = {
           id: p.id,
+          seller_id: p.seller_id,
           title: p.name || "Untitled",
           description: p.description || "",
           category: p.category || "Living Room",
@@ -134,6 +135,7 @@ export default function ProductDetail() {
   const baseItem = product
     ? {
         id: product.id,
+        seller_id: product.seller_id,
         title: product.title,
         price: Number(product.price),
         oldPrice: Number(product.oldPrice || product.price),

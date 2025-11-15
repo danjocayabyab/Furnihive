@@ -14,6 +14,7 @@ export default function ProductCard({ product }) {
   const onAdd = () => {
     const baseItem = {
       id: product.id,
+      seller_id: product.seller_id,
       title: product.title,
       price: Number(product.price),
       oldPrice: Number(product.oldPrice || product.price),

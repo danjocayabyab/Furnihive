@@ -1,6 +1,6 @@
 // src/pages/user/Checkout.jsx
 import { useMemo, useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useCart } from "../../components/contexts/CartContext.jsx";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
 import { supabase } from "../../lib/supabaseClient";
@@ -11,6 +11,18 @@ const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 export default function Checkout() {
   const navigate = useNavigate();
   const { items, clearCart } = useCart();
+  const location = useLocation();
+
+  const selectedIds = Array.isArray(location.state?.selectedItems)
+    ? location.state.selectedItems
+    : null;
+
+  // Only use selected items from cart if provided; otherwise fall back to all items
+  const checkoutItems = useMemo(() => {
+    if (!selectedIds || !selectedIds.length) return items;
+    const selectedSet = new Set(selectedIds);
+    return items.filter((it) => selectedSet.has(it.id));
+  }, [items, selectedIds]);
 
   // ---- STEPS
   const [step, setStep] = useState(1); // 1=shipping, 2=payment, 3=review
@@ -33,14 +45,86 @@ export default function Checkout() {
   const [card, setCard] = useState({ name: "", number: "", exp: "", cvv: "" });
   const [agree, setAgree] = useState(false);
 
-  // ---- ORDER SUM
+  // ---- PROMOTIONS (seller vouchers)
+  const [vouchers, setVouchers] = useState([]); // active voucher-type promotions (all sellers)
+  const [selectedVoucherId, setSelectedVoucherId] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const { data, error } = await supabase
+          .from("promotions")
+          .select("id, seller_id, name, code, type, discount_type, discount_value, min_purchase, max_discount, status, start_date, end_date")
+          .eq("type", "voucher")
+          .eq("status", "active");
+        if (error || cancelled) return;
+
+        const usable = (data || []).filter((p) => {
+          // basic date window check if dates are present
+          if (p.start_date && p.start_date > today) return false;
+          if (p.end_date && p.end_date < today) return false;
+          return true;
+        });
+
+        setVouchers(usable);
+      } catch {
+        // silently ignore promo load errors on checkout UI
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // derive which seller(s) are in the cart
+  const sellerIdsInCart = useMemo(() => {
+    const set = new Set();
+    for (const it of checkoutItems) {
+      if (it.seller_id) set.add(it.seller_id);
+    }
+    return Array.from(set);
+  }, [checkoutItems]);
+
+  // limit vouchers to those owned by the single seller in the cart
+  const applicableVouchers = useMemo(() => {
+    if (sellerIdsInCart.length !== 1) return [];
+    const sellerId = sellerIdsInCart[0];
+    return vouchers.filter((v) => v.seller_id === sellerId);
+  }, [vouchers, sellerIdsInCart]);
+
+  // ---- ORDER SUM (with optional voucher discount)
   const totals = useMemo(() => {
-    const subtotal = items.reduce((s, it) => s + (it.price || 0) * (it.qty || 1), 0);
-    const shipping = subtotal >= 25000 || items.length === 0 ? 0 : 500;
+    const subtotal = checkoutItems.reduce((s, it) => s + (it.price || 0) * (it.qty || 1), 0);
+    const shipping = subtotal >= 25000 || checkoutItems.length === 0 ? 0 : 500;
     const vat = Math.round(subtotal * 0.12);
-    const total = subtotal + shipping + vat;
-    return { subtotal, shipping, vat, total };
-  }, [items]);
+
+    let promoDiscount = 0;
+    if (selectedVoucherId) {
+      const v = applicableVouchers.find((p) => p.id === selectedVoucherId);
+      if (v) {
+        const minPurchase = typeof v.min_purchase === "number" ? v.min_purchase : 0;
+        if (subtotal >= minPurchase) {
+          const isPercentage = v.discount_type === "percentage";
+          const rawValue = Number(v.discount_value) || 0;
+          let rawDiscount = 0;
+          if (isPercentage) {
+            rawDiscount = Math.round(subtotal * (rawValue / 100));
+          } else {
+            rawDiscount = rawValue;
+          }
+          const maxDiscount = typeof v.max_discount === "number" ? v.max_discount : null;
+          let applied = rawDiscount;
+          if (maxDiscount != null) applied = Math.min(applied, maxDiscount);
+          promoDiscount = Math.max(0, applied);
+        }
+      }
+    }
+
+    const total = Math.max(0, subtotal + shipping + vat - promoDiscount);
+    return { subtotal, shipping, vat, promoDiscount, total };
+  }, [checkoutItems, applicableVouchers, selectedVoucherId]);
 
   const canContinueShipping =
     ship.firstName && ship.lastName && ship.email && ship.phone && ship.street && ship.city && ship.zip;
@@ -109,7 +193,7 @@ export default function Checkout() {
           <h3 className="font-semibold text-[var(--brown-700)] mb-3">Order Summary</h3>
 
           <div className="space-y-4">
-            {items.map((it) => (
+            {checkoutItems.map((it) => (
               <div key={it.id} className="flex gap-3">
                 <div className="relative">
                   <img
@@ -130,11 +214,36 @@ export default function Checkout() {
               </div>
             ))}
 
+            {/* Voucher selection (seller promotions; single-seller carts only) */}
+            {applicableVouchers.length > 0 && (
+              <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-3 text-sm">
+                <div className="font-semibold text-[var(--brown-700)] mb-1">Apply Voucher</div>
+                <select
+                  className="w-full rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-sm"
+                  value={selectedVoucherId || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedVoucherId(val || null);
+                  }}
+                >
+                  <option value="">No voucher</option>
+                  {applicableVouchers.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <hr className="border-[var(--line-amber)]/70" />
 
             <Row label={`Subtotal`} value={peso(totals.subtotal)} />
             <Row label={`Shipping`} value={totals.shipping ? peso(totals.shipping) : "FREE"} />
             <Row label={`Tax (VAT 12%)`} value={peso(totals.vat)} />
+            {totals.promoDiscount > 0 && (
+              <Row label={`Voucher Discount`} value={`- ${peso(totals.promoDiscount)}`} />
+            )}
             <div className="mt-1 pt-2 border-t border-[var(--line-amber)]/70">
               <Row label={<b>Total</b>} value={<b>{peso(totals.total)}</b>} />
             </div>

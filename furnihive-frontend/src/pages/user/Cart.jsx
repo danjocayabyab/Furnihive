@@ -11,7 +11,7 @@ export default function Cart() {
 
   const [promo, setPromo] = useState("");
   const [confirm, setConfirm] = useState(null); // { type:"delete"|"clear", id? }
-  const [selected, setSelected] = useState(items.map((i) => i.id)); // all selected by default
+  const [selected, setSelected] = useState([]); // start with no items selected
 
   const totals = useMemo(() => {
     const selectedItems = items.filter((i) => selected.includes(i.id));
