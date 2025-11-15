@@ -1,8 +1,9 @@
 // src/pages/user/Checkout.jsx
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../../components/contexts/CartContext.jsx";
- // same hook we used in ProductDetail/Cart
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
+import { supabase } from "../../lib/supabaseClient";
 
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 
@@ -57,10 +58,17 @@ export default function Checkout() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      {/* Top nav / progress */}
-      <Progress step={step} />
+      {/* Header: back link + steps aligned */}
+      <div className="mb-4 flex items-center gap-2">
+        <Link to="/cart" className="text-sm text-[var(--orange-600)] hover:underline whitespace-nowrap">
+          ← Back to Cart
+        </Link>
+        <div className="flex-1 flex justify-center">
+          <Progress step={step} />
+        </div>
+      </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr,360px] mt-4">
+      <div className="grid gap-6 lg:grid-cols-[1fr,360px] mt-2">
         {/* LEFT: step panel */}
         <div className="rounded-2xl border border-[var(--line-amber)] bg-white">
           {step === 1 && (
@@ -138,11 +146,6 @@ export default function Checkout() {
           </div>
         </aside>
       </div>
-
-      {/* Back to cart link */}
-      <div className="mt-4">
-        <Link to="/cart" className="text-sm text-[var(--orange-600)] hover:underline">← Back to Cart</Link>
-      </div>
     </div>
   );
 }
@@ -150,10 +153,73 @@ export default function Checkout() {
 /* ---------------------------- Step Components --------------------------- */
 
 function ShippingForm({ ship, setShip, onNext, disabledNext }) {
+  const { user } = useAuth();
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [activeAddressId, setActiveAddressId] = useState("");
   const set = (k) => (e) => setShip((s) => ({ ...s, [k]: e.target.value }));
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("addresses")
+          .select(
+            "id, label, name, line1, line2, phone, province, city, postal_code"
+          )
+          .eq("user_id", user.id)
+          .is("deleted_at", null)
+          .order("is_default", { ascending: false })
+          .order("created_at", { ascending: false });
+        if (error || cancelled) return;
+        setSavedAddresses(data || []);
+      } catch {
+        if (cancelled) return;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+  const applyAddressToForm = (addr) => {
+    if (!addr) return;
+    const fullName = addr.name || "";
+    const [firstName, ...rest] = fullName.split(" ");
+    const lastName = rest.join(" ");
+    setShip((s) => ({
+      ...s,
+      firstName: firstName || s.firstName,
+      lastName: lastName || s.lastName,
+      phone: addr.phone || s.phone,
+      street: [addr.line1, addr.line2].filter(Boolean).join(", "),
+      city: addr.city || s.city,
+      province: addr.province || s.province,
+      zip: addr.postal_code || s.zip,
+    }));
+  };
+
   return (
     <div className="p-5">
-      <SectionTitle icon="" title="Shipping Information" />
+      <div className="flex items-center justify-between gap-2">
+        <SectionTitle icon="" title="Shipping Information" />
+        {savedAddresses.length > 0 && (
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded-xl border border-[var(--line-amber)] px-3 py-1 text-xs text-[var(--brown-700)] hover:bg-[var(--cream-50)]"
+            onClick={() => {
+              setActiveAddressId("");
+              setShowAddressModal(true);
+            }}
+          >
+            <span className="text-sm">📂</span>
+            <span>Saved addresses</span>
+          </button>
+        )}
+      </div>
       <div className="grid gap-3 mt-3">
         <TwoCols>
           <Field label="First Name"><Input value={ship.firstName} onChange={set("firstName")} /></Field>
@@ -188,10 +254,178 @@ function ShippingForm({ ship, setShip, onNext, disabledNext }) {
           <Input value={ship.note} onChange={set("note")} placeholder="Gate code, landmarks, etc." />
         </Field>
 
-        <div className="pt-2">
-          <Button primary disabled={disabledNext} onClick={onNext}>Continue to Payment</Button>
+        <div className="pt-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2 text-xs text-gray-700">
+            <button
+              type="button"
+              className="rounded-xl border border-[var(--line-amber)] px-3 py-1 text-xs text-[var(--brown-700)] hover:bg-[var(--cream-50)] disabled:opacity-50"
+              disabled={savingAddress || !user?.id}
+              onClick={async () => {
+                if (!user?.id) return;
+                const fullName = `${ship.firstName || ""} ${ship.lastName || ""}`.trim();
+                if (!fullName || !ship.street) {
+                  alert("Please fill in at least name and street before saving the address.");
+                  return;
+                }
+                try {
+                  setSavingAddress(true);
+                  const payload = {
+                    user_id: user.id,
+                    label: null,
+                    name: fullName,
+                    line1: ship.street || null,
+                    line2: null,
+                    phone: ship.phone || null,
+                    province: ship.province || null,
+                    city: ship.city || null,
+                    postal_code: ship.zip || null,
+                  };
+                  const { data, error } = await supabase
+                    .from("addresses")
+                    .insert(payload)
+                    .select("id, label, name, line1, line2, phone, province, city, postal_code, created_at, is_default")
+                    .single();
+                  if (!error && data) {
+                    setSavedAddresses((prev) => [data, ...prev]);
+                  }
+                } catch {
+                  // ignore
+                } finally {
+                  setSavingAddress(false);
+                }
+              }}
+            >
+              {savingAddress ? "Saving..." : "Save as address"}
+            </button>
+          </div>
+
+          <div className="md:ml-auto">
+            <Button primary disabled={disabledNext} onClick={onNext}>Continue to Payment</Button>
+          </div>
         </div>
       </div>
+
+      {showAddressModal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30">
+          <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-lg border border-[var(--line-amber)]">
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-semibold text-[var(--brown-700)] text-sm">Saved Addresses</div>
+              <button
+                type="button"
+                className="text-xs text-gray-500 hover:text-[var(--brown-700)]"
+                onClick={() => setShowAddressModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-2">
+              <select
+                className="w-full rounded-xl border border-[var(--line-amber)] px-3 py-2 text-sm bg-white"
+                value={activeAddressId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setActiveAddressId(id);
+                  const addr = savedAddresses.find((a) => a.id === id);
+                  applyAddressToForm(addr);
+                }}
+              >
+                <option value="">Select saved address</option>
+                {savedAddresses.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label || a.name || [a.line1, a.city].filter(Boolean).join(", ")}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto space-y-2 text-xs text-gray-700">
+              {savedAddresses.map((a) => (
+                <div
+                  key={a.id}
+                  className="rounded-xl border border-[var(--line-amber)] p-2 flex flex-col gap-1"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-semibold truncate">
+                      {a.label || a.name || [a.line1, a.city].filter(Boolean).join(", ")}
+                    </div>
+                    <button
+                      type="button"
+                      className="text-[var(--orange-600)] text-[11px] hover:underline"
+                      onClick={() => {
+                        setActiveAddressId(a.id);
+                        applyAddressToForm(a);
+                        setShowAddressModal(false);
+                      }}
+                    >
+                      Use
+                    </button>
+                  </div>
+                  <div className="text-[11px] text-gray-600 leading-snug">
+                    {a.name && <div>{a.name}</div>}
+                    <div>
+                      {[a.line1, a.line2].filter(Boolean).join(", ")}
+                    </div>
+                    <div>
+                      {[a.city, a.province].filter(Boolean).join(", ")} {a.postal_code}
+                    </div>
+                    {a.phone && <div>📞 {a.phone}</div>}
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      className="text-[var(--orange-600)] text-[11px] hover:underline"
+                      onClick={async () => {
+                        const current = a.label || "";
+                        const next = window.prompt("Address label", current);
+                        if (next == null) return;
+                        const trimmed = next.trim();
+                        try {
+                          await supabase
+                            .from("addresses")
+                            .update({ label: trimmed || null })
+                            .eq("id", a.id)
+                            .eq("user_id", user?.id || "");
+                          setSavedAddresses((prev) =>
+                            prev.map((x) => (x.id === a.id ? { ...x, label: trimmed || null } : x))
+                          );
+                        } catch {
+                          // ignore errors for now
+                        }
+                      }}
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      className="text-red-600 text-[11px] hover:underline"
+                      onClick={async () => {
+                        if (!window.confirm("Remove this address?")) return;
+                        try {
+                          await supabase
+                            .from("addresses")
+                            .update({ deleted_at: new Date().toISOString() })
+                            .eq("id", a.id)
+                            .eq("user_id", user?.id || "");
+                          setSavedAddresses((prev) => prev.filter((x) => x.id !== a.id));
+                          if (activeAddressId === a.id) setActiveAddressId("");
+                        } catch {
+                          // ignore errors for now
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {savedAddresses.length === 0 && (
+                <div className="text-center text-[11px] text-gray-500 py-4">No saved addresses yet.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

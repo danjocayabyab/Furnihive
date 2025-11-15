@@ -41,7 +41,7 @@ export default function Inventory() {
           .from("products")
           .select(
             `id, seller_id, name, description, category, base_price, status,
-             sku, length_cm, width_cm, height_cm, stock_qty,
+             sku, length_cm, width_cm, height_cm, stock_qty, material, weight_kg, color,
              product_images ( url, is_primary, position ),
              inventory_items ( quantity_on_hand )`
           )
@@ -69,6 +69,9 @@ export default function Inventory() {
             length: p.length_cm ?? 0,
             width: p.width_cm ?? 0,
             height: p.height_cm ?? 0,
+            material: p.material || "",
+            weight_kg: p.weight_kg ?? 0,
+            color: p.color || "",
           };
         });
         if (!cancelled) setItems(mapped);
@@ -123,6 +126,9 @@ export default function Inventory() {
         length_cm: changes.length,
         width_cm: changes.width,
         height_cm: changes.height,
+        material: changes.material,
+        weight_kg: changes.weight_kg,
+        color: changes.color,
       };
       if (typeof changes.stock === "number") {
         productPayload.stock_qty = changes.stock;
@@ -302,10 +308,13 @@ export default function Inventory() {
           length_cm: data.length,
           width_cm: data.width,
           height_cm: data.height,
+          material: data.material,
+          weight_kg: data.weight_kg,
+          color: data.color,
           status: "active",
           stock_qty: data.stock,
         })
-        .select("id, name, description, category, base_price, status, sku, length_cm, width_cm, height_cm, stock_qty")
+        .select("id, name, description, category, base_price, status, sku, length_cm, width_cm, height_cm, stock_qty, material, weight_kg, color")
         .single();
       if (prodErr) throw prodErr;
 
@@ -370,6 +379,9 @@ export default function Inventory() {
         length: product.length_cm ?? 0,
         width: product.width_cm ?? 0,
         height: product.height_cm ?? 0,
+        material: product.material || "",
+        weight_kg: product.weight_kg ?? 0,
+        color: product.color || "",
       };
       setItems((prev) => [newItem, ...prev]);
       toast.success("Product added.");
@@ -540,6 +552,9 @@ export default function Inventory() {
             length: 0,
             width: 0,
             height: 0,
+            material: "",
+            weight_kg: 0,
+            color: "",
           }}
           onCancel={() => setAdd(false)}
           onSave={async (newItem) => {
@@ -635,19 +650,24 @@ function ViewProductDetails({ view, onClose, onEdit }) {
         </div>
       </div>
 
-      {/* Details grid */}
-      <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-4 space-y-3 text-sm">
+      {/* Description */}
+      <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-4 text-sm">
+        <div className="text-xs text-gray-600 mb-1">Description</div>
+        <div className="text-sm text-[var(--brown-700)] whitespace-pre-line">
+          {view.description || "No description provided."}
+        </div>
+      </div>
+
+      {/* Specifications */}
+      <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-4 mt-3 text-sm">
+        <div className="text-xs text-gray-600 mb-1">Specifications</div>
         <div className="grid md:grid-cols-3 gap-3">
           <Field label="Length (cm)" value={view.length != null ? `${view.length}` : "-"} />
           <Field label="Width (cm)" value={view.width != null ? `${view.width}` : "-"} />
           <Field label="Height (cm)" value={view.height != null ? `${view.height}` : "-"} />
-        </div>
-
-        <div className="mt-2">
-          <div className="text-xs text-gray-600 mb-1">Description</div>
-          <div className="text-sm text-[var(--brown-700)] whitespace-pre-line">
-            {view.description || "No description provided."}
-          </div>
+          <Field label="Material" value={view.material || "-"} />
+          <Field label="Weight (kg)" value={view.weight_kg != null ? `${view.weight_kg}` : "-"} />
+          <Field label="Color" value={view.color || "-"} />
         </div>
       </div>
 
@@ -730,7 +750,7 @@ function Modal({ children, onClose, maxWidth = "640px" }) {
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div
-        className="relative w-full rounded-2xl border border-[var(--line-amber)] bg-white p-5"
+        className="relative w-full max-h-[90vh] overflow-y-auto rounded-2xl border border-[var(--line-amber)] bg-white p-5"
         style={{ maxWidth }}
       >
         <button
@@ -792,6 +812,9 @@ function EditModal({ item, onCancel, onSave }) {
     length: item.length || 0,
     width: item.width || 0,
     height: item.height || 0,
+    material: item.material || "",
+    weight_kg: item.weight_kg || 0,
+    color: item.color || "",
     images: (() => {
       const imgs = item.images || (item.image ? [item.image] : []);
       return imgs.slice(0, 4);
@@ -860,6 +883,9 @@ function EditModal({ item, onCancel, onSave }) {
       length: Number(form.length) || 0,
       width: Number(form.width) || 0,
       height: Number(form.height) || 0,
+      material: form.material,
+      weight_kg: form.weight_kg ? Number(form.weight_kg) : null,
+      color: form.color,
       sku: form.sku,
       description: form.description,
       existingImages: keptExisting,
@@ -956,6 +982,43 @@ function EditModal({ item, onCancel, onSave }) {
           />
         </div>
 
+        {/* Specifications (includes dimensions and key attributes) */}
+        <div>
+          <label className="text-xs text-gray-600 mb-1 block">Specifications</label>
+          <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-3">
+            <div className="grid md:grid-cols-3 gap-3">
+              <DimInput label="Length (cm)" value={form.length} onChange={(v) => set("length", v)} />
+              <DimInput label="Width (cm)" value={form.width} onChange={(v) => set("width", v)} />
+              <DimInput label="Height (cm)" value={form.height} onChange={(v) => set("height", v)} />
+              <div>
+                <label className="text-xs text-gray-600">Material</label>
+                <input
+                  className="w-full rounded-xl border border-[var(--line-amber)] px-3 py-2"
+                  value={form.material}
+                  onChange={(e) => set("material", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-600">Weight (kg)</label>
+                <input
+                  type="number"
+                  className="w-full rounded-xl border border-[var(--line-amber)] px-3 py-2"
+                  value={form.weight_kg}
+                  onChange={(e) => set("weight_kg", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-600">Color</label>
+                <input
+                  className="w-full rounded-xl border border-[var(--line-amber)] px-3 py-2"
+                  value={form.color}
+                  onChange={(e) => set("color", e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Price, Stock, SKU */}
         <div className="grid md:grid-cols-3 gap-3">
           <div>
@@ -986,13 +1049,6 @@ function EditModal({ item, onCancel, onSave }) {
               onChange={(e) => set("sku", e.target.value)}
             />
           </div>
-        </div>
-
-        {/* Dimensions */}
-        <div className="grid md:grid-cols-3 gap-3">
-          <DimInput label="Length (cm)" value={form.length} onChange={(v) => set("length", v)} />
-          <DimInput label="Width (cm)" value={form.width} onChange={(v) => set("width", v)} />
-          <DimInput label="Height (cm)" value={form.height} onChange={(v) => set("height", v)} />
         </div>
 
         {/* Buttons */}
