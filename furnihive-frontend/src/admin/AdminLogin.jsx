@@ -1,25 +1,43 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../components/contexts/AuthContext.jsx";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
+  const { isAdmin, user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    if (user && isAdmin) navigate("/admin", { replace: true });
+  }, [user, isAdmin, navigate]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // simple hardcoded admin check (you can replace with API later)
-    if (email === "admin@furnihive.com" && password === "admin123") {
-      localStorage.setItem("fh_token", "demo_admin_token");
-      localStorage.setItem(
-        "fh_user",
-        JSON.stringify({ name: "Admin", role: "admin", email })
-      );
-      navigate("/admin");
-    } else {
-      setError("Invalid email or password.");
+    setError("");
+    setLoading(true);
+    try {
+      const { data, error: signErr } = await supabase.auth.signInWithPassword({ email, password });
+      if (signErr) throw signErr;
+      const uid = data.user?.id;
+      if (!uid) throw new Error("Login failed.");
+      const { data: adminRow } = await supabase
+        .from("admins")
+        .select("user_id")
+        .eq("user_id", uid)
+        .maybeSingle();
+      if (!adminRow) {
+        await supabase.auth.signOut();
+        throw new Error("This account is not an admin.");
+      }
+      navigate("/admin", { replace: true });
+    } catch (err) {
+      setError(err?.message || "Invalid email or password.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -48,7 +66,7 @@ export default function AdminLogin() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full h-10 rounded-lg border border-[var(--line-amber)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--amber-400)]/40"
-              placeholder="admin@furnihive.com"
+              placeholder="Enter email"
               required
             />
           </div>
@@ -62,7 +80,7 @@ export default function AdminLogin() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full h-10 rounded-lg border border-[var(--line-amber)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--amber-400)]/40"
-              placeholder="••••••••"
+              placeholder="Enter password"
               required
             />
           </div>
@@ -73,9 +91,10 @@ export default function AdminLogin() {
 
           <button
             type="submit"
-            className="w-full h-10 rounded-lg bg-[var(--orange-600)] text-white font-medium hover:bg-[var(--orange-700)] transition"
+            className="w-full h-10 rounded-lg bg-[var(--orange-600)] text-white font-medium hover:bg-[var(--orange-700)] transition disabled:opacity-50"
+            disabled={loading}
           >
-            Sign In
+            {loading ? "Signing In..." : "Sign In"}
           </button>
         </form>
 
