@@ -17,20 +17,20 @@ export default function Checkout() {
 
   // ---- SHIPPING FORM
   const [ship, setShip] = useState({
-    firstName: "Juan",
-    lastName: "dela Cruz",
-    email: "juan@example.com",
-    phone: "+63 912 345 6789",
-    street: "123 Main Street, Barangay Sample",
-    city: "Quezon City",
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    street: "",
+    city: "",
     province: "",
-    zip: "1100",
+    zip: "",
     note: "",
   });
 
   // ---- PAYMENT FORM
   const [payMethod, setPayMethod] = useState("card"); // card | gcash | paymaya | cod
-  const [card, setCard] = useState({ name: "Juan dela Cruz", number: "", exp: "", cvv: "" });
+  const [card, setCard] = useState({ name: "", number: "", exp: "", cvv: "" });
   const [agree, setAgree] = useState(false);
 
   // ---- ORDER SUM
@@ -185,6 +185,15 @@ function ShippingForm({ ship, setShip, onNext, disabledNext }) {
       cancelled = true;
     };
   }, [user?.id]);
+
+  // Prefill email from logged-in user if the form is still empty
+  useEffect(() => {
+    if (!user?.email) return;
+    setShip((prev) => {
+      if (prev.email) return prev;
+      return { ...prev, email: user.email };
+    });
+  }, [user?.email, setShip]);
   const applyAddressToForm = (addr) => {
     if (!addr) return;
     const fullName = addr.name || "";
@@ -236,12 +245,7 @@ function ShippingForm({ ship, setShip, onNext, disabledNext }) {
         <TwoCols>
           <Field label="City"><Input value={ship.city} onChange={set("city")} /></Field>
           <Field label="Province">
-            <Select value={ship.province} onChange={set("province")}>
-              <option value="">Select province</option>
-              <option>Metro Manila</option>
-              <option>Cebu</option>
-              <option>Davao del Sur</option>
-            </Select>
+            <Input value={ship.province} onChange={set("province")} placeholder="Province" />
           </Field>
         </TwoCols>
 

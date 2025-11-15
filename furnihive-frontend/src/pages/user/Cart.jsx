@@ -172,15 +172,13 @@ export default function Cart() {
                   <div className="font-bold text-[var(--brown-700)]">
                     {peso(item.price)}
                   </div>
-                  {item.oldPrice && (
+                  {item.oldPrice && item.oldPrice > item.price && (
                     <div className="text-xs text-gray-500 line-through">
                       {peso(item.oldPrice)}
                     </div>
                   )}
-                  <div className="text-xs text-gray-500">per piece</div>
                 </div>
                 <div className="flex gap-3 text-[var(--orange-600)]">
-                  <button title="Save to Wishlist">♡</button>
                   <button
                     title="Remove"
                     onClick={() => setConfirm({ type: "delete", id: item.id })}
