@@ -14,33 +14,37 @@ export function AuthProvider({ children }) {
       setProfile(null);
       return;
     }
-    const { data, error } = await supabase
+    const md = u.user_metadata || {};
+    // Always load base profile from profiles
+    const prof = await supabase
       .from("profiles")
-      .select("id, role, seller_approved, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path")
+      .select(
+        "id, role, seller_approved, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path"
+      )
       .eq("id", u.id)
       .single();
-    if (!error && data) {
-      setProfile(data);
-      return;
+    if (!prof.error && prof.data) {
+      setProfile(prof.data);
+    } else {
+      // create minimal profile if missing
+      const candidate = {
+        id: u.id,
+        role: md.role || "buyer",
+        first_name: md.first_name || null,
+        last_name: md.last_name || null,
+        store_name: md.store_name || null,
+        phone: md.phone || null,
+        seller_approved: md.role === "seller" ? true : null,
+      };
+      const up = await supabase
+        .from("profiles")
+        .upsert(candidate, { onConflict: "id" })
+        .select(
+          "id, role, seller_approved, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path"
+        )
+        .single();
+      if (!up.error && up.data) setProfile(up.data);
     }
-    // If profile missing, attempt to create it from user metadata once authenticated
-    const md = u.user_metadata || {};
-    const candidate = {
-      id: u.id,
-      role: md.role || "buyer",
-      first_name: md.first_name || null,
-      last_name: md.last_name || null,
-      store_name: md.store_name || null,
-      phone: md.phone || null,
-      seller_approved: md.role === "seller" ? true : null,
-    };
-    const { error: upsertErr, data: upserted } = await supabase
-      .from("profiles")
-      .upsert(candidate, { onConflict: "id" })
-      .select("id, role, seller_approved, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path")
-      .single();
-    if (!upsertErr && upserted) setProfile(upserted);
-    else setProfile(null);
   }
 
   useEffect(() => {
