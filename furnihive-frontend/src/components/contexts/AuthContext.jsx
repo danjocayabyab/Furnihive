@@ -8,10 +8,12 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   async function loadProfile(u) {
     if (!u) {
       setProfile(null);
+      setIsAdmin(false);
       return;
     }
     const md = u.user_metadata || {};
@@ -47,6 +49,23 @@ export function AuthProvider({ children }) {
     }
   }
 
+  async function loadAdmin(u) {
+    try {
+      if (!u?.id) {
+        setIsAdmin(false);
+        return;
+      }
+      const { data: adminRow } = await supabase
+        .from("admins")
+        .select("user_id")
+        .eq("user_id", u.id)
+        .maybeSingle();
+      setIsAdmin(!!adminRow);
+    } catch {
+      setIsAdmin(false);
+    }
+  }
+
   useEffect(() => {
     let isMounted = true;
     async function init() {
@@ -57,6 +76,7 @@ export function AuthProvider({ children }) {
       // Do not block initial render on profile fetch; load it in background
       setLoading(false);
       loadProfile(data.session?.user ?? null);
+      loadAdmin(data.session?.user ?? null);
     }
     init();
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
@@ -64,6 +84,7 @@ export function AuthProvider({ children }) {
       const u = newSession?.user ?? null;
       setUser(u);
       loadProfile(u);
+      loadAdmin(u);
     });
     return () => {
       isMounted = false;
@@ -84,8 +105,8 @@ export function AuthProvider({ children }) {
   };
 
   const value = useMemo(
-    () => ({ session, user, profile, loading, refreshProfile, refreshUser }),
-    [session, user, profile, loading]
+    () => ({ session, user, profile, loading, isAdmin, refreshProfile, refreshUser }),
+    [session, user, profile, loading, isAdmin]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
