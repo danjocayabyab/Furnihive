@@ -8,6 +8,13 @@ export default function SellerDashboard() {
   const navigate = useNavigate();
   const { user: authUser, profile } = useAuth();
   const [storeName, setStoreName] = useState(profile?.store_name || "your store");
+  const [stats, setStats] = useState({
+    totalSales: 0,
+    activeOrders: 0,
+    productsListed: 0,
+    lowStockItems: 0,
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
 
   useEffect(() => {
     if (!authUser?.id) return;
@@ -35,6 +42,50 @@ export default function SellerDashboard() {
     };
   }, [authUser?.id]);
 
+  useEffect(() => {
+    if (!authUser?.id) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setLoadingStats(true);
+
+        const { data: products, error } = await supabase
+          .from("products")
+          .select("id, status, seller_id, inventory_items(quantity_on_hand)")
+          .eq("seller_id", authUser.id);
+
+        if (error) throw error;
+
+        const list = products || [];
+        const activeProducts = list.filter((p) => p.status !== "archived");
+        const productsListed = activeProducts.length;
+
+        const lowStockItems = activeProducts.filter((p) => {
+          const qty = p.inventory_items?.[0]?.quantity_on_hand ?? 0;
+          return qty > 0 && qty <= 2;
+        }).length;
+
+        if (!cancelled) {
+          setStats({
+            totalSales: 0,
+            activeOrders: 0,
+            productsListed,
+            lowStockItems,
+          });
+        }
+      } catch (e) {
+        console.error("Failed to load dashboard stats", e);
+      } finally {
+        if (!cancelled) setLoadingStats(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id]);
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
       {/* Header */}
@@ -51,29 +102,29 @@ export default function SellerDashboard() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <SummaryCard
           title="Total Sales"
-          value="₱248,500"
-          change="+12.5%"
+          value={loadingStats ? "-" : `₱${stats.totalSales.toLocaleString()}`}
+          change=""
           
           color="text-green-600"
         />
         <SummaryCard
           title="Active Orders"
-          value="23"
-          change="+3"
+          value={loadingStats ? "-" : `${stats.activeOrders}`}
+          change=""
           
           color="text-green-600"
         />
         <SummaryCard
           title="Products Listed"
-          value="87"
-          change="+5"
+          value={loadingStats ? "-" : `${stats.productsListed}`}
+          change=""
           
           color="text-green-600"
         />
         <SummaryCard
           title="Low Stock Items"
-          value="12"
-          change="-2"
+          value={loadingStats ? "-" : `${stats.lowStockItems}`}
+          change=""
           
           color="text-red-600"
         />
