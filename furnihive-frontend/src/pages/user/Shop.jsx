@@ -14,6 +14,7 @@ export default function Shop() {
   const [remoteProducts, setRemoteProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const CATS = ["Living Room", "Bedroom", "Dining", "Office"];
+  const IMAGES_PUBLIC = String(import.meta.env.VITE_PRODUCT_IMAGES_PUBLIC || "false").toLowerCase() === "true";
 
   // Preselect category from URL (e.g., /shop?category=Living%20Room)
   useEffect(() => {
@@ -23,7 +24,7 @@ export default function Shop() {
     }
   }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load products from Supabase (schema: id, seller_id, name, base_price, status, category, ...)
+  // Load products from Supabase (schema: id, seller_id, name, base_price, status, category, category_id, ...)
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -31,7 +32,7 @@ export default function Shop() {
       const { data, error } = await supabase
         .from("products")
         .select(
-          "id, seller_id, name, slug, description, category, status, base_price, created_at"
+          "id, seller_id, name, slug, description, category, category_id, status, base_price, created_at, categories(name)"
         )
         .order("created_at", { ascending: false });
       if (!cancelled) {
@@ -48,7 +49,8 @@ export default function Shop() {
             reviews: 0,
             outOfStock:
               r.status && r.status.toLowerCase() !== "active" && r.status.toLowerCase() !== "published",
-            category: r.category || CATS[i % CATS.length],
+            category: r.categories?.name || r.category || CATS[i % CATS.length],
+            category_id: r.category_id || null,
             seller: undefined,
           }));
 
@@ -66,29 +68,74 @@ export default function Shop() {
             });
           }
 
-          // Step 3: resolve image URLs from storage bucket 'product-images'
-          const withImages = await Promise.all(
-            base.map(async (p) => {
-              let img = "";
-              try {
-                // Convention: product-images/<product_id>/cover.jpg
-                const path = `${p.id}/cover.jpg`;
-                const { data: signed } = await supabase.storage
-                  .from("product-images")
-                  .createSignedUrl(path, 3600);
-                img = signed?.signedUrl || "";
-              } catch {}
-              return {
-                ...p,
-                image:
-                  img ||
-                  "https://images.unsplash.com/photo-1493666438817-866a91353ca9?q=80&w=800&auto=format&fit=crop",
-                seller: sellersById[p.seller_id] || undefined,
-              };
-            })
-          );
+          // Step 3: resolve image URLs from product_images table (primary/cover image)
+          const productIds = base.map((p) => p.id);
+          let coverById = {};
+          if (productIds.length) {
+            const { data: imgs } = await supabase
+              .from("product_images")
+              .select("product_id, url, path, is_primary, position, created_at")
+              .in("product_id", productIds)
+              .order("is_primary", { ascending: false })
+              .order("position", { ascending: true })
+              .order("created_at", { ascending: true });
+            (imgs || []).forEach((row) => {
+              // first seen per product given ordering will be the primary/cover
+              if (!coverById[row.product_id]) coverById[row.product_id] = { url: row.url, path: row.path };
+            });
+          }
+          const withImages = base.map((p) => {
+            const entry = coverById[p.id] || null;
+            let imageUrl = "";
+            if (entry?.url) {
+              imageUrl = entry.url; // direct URL if provided
+            } else if (entry?.path) {
+              if (IMAGES_PUBLIC) {
+                const { data: pub } = supabase.storage.from("product-images").getPublicUrl(entry.path);
+                imageUrl = pub?.publicUrl || "";
+              }
+            }
+            return { ...p, image: imageUrl, seller: sellersById[p.seller_id] || undefined };
+          });
 
-          setRemoteProducts(withImages);
+          // Step 4: If bucket is private or any missing, sign URLs per missing
+          const needSigning = withImages.some((p) => !p.image);
+          let finalList = withImages;
+          if (!IMAGES_PUBLIC && needSigning) {
+            finalList = await Promise.all(
+              withImages.map(async (p) => {
+                if (p.image) return p;
+                const entry = coverById[p.id];
+                if (!entry?.path && !entry?.url) return {
+                  ...p,
+                  image:
+                    "https://images.unsplash.com/photo-1493666438817-866a91353ca9?q=80&w=800&auto=format&fit=crop",
+                };
+                if (entry?.url) {
+                  // direct URL provided
+                  return { ...p, image: entry.url };
+                }
+                try {
+                  const { data: signed } = await supabase.storage
+                    .from("product-images")
+                    .createSignedUrl(entry.path, 3600);
+                  return { ...p, image: signed?.signedUrl || "" };
+                } catch {
+                  return { ...p, image: "" };
+                }
+              })
+            );
+          }
+
+          // Fallback placeholder for any empty image
+          finalList = finalList.map((p) => ({
+            ...p,
+            image:
+              p.image ||
+              "https://images.unsplash.com/photo-1493666438817-866a91353ca9?q=80&w=800&auto=format&fit=crop",
+          }));
+
+          setRemoteProducts(finalList);
         } else {
           setRemoteProducts([]);
         }
