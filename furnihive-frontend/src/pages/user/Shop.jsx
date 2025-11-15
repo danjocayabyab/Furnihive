@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import ProductCard from "../../components/ProductCard.jsx";
 import { featured as ALL_PRODUCTS } from "../../data/mockProducts.js";
+import { supabase } from "../../lib/supabaseClient";
 
 export default function Shop() {
   const [searchParams] = useSearchParams();
@@ -10,6 +11,8 @@ export default function Shop() {
   const [priceMax, setPriceMax] = useState(100000);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [sort, setSort] = useState("featured");
+  const [remoteProducts, setRemoteProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const CATS = ["Living Room", "Bedroom", "Dining", "Office"];
 
   // Preselect category from URL (e.g., /shop?category=Living%20Room)
@@ -20,16 +23,95 @@ export default function Shop() {
     }
   }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // demo: add missing props for filtering
-  const products = useMemo(
-    () =>
-      ALL_PRODUCTS.map((p, i) => ({
-        ...p,
-        category: p.category || CATS[i % CATS.length],
-        outOfStock: p.outOfStock || false,
-      })),
-    []
-  );
+  // Load products from Supabase (schema: id, seller_id, name, base_price, status, category, ...)
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("products")
+        .select(
+          "id, seller_id, name, slug, description, category, status, base_price, created_at"
+        )
+        .order("created_at", { ascending: false });
+      if (!cancelled) {
+        if (!error && Array.isArray(data)) {
+          // Step 1: base mapping
+          const base = data.map((r, i) => ({
+            id: r.id,
+            seller_id: r.seller_id,
+            title: r.name || "Untitled",
+            price: Number(r.base_price ?? 0),
+            oldPrice: null,
+            image: "",
+            rating: 4.8,
+            reviews: 0,
+            outOfStock:
+              r.status && r.status.toLowerCase() !== "active" && r.status.toLowerCase() !== "published",
+            category: r.category || CATS[i % CATS.length],
+            seller: undefined,
+          }));
+
+          // Step 2: load seller profiles in one query
+          const sellerIds = Array.from(new Set(base.map((p) => p.seller_id).filter(Boolean)));
+          let sellersById = {};
+          if (sellerIds.length) {
+            const { data: sellers } = await supabase
+              .from("profiles")
+              .select("id, store_name, first_name, last_name")
+              .in("id", sellerIds);
+            (sellers || []).forEach((s) => {
+              const fullName = [s.first_name, s.last_name].filter(Boolean).join(" ").trim();
+              sellersById[s.id] = s.store_name || fullName || null;
+            });
+          }
+
+          // Step 3: resolve image URLs from storage bucket 'product-images'
+          const withImages = await Promise.all(
+            base.map(async (p) => {
+              let img = "";
+              try {
+                // Convention: product-images/<product_id>/cover.jpg
+                const path = `${p.id}/cover.jpg`;
+                const { data: signed } = await supabase.storage
+                  .from("product-images")
+                  .createSignedUrl(path, 3600);
+                img = signed?.signedUrl || "";
+              } catch {}
+              return {
+                ...p,
+                image:
+                  img ||
+                  "https://images.unsplash.com/photo-1493666438817-866a91353ca9?q=80&w=800&auto=format&fit=crop",
+                seller: sellersById[p.seller_id] || undefined,
+              };
+            })
+          );
+
+          setRemoteProducts(withImages);
+        } else {
+          setRemoteProducts([]);
+        }
+        setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Prefer remote products; fallback to mock if none
+  const products = useMemo(() => {
+    const base = remoteProducts.length
+      ? remoteProducts
+      : ALL_PRODUCTS.map((p, i) => ({
+          ...p,
+          category: p.category || CATS[i % CATS.length],
+          outOfStock: p.outOfStock || false,
+        }));
+    return base;
+  }, [remoteProducts]);
 
   const filtered = useMemo(() => {
     let list = products.filter(
@@ -74,7 +156,7 @@ export default function Shop() {
         {/* Right side: product count + sort */}
         <div className="flex items-center gap-4">
           <div className="text-sm text-[var(--brown-700)] whitespace-nowrap">
-            {filtered.length} products found
+            {loading ? "Loading..." : `${filtered.length} products found`}
           </div>
           <select
             value={sort}
