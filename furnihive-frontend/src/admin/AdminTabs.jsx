@@ -1,7 +1,5 @@
 const tabs = [
   { key: "applications", label: "Applications", icon: "" },
-  { key: "analytics", label: "Analytics & Reports", icon: "" },
-  { key: "orders", label: "Orders", icon: "" },
   { key: "users", label: "Users", icon: "" },
   { key: "support", label: "Support", icon: "" },
 ];

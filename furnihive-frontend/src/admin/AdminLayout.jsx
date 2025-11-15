@@ -2,8 +2,6 @@ import { useState } from "react";
 import AdminTopbar from "./AdminTopbar";
 import AdminTabs from "./AdminTabs";
 import ApplicationsPage from "./ApplicationsPage";
-import AnalyticsReports from "./AnalyticsReports";
-import OrdersPage from "./OrdersPage";
 import UsersPage from "./UsersPage";
 import CustomerSupportPage from "./CustomerSupportPage";
 
@@ -28,8 +26,6 @@ export default function AdminLayout() {
       <main className="flex-1 w-full">
         <div className="mx-auto max-w-6xl px-4 pb-6">
           {tab === "applications" && <ApplicationsPage />}
-          {tab === "analytics" && <AnalyticsReports />}
-          {tab === "orders" && <OrdersPage />}
           {tab === "users" && <UsersPage />}
           {tab === "support" && <CustomerSupportPage />}
         </div>
