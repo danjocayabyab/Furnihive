@@ -22,6 +22,7 @@ export default function ProductDetail() {
   const [selectedColor, setSelectedColor] = useState("Charcoal Gray");
   const [qty, setQty] = useState(1);
   const [tab, setTab] = useState("description");
+  const [mainIndex, setMainIndex] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,7 +32,7 @@ export default function ProductDetail() {
         const { data: p, error } = await supabase
           .from("products")
           .select(
-            "id, seller_id, name, description, category, category_id, status, base_price, stock_qty"
+            "id, seller_id, name, description, category, category_id, status, base_price, stock_qty, length_cm, width_cm, height_cm, material, weight_kg, color"
           )
           .eq("id", id)
           .maybeSingle();
@@ -101,6 +102,12 @@ export default function ProductDetail() {
             (typeof p.stock_qty === "number" ? p.stock_qty <= 0 : false) ||
             (p.status && p.status.toLowerCase() !== "active" && p.status.toLowerCase() !== "published"),
           stock_qty: typeof p.stock_qty === "number" ? p.stock_qty : null,
+          length_cm: p.length_cm ?? null,
+          width_cm: p.width_cm ?? null,
+          height_cm: p.height_cm ?? null,
+          material: p.material || "",
+          weight_kg: p.weight_kg ?? null,
+          color: p.color || "",
         };
         if (!cancelled) setProduct(mapped);
       } catch (e) {
@@ -122,6 +129,7 @@ export default function ProductDetail() {
   const { showAddToCart } = useUI();
 
   const images = product?.images && product.images.length ? product.images : (product?.image ? [product.image] : []);
+  const mainImage = images[mainIndex] || images[0] || product?.image || "";
 
   const baseItem = product
     ? {
@@ -181,27 +189,39 @@ export default function ProductDetail() {
         <div className="grid md:grid-cols-2 gap-6">
           {/* Images */}
           <div>
-            <div className="rounded-2xl border border-[var(--line-amber)] overflow-hidden">
-              {product?.image ? (
+            <div className="rounded-2xl border border-[var(--line-amber)] overflow-hidden bg-[var(--cream-50)] flex items-center justify-center">
+              {mainImage ? (
                 <img
-                  src={product.image}
-                  alt={product.title}
+                  src={mainImage}
+                  alt={product?.title}
                   className="w-full object-cover h-80"
                 />
               ) : (
                 <div className="w-full h-80 bg-[var(--cream-50)] animate-pulse" />
               )}
             </div>
-            <div className="mt-3 flex gap-2">
-              {images.map((img, i) => (
-                <img
-                  key={i}
-                  src={img}
-                  alt={`thumb-${i}`}
-                  className="h-20 w-24 object-cover rounded-lg border border-[var(--line-amber)] cursor-pointer"
-                />
-              ))}
-            </div>
+            {images.length > 1 && (
+              <div className="mt-3 flex gap-2 overflow-x-auto">
+                {images.map((img, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setMainIndex(i)}
+                    className={`h-20 w-24 rounded-lg border flex-shrink-0 overflow-hidden ${
+                      i === mainIndex
+                        ? "border-[var(--orange-600)]"
+                        : "border-[var(--line-amber)] opacity-80"
+                    }`}
+                  >
+                    <img
+                      src={img}
+                      alt={`thumb-${i}`}
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Summary */}
@@ -247,10 +267,12 @@ export default function ProductDetail() {
 
             {/* Actions */}
             <Button className="w-full" onClick={handleAddToCart} disabled={product?.outOfStock}>
-              {product?.outOfStock ? "Out of Stock" : `Add to Cart – ${peso(Number(product?.price || 0) * qty)}`}
+              {product?.outOfStock ? "Out of Stock" : "Add to Cart"}
             </Button>
             <Button className="w-full" onClick={handleBuyNow} disabled={product?.outOfStock}>
-              Buy Now
+              {product?.outOfStock
+                ? "Buy Now"
+                : `Buy Now – ${peso(Number(product?.price || 0) * qty)}`}
             </Button>
 
             {/* Seller info */}
@@ -288,29 +310,39 @@ export default function ProductDetail() {
 
           {/* Panels */}
           {tab === "description" && (
-            <div className="mt-4 space-y-2 text-sm text-gray-700">
-              <p>
-                Transform your living space with this contemporary sectional sofa featuring premium
-                fabric upholstery and a solid hardwood frame. Perfect for modern Filipino homes.
-              </p>
-              <ul className="list-disc list-inside">
-                <li>Premium fabric upholstery</li>
-                <li>High-density foam cushions</li>
-                <li>Left and right configurations available</li>
-                <li>Solid hardwood frame</li>
-                <li>Removable and washable covers</li>
-                <li>Accommodates 4–5 people comfortably</li>
-              </ul>
+            <div className="mt-4 text-sm text-gray-700">
+              <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-4">
+                <div className="text-sm text-[var(--brown-700)] whitespace-pre-line">
+                  {product?.description || "No description provided."}
+                </div>
+              </div>
             </div>
           )}
 
           {tab === "specs" && (
-            <div className="mt-4 text-sm text-gray-700 grid sm:grid-cols-2 gap-y-2">
-              <div><strong>Dimensions:</strong> L:280cm × W:180cm × H:85cm</div>
-              <div><strong>Weight:</strong> 75kg</div>
-              <div><strong>Material:</strong> Hardwood frame, premium fabric</div>
-              <div><strong>Warranty:</strong> 2 years manufacturer warranty</div>
-              <div><strong>Assembly:</strong> Minimal assembly required</div>
+            <div className="mt-4 text-sm text-gray-700">
+              <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-4">
+                <div className="grid sm:grid-cols-2 gap-y-2">
+                  <div>
+                    <strong>Dimensions:</strong>{" "}
+                    {product && (product.length_cm || product.width_cm || product.height_cm)
+                      ? `L:${product.length_cm ?? "-"}cm × W:${product.width_cm ?? "-"}cm × H:${product.height_cm ?? "-"}cm`
+                      : "Not specified"}
+                  </div>
+                  <div>
+                    <strong>Material:</strong>{" "}
+                    {product && product.material ? product.material : "Not specified"}
+                  </div>
+                  <div>
+                    <strong>Weight:</strong>{" "}
+                    {product && product.weight_kg != null ? `${product.weight_kg} kg` : "Not specified"}
+                  </div>
+                  <div>
+                    <strong>Color:</strong>{" "}
+                    {product && product.color ? product.color : "Not specified"}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
