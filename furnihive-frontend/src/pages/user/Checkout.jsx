@@ -53,18 +53,22 @@ export default function Checkout() {
     let cancelled = false;
     (async () => {
       try {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = new Date();
         const { data, error } = await supabase
           .from("promotions")
-          .select("id, seller_id, name, code, type, discount_type, discount_value, min_purchase, max_discount, status, start_date, end_date")
+          .select(
+            "id, seller_id, name, code, type, discount_type, discount_value, min_purchase, max_discount, status, start_date, end_date"
+          )
           .eq("type", "voucher")
           .eq("status", "active");
         if (error || cancelled) return;
 
         const usable = (data || []).filter((p) => {
           // basic date window check if dates are present
-          if (p.start_date && p.start_date > today) return false;
-          if (p.end_date && p.end_date < today) return false;
+          const start = p.start_date ? new Date(p.start_date) : null;
+          const end = p.end_date ? new Date(p.end_date) : null;
+          if (start && start > today) return false;
+          if (end && end < today) return false;
           return true;
         });
 
@@ -78,21 +82,8 @@ export default function Checkout() {
     };
   }, []);
 
-  // derive which seller(s) are in the cart
-  const sellerIdsInCart = useMemo(() => {
-    const set = new Set();
-    for (const it of checkoutItems) {
-      if (it.seller_id) set.add(it.seller_id);
-    }
-    return Array.from(set);
-  }, [checkoutItems]);
-
-  // limit vouchers to those owned by the single seller in the cart
-  const applicableVouchers = useMemo(() => {
-    if (sellerIdsInCart.length !== 1) return [];
-    const sellerId = sellerIdsInCart[0];
-    return vouchers.filter((v) => v.seller_id === sellerId);
-  }, [vouchers, sellerIdsInCart]);
+  // expose all active vouchers loaded from Supabase; discount is still scoped per seller
+  const applicableVouchers = useMemo(() => vouchers, [vouchers]);
 
   // ---- ORDER SUM (with optional voucher discount)
   const totals = useMemo(() => {
@@ -104,8 +95,8 @@ export default function Checkout() {
     if (selectedVoucherId) {
       const v = applicableVouchers.find((p) => p.id === selectedVoucherId);
       if (v) {
-        const minPurchase = typeof v.min_purchase === "number" ? v.min_purchase : 0;
-        if (subtotal >= minPurchase) {
+        // Apply voucher to the entire checkout subtotal
+        if (subtotal > 0) {
           const isPercentage = v.discount_type === "percentage";
           const rawValue = Number(v.discount_value) || 0;
           let rawDiscount = 0;
@@ -114,10 +105,8 @@ export default function Checkout() {
           } else {
             rawDiscount = rawValue;
           }
-          const maxDiscount = typeof v.max_discount === "number" ? v.max_discount : null;
-          let applied = rawDiscount;
-          if (maxDiscount != null) applied = Math.min(applied, maxDiscount);
-          promoDiscount = Math.max(0, applied);
+
+          promoDiscount = Math.max(0, rawDiscount);
         }
       }
     }
