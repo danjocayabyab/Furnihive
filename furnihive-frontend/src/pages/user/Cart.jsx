@@ -11,7 +11,7 @@ export default function Cart() {
 
   const [promo, setPromo] = useState("");
   const [confirm, setConfirm] = useState(null); // { type:"delete"|"clear", id? }
-  const [selected, setSelected] = useState(items.map((i) => i.id)); // all selected by default
+  const [selected, setSelected] = useState([]); // start with no items selected
 
   const totals = useMemo(() => {
     const selectedItems = items.filter((i) => selected.includes(i.id));
@@ -172,15 +172,13 @@ export default function Cart() {
                   <div className="font-bold text-[var(--brown-700)]">
                     {peso(item.price)}
                   </div>
-                  {item.oldPrice && (
+                  {item.oldPrice && item.oldPrice > item.price && (
                     <div className="text-xs text-gray-500 line-through">
                       {peso(item.oldPrice)}
                     </div>
                   )}
-                  <div className="text-xs text-gray-500">per piece</div>
                 </div>
                 <div className="flex gap-3 text-[var(--orange-600)]">
-                  <button title="Save to Wishlist">♡</button>
                   <button
                     title="Remove"
                     onClick={() => setConfirm({ type: "delete", id: item.id })}

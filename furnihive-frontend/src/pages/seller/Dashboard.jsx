@@ -52,7 +52,7 @@ export default function SellerDashboard() {
 
         const { data: products, error } = await supabase
           .from("products")
-          .select("id, status, seller_id, inventory_items(quantity_on_hand)")
+          .select("id, status, seller_id, stock_qty, inventory_items(quantity_on_hand)")
           .eq("seller_id", authUser.id);
 
         if (error) throw error;
@@ -62,7 +62,11 @@ export default function SellerDashboard() {
         const productsListed = activeProducts.length;
 
         const lowStockItems = activeProducts.filter((p) => {
-          const qty = p.inventory_items?.[0]?.quantity_on_hand ?? 0;
+          const qtyFromProduct =
+            (p.stock_qty ?? null) != null
+              ? p.stock_qty
+              : p.inventory_items?.[0]?.quantity_on_hand ?? 0;
+          const qty = Number(qtyFromProduct) || 0;
           return qty > 0 && qty <= 2;
         }).length;
 

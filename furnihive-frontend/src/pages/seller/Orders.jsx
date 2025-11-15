@@ -165,10 +165,9 @@ export default function SellerOrders() {
         </div>
       </div>
 
-      {/* search + filters (filters button UI only) */}
+      {/* search */}
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-3 flex items-center gap-3">
         <div className="flex-1 flex items-center gap-2 rounded-full border border-[var(--line-amber)] bg-[var(--cream-50)] px-3 py-2">
-          
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -176,9 +175,6 @@ export default function SellerOrders() {
             placeholder="Search by order ID or customer name…"
           />
         </div>
-        <button className="rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm hover:bg-[var(--cream-50)]">
-          Filters
-        </button>
       </div>
 
       {/* tabs */}
