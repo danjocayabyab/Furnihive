@@ -124,8 +124,9 @@ function PersonalPanel({ authUser, profile }) {
         birth_date: birthDate || null,
         gender: gender || null,
       };
+      // always update base profile
       if (profile?.role === "seller") {
-        update.store_name = sn || null;
+        update.store_name = sn || null; // still mirror for backward-compat
       }
       const { error, data: updatedRow } = await supabase
         .from("profiles")
@@ -137,6 +138,7 @@ function PersonalPanel({ authUser, profile }) {
       if (!updatedRow) {
         console.warn("Profile update returned no row. Check RLS.");
       }
+      // role-table mirroring removed: profiles is the single source of truth
       // Also update Supabase Auth user metadata so the Auth display name reflects changes
       const fullName = `${fn || ""} ${ln || ""}`.trim();
       try {
@@ -187,11 +189,13 @@ function PersonalPanel({ authUser, profile }) {
       const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
       const avatarUrl = pub?.publicUrl || null;
 
+      // store avatar on base profile only
       const { error } = await supabase
         .from("profiles")
         .update({ avatar_url: avatarUrl, avatar_path: path })
         .eq("id", authUser?.id);
       if (error) throw error;
+      // role-table mirroring removed
       try {
         await supabase.auth.updateUser({ data: { avatar_url: avatarUrl, avatar_path: path } });
       } catch {}
