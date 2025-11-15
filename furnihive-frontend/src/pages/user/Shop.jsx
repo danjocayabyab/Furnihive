@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import ProductCard from "../../components/ProductCard.jsx";
-import { featured as ALL_PRODUCTS } from "../../data/mockProducts.js";
 import { supabase } from "../../lib/supabaseClient";
 
 export default function Shop() {
@@ -32,13 +31,27 @@ export default function Shop() {
       const { data, error } = await supabase
         .from("products")
         .select(
-          "id, seller_id, name, slug, description, category, category_id, status, base_price, created_at, categories(name)"
+          "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, created_at, categories(name)"
         )
         .order("created_at", { ascending: false });
+      let rows = data;
+      let err = error;
+      // Fallback: if relation name is different or missing, retry without categories()
+      if (err) {
+        console.warn("Shop products query with categories() failed, retrying without join:", err?.message);
+        const retry = await supabase
+          .from("products")
+          .select(
+            "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, created_at"
+          )
+          .order("created_at", { ascending: false });
+        rows = retry.data;
+        err = retry.error;
+      }
       if (!cancelled) {
-        if (!error && Array.isArray(data)) {
+        if (!err && Array.isArray(rows)) {
           // Step 1: base mapping
-          const base = data.map((r, i) => ({
+          const base = rows.map((r, i) => ({
             id: r.id,
             seller_id: r.seller_id,
             title: r.name || "Untitled",
@@ -48,23 +61,23 @@ export default function Shop() {
             rating: 4.8,
             reviews: 0,
             outOfStock:
-              r.status && r.status.toLowerCase() !== "active" && r.status.toLowerCase() !== "published",
+              (typeof r.stock_qty === "number" ? r.stock_qty <= 0 : false) ||
+              (r.status && r.status.toLowerCase() !== "active" && r.status.toLowerCase() !== "published"),
             category: r.categories?.name || r.category || CATS[i % CATS.length],
             category_id: r.category_id || null,
             seller: undefined,
           }));
 
-          // Step 2: load seller profiles in one query
+          // Step 2: load store names by owner (seller) in one query
           const sellerIds = Array.from(new Set(base.map((p) => p.seller_id).filter(Boolean)));
-          let sellersById = {};
+          let storeNameByOwner = {};
           if (sellerIds.length) {
-            const { data: sellers } = await supabase
-              .from("profiles")
-              .select("id, store_name, first_name, last_name")
-              .in("id", sellerIds);
-            (sellers || []).forEach((s) => {
-              const fullName = [s.first_name, s.last_name].filter(Boolean).join(" ").trim();
-              sellersById[s.id] = s.store_name || fullName || null;
+            const { data: stores } = await supabase
+              .from("stores")
+              .select("owner_id, name")
+              .in("owner_id", sellerIds);
+            (stores || []).forEach((s) => {
+              storeNameByOwner[s.owner_id] = s.name || null;
             });
           }
 
@@ -95,7 +108,7 @@ export default function Shop() {
                 imageUrl = pub?.publicUrl || "";
               }
             }
-            return { ...p, image: imageUrl, seller: sellersById[p.seller_id] || undefined };
+            return { ...p, image: imageUrl, seller: storeNameByOwner[p.seller_id] || undefined };
           });
 
           // Step 4: If bucket is private or any missing, sign URLs per missing
@@ -137,6 +150,7 @@ export default function Shop() {
 
           setRemoteProducts(finalList);
         } else {
+          if (err) console.warn("Shop products query failed:", err?.message);
           setRemoteProducts([]);
         }
         setLoading(false);
@@ -148,17 +162,8 @@ export default function Shop() {
     };
   }, []);
 
-  // Prefer remote products; fallback to mock if none
-  const products = useMemo(() => {
-    const base = remoteProducts.length
-      ? remoteProducts
-      : ALL_PRODUCTS.map((p, i) => ({
-          ...p,
-          category: p.category || CATS[i % CATS.length],
-          outOfStock: p.outOfStock || false,
-        }));
-    return base;
-  }, [remoteProducts]);
+  // Only use remote products (no mock fallback)
+  const products = useMemo(() => remoteProducts, [remoteProducts]);
 
   const filtered = useMemo(() => {
     let list = products.filter(
@@ -295,11 +300,17 @@ export default function Shop() {
 
         {/* RIGHT: Products */}
         <section className="min-w-0 flex-1">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {filtered.map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
-          </div>
+          {filtered.length === 0 ? (
+            <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-6 text-center text-gray-600">
+              {loading ? "Loading products..." : "No products yet"}
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {filtered.map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </div>

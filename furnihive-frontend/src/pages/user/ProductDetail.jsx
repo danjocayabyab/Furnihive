@@ -1,10 +1,10 @@
 // src/pages/user/ProductDetail.jsx
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Button from "../../components/ui/Button.jsx";
-import { featured as mockProducts } from "../../data/mockProducts.js";
 import ReviewSummary from "../../components/reviews/ReviewSummary.jsx";
 import ReviewCard from "../../components/reviews/ReviewCard.jsx";
+import { supabase } from "../../lib/supabaseClient";
 
 import { useCart } from "../../components/contexts/CartContext.jsx";
 import { useUI } from "../../components/contexts/UiContext.jsx";
@@ -15,33 +15,129 @@ export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const product = useMemo(
-    () => mockProducts.find((p) => String(p.id) === String(id)) || mockProducts[0],
-    [id]
-  );
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const IMAGES_PUBLIC = String(import.meta.env.VITE_PRODUCT_IMAGES_PUBLIC || "false").toLowerCase() === "true";
 
   const [selectedColor, setSelectedColor] = useState("Charcoal Gray");
   const [qty, setQty] = useState(1);
   const [tab, setTab] = useState("description");
 
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const { data: p, error } = await supabase
+          .from("products")
+          .select(
+            "id, seller_id, name, description, category, category_id, status, base_price, stock_qty"
+          )
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw error;
+        if (!p) {
+          if (!cancelled) setProduct(null);
+          return;
+        }
+
+        // load store name
+        let storeName = undefined;
+        if (p.seller_id) {
+          const { data: stores } = await supabase
+            .from("stores")
+            .select("owner_id, name")
+            .eq("owner_id", p.seller_id)
+            .limit(1);
+          storeName = stores?.[0]?.name || undefined;
+        }
+
+        // load images
+        const { data: imgs } = await supabase
+          .from("product_images")
+          .select("url, path, is_primary, position, created_at")
+          .eq("product_id", p.id)
+          .order("is_primary", { ascending: false })
+          .order("position", { ascending: true })
+          .order("created_at", { ascending: true });
+        const ordered = (imgs || []).slice();
+
+        // resolve primary image
+        let cover = "";
+        let resolvedImages = [];
+        if (ordered.length) {
+          // build images list with url or resolved public url
+          for (const row of ordered) {
+            if (row.url) {
+              resolvedImages.push(row.url);
+            } else if (row.path && IMAGES_PUBLIC) {
+              const { data: pub } = supabase.storage.from("product-images").getPublicUrl(row.path);
+              if (pub?.publicUrl) resolvedImages.push(pub.publicUrl);
+            } else if (row.path && !IMAGES_PUBLIC) {
+              try {
+                const { data: signed } = await supabase.storage
+                  .from("product-images")
+                  .createSignedUrl(row.path, 3600);
+                if (signed?.signedUrl) resolvedImages.push(signed.signedUrl);
+              } catch {}
+            }
+          }
+          cover = resolvedImages[0] || "";
+        }
+
+        const mapped = {
+          id: p.id,
+          title: p.name || "Untitled",
+          description: p.description || "",
+          category: p.category || "Living Room",
+          price: Number(p.base_price ?? 0),
+          oldPrice: null,
+          image: cover || "",
+          images: resolvedImages,
+          rating: 4.8,
+          reviews: 0,
+          seller: storeName,
+          outOfStock:
+            (typeof p.stock_qty === "number" ? p.stock_qty <= 0 : false) ||
+            (p.status && p.status.toLowerCase() !== "active" && p.status.toLowerCase() !== "published"),
+          stock_qty: typeof p.stock_qty === "number" ? p.stock_qty : null,
+        };
+        if (!cancelled) setProduct(mapped);
+      } catch (e) {
+        if (!cancelled) setProduct(null);
+        // eslint-disable-next-line no-console
+        console.warn("ProductDetail: failed to load product", e?.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
   const cart = useCart();
   const addToCartCtx = typeof cart.add === "function" ? cart.add : cart.addItem;
   const { showAddToCart } = useUI();
 
-  const thumbs = [product.image, product.image, product.image];
+  const images = product?.images && product.images.length ? product.images : (product?.image ? [product.image] : []);
 
-  const baseItem = {
-    id: product.id,
-    title: product.title,
-    price: Number(product.price),
-    oldPrice: Number(product.oldPrice || product.price),
-    image: product.image,
-    seller: product.seller || "Manila Furniture Co.",
-    color: selectedColor,
-    rating: product.rating,
-  };
+  const baseItem = product
+    ? {
+        id: product.id,
+        title: product.title,
+        price: Number(product.price),
+        oldPrice: Number(product.oldPrice || product.price),
+        image: product.image,
+        seller: product.seller,
+        color: selectedColor,
+        rating: product.rating,
+      }
+    : null;
 
   const handleAddToCart = () => {
+    if (!product || product.outOfStock) return;
     addToCartCtx(baseItem, qty);
     showAddToCart({
       title: product.title,
@@ -75,9 +171,9 @@ export default function ProductDetail() {
           Back to Shop
         </Link>
         <span>/</span>
-        <span>{product.category || "Living Room"}</span>
+        <span>{product?.category || "Living Room"}</span>
         <span>/</span>
-        <span className="text-[var(--brown-700)] font-semibold">{product.title}</span>
+        <span className="text-[var(--brown-700)] font-semibold">{product?.title || (loading ? "Loading..." : "")}</span>
       </div>
 
       {/* Product Card */}
@@ -86,14 +182,18 @@ export default function ProductDetail() {
           {/* Images */}
           <div>
             <div className="rounded-2xl border border-[var(--line-amber)] overflow-hidden">
-              <img
-                src={product.image}
-                alt={product.title}
-                className="w-full object-cover h-80"
-              />
+              {product?.image ? (
+                <img
+                  src={product.image}
+                  alt={product.title}
+                  className="w-full object-cover h-80"
+                />
+              ) : (
+                <div className="w-full h-80 bg-[var(--cream-50)] animate-pulse" />
+              )}
             </div>
             <div className="mt-3 flex gap-2">
-              {thumbs.map((img, i) => (
+              {images.map((img, i) => (
                 <img
                   key={i}
                   src={img}
@@ -106,21 +206,21 @@ export default function ProductDetail() {
 
           {/* Summary */}
           <div className="space-y-4">
-            <h1 className="text-2xl font-semibold text-[var(--brown-700)]">{product.title}</h1>
+            <h1 className="text-2xl font-semibold text-[var(--brown-700)]">{product?.title || (loading ? "Loading..." : "")}</h1>
             <p className="text-sm text-gray-600">
               by{" "}
               <span className="text-[var(--orange-600)]">
-                {product.seller || "Manila Furniture Co."}
+                {product?.seller || ""}
               </span>
             </p>
 
             {/* Rating */}
-            <div className="text-sm text-yellow-600">⭐ {Number(product.rating).toFixed(1)} ({product.reviews} reviews)</div>
+            <div className="text-sm text-yellow-600">⭐ {Number(product?.rating || 0).toFixed(1)} ({product?.reviews || 0} reviews)</div>
 
             {/* Price */}
             <div className="flex items-center gap-3">
-              <div className="text-2xl font-bold text-[var(--brown-700)]">{peso(product.price)}</div>
-              {product.oldPrice && (
+              <div className="text-2xl font-bold text-[var(--brown-700)]">{peso(product?.price || 0)}</div>
+              {product?.oldPrice && (
                 <>
                   <div className="text-gray-500 line-through">{peso(product.oldPrice)}</div>
                   <span className="text-green-600 font-medium">
@@ -142,21 +242,21 @@ export default function ProductDetail() {
                   +
                 </button>
               </div>
-              <span className="text-xs text-gray-500">12 items available</span>
+              <span className="text-xs text-gray-500">{typeof product?.stock_qty === "number" && product?.stock_qty >= 0 ? `${product.stock_qty} items available` : ""}</span>
             </div>
 
             {/* Actions */}
-            <Button className="w-full" onClick={handleAddToCart}>
-              Add to Cart – {peso(Number(product.price) * qty)}
+            <Button className="w-full" onClick={handleAddToCart} disabled={product?.outOfStock}>
+              {product?.outOfStock ? "Out of Stock" : `Add to Cart – ${peso(Number(product?.price || 0) * qty)}`}
             </Button>
-            <Button className="w-full" onClick={handleBuyNow}>
+            <Button className="w-full" onClick={handleBuyNow} disabled={product?.outOfStock}>
               Buy Now
             </Button>
 
             {/* Seller info */}
             <div className="border border-[var(--line-amber)] rounded-2xl p-3 flex items-center justify-between mt-4">
               <div>
-                <div className="font-semibold">{product.seller || "Manila Furniture Co."}</div>
+                <div className="font-semibold">{product?.seller || ""}</div>
                 <div className="text-xs text-gray-600">⭐ 4.9 • 2847 sales</div>
               </div>
               <Button variant="secondary" className="text-xs px-3 py-1" onClick={openChat}>
@@ -181,7 +281,7 @@ export default function ProductDetail() {
               >
                 {t === "description" && "Description"}
                 {t === "specs" && "Specifications"}
-                {t === "reviews" && `Reviews (${product.reviews})`}
+                {t === "reviews" && `Reviews (${product?.reviews || 0})`}
               </button>
             ))}
           </div>
