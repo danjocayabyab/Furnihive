@@ -2,76 +2,17 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Status from "../../components/seller/Status.jsx";
-
-/** --- Demo data (replace with API later) --- */
-const DEMO = [
-  {
-    id: "p-1",
-    title: "Modern Sectional Sofa",
-    category: "Living Room",
-    price: 45999,
-    stock: 12,
-    views: 234,
-    sold: 18,
-    active: true,
-    image:
-      "https://images.unsplash.com/photo-1501045661006-fcebe0257c3f?q=80&w=800&auto=format&fit=crop",
-  },
-  {
-    id: "p-2",
-    title: "Solid Wood Dining Set",
-    category: "Dining Room",
-    price: 35500,
-    stock: 8,
-    views: 189,
-    sold: 12,
-    active: true,
-    image:
-      "https://images.unsplash.com/photo-1519710164239-da123dc03ef4?q=80&w=800&auto=format&fit=crop",
-  },
-  {
-    id: "p-3",
-    title: "Queen Size Bed Frame",
-    category: "Bedroom",
-    price: 28900,
-    stock: 5,
-    views: 156,
-    sold: 9,
-    active: true,
-    image:
-      "https://images.unsplash.com/photo-1519710884004-2f43f6b4d6f6?q=80&w=800&auto=format&fit=crop",
-  },
-  {
-    id: "p-4",
-    title: "Velvet Armchair",
-    category: "Living Room",
-    price: 18500,
-    stock: 2,
-    views: 98,
-    sold: 15,
-    active: true,
-    image:
-      "https://images.unsplash.com/photo-1582582429416-4b1c5fd5f6b3?q=80&w=800&auto=format&fit=crop",
-  },
-  {
-    id: "p-5",
-    title: "Office Desk",
-    category: "Office",
-    price: 15999,
-    stock: 0,
-    views: 145,
-    sold: 20,
-    active: false,
-    image:
-      "https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=800&auto=format&fit=crop",
-  },
-];
+import { supabase } from "../../lib/supabaseClient";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
+import toast from "react-hot-toast";
 
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 
 export default function Inventory() {
   const navigate = useNavigate();
-  const [items, setItems] = useState(DEMO);
+  const { user: authUser } = useAuth();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("All");
   const [menu, setMenu] = useState(null); // id for 3-dot menu
@@ -89,6 +30,61 @@ export default function Inventory() {
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, []);
+
+  useEffect(() => {
+    if (!authUser?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from("products")
+          .select(
+            `id, seller_id, name, description, category, base_price, status,
+             sku, length_cm, width_cm, height_cm,
+             product_images ( url, is_primary, position ),
+             inventory_items ( quantity_on_hand )`
+          )
+          .eq("seller_id", authUser.id)
+          .neq("status", "archived")
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        const mapped = (data || []).map((p) => {
+          const imgs = (p.product_images || []).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+          const primary = imgs.find((i) => i.is_primary) || imgs[0] || null;
+          return {
+            id: p.id,
+            title: p.name,
+            category: p.category || "Uncategorized",
+            description: p.description || "",
+            price: p.base_price,
+            stock: p.inventory_items?.[0]?.quantity_on_hand ?? 0,
+            views: 0,
+            sold: 0,
+            sku: p.sku || "",
+            active: p.status === "active",
+            image: primary?.url || "",
+            images: imgs.map((i) => i.url),
+            length: p.length_cm ?? 0,
+            width: p.width_cm ?? 0,
+            height: p.height_cm ?? 0,
+          };
+        });
+        if (!cancelled) setItems(mapped);
+      } catch (e) {
+        if (!cancelled) {
+          console.error("Failed to load inventory", e);
+          toast.error(e?.message || "Failed to load inventory.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id]);
 
   const stats = useMemo(() => {
     const total = items.length;
@@ -115,15 +111,217 @@ export default function Inventory() {
     [items]
   );
 
-  const updateItem = (id, changes) =>
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...changes } : i)));
+  const updateItem = async (id, changes) => {
+    if (!authUser?.id) return;
+    try {
+      const productPayload = {
+        name: changes.title,
+        description: changes.description,
+        category: changes.category,
+        base_price: changes.price,
+        sku: changes.sku,
+        length_cm: changes.length,
+        width_cm: changes.width,
+        height_cm: changes.height,
+      };
+      const { error: prodErr } = await supabase
+        .from("products")
+        .update(productPayload)
+        .eq("id", id)
+        .eq("seller_id", authUser.id);
+      if (prodErr) throw prodErr;
 
-  const removeItem = (id) =>
-    setItems((prev) => prev.filter((i) => i.id !== id));
+      if (typeof changes.stock === "number") {
+        const { data: invRow, error: invSelErr } = await supabase
+          .from("inventory_items")
+          .select("id")
+          .eq("product_id", id)
+          .eq("seller_id", authUser.id)
+          .maybeSingle();
+        if (!invSelErr) {
+          if (invRow?.id) {
+            const { error: invErr } = await supabase
+              .from("inventory_items")
+              .update({ quantity_on_hand: changes.stock })
+              .eq("id", invRow.id);
+            if (invErr) throw invErr;
+          } else {
+            const { error: invInsErr } = await supabase
+              .from("inventory_items")
+              .insert({
+                seller_id: authUser.id,
+                product_id: id,
+                quantity_on_hand: changes.stock,
+              });
+            if (invInsErr) throw invInsErr;
+          }
+        }
+      }
 
-  const addItem = (data) => {
-    const newItem = { id: `p-${Date.now()}`, views: 0, sold: 0, active: true, ...data };
-    setItems((prev) => [newItem, ...prev]);
+      let newImages = null;
+      if (Array.isArray(changes.files) && changes.files.length) {
+        await supabase
+          .from("product_images")
+          .delete()
+          .eq("product_id", id);
+
+        const uploads = changes.files.map(async (file, index) => {
+          const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+          const path = `${authUser.id}/${id}/${Date.now()}-${index}-${safeName}`;
+          const { error: uploadErr } = await supabase
+            .storage
+            .from("product-images")
+            .upload(path, file, {
+              cacheControl: "3600",
+              upsert: false,
+            });
+          if (uploadErr) throw uploadErr;
+          const { data: pub } = supabase.storage.from("product-images").getPublicUrl(path);
+          const url = pub?.publicUrl || null;
+          if (!url) throw new Error("Failed to get public URL for image.");
+          return { url, index };
+        });
+
+        const uploaded = await Promise.all(uploads);
+        newImages = uploaded.map((u) => u.url);
+
+        const rows = uploaded.map((u) => ({
+          product_id: id,
+          url: u.url,
+          is_primary: u.index === 0,
+          position: u.index,
+        }));
+        const { error: imgInsErr } = await supabase
+          .from("product_images")
+          .insert(rows);
+        if (imgInsErr) throw imgInsErr;
+      }
+
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === id
+            ? {
+                ...i,
+                ...changes,
+                image: newImages ? newImages[0] : i.image,
+                images: newImages || i.images,
+              }
+            : i
+        )
+      );
+      toast.success("Product updated.");
+    } catch (e) {
+      console.error("Update product failed", e);
+      toast.error(e?.message || "Failed to update product.");
+    }
+  };
+
+  const removeItem = async (id) => {
+    if (!authUser?.id) return;
+    try {
+      const { error } = await supabase
+        .from("products")
+        .update({ status: "archived" })
+        .eq("id", id)
+        .eq("seller_id", authUser.id);
+      if (error) throw error;
+      setItems((prev) => prev.filter((i) => i.id !== id));
+      toast.success("Product archived.");
+    } catch (e) {
+      console.error("Archive product failed", e);
+      toast.error(e?.message || "Failed to delete product.");
+    }
+  };
+
+  const addItem = async (data) => {
+    if (!authUser?.id) return;
+    try {
+      const { data: product, error: prodErr } = await supabase
+        .from("products")
+        .insert({
+          seller_id: authUser.id,
+          name: data.title,
+          description: data.description,
+          category: data.category,
+          base_price: data.price,
+          sku: data.sku,
+          length_cm: data.length,
+          width_cm: data.width,
+          height_cm: data.height,
+          status: "active",
+        })
+        .select("id, name, description, category, base_price, status, sku, length_cm, width_cm, height_cm")
+        .single();
+      if (prodErr) throw prodErr;
+
+      const { data: invRow, error: invErr } = await supabase
+        .from("inventory_items")
+        .insert({
+          seller_id: authUser.id,
+          product_id: product.id,
+          quantity_on_hand: data.stock,
+        })
+        .select("quantity_on_hand")
+        .single();
+      if (invErr) throw invErr;
+
+      let imageUrls = [];
+      if (Array.isArray(data.files) && data.files.length) {
+        const uploads = data.files.map(async (file, index) => {
+          const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+          const path = `${authUser.id}/${product.id}/${Date.now()}-${index}-${safeName}`;
+          const { error: uploadErr } = await supabase
+            .storage
+            .from("product-images")
+            .upload(path, file, {
+              cacheControl: "3600",
+              upsert: false,
+            });
+          if (uploadErr) throw uploadErr;
+          const { data: pub } = supabase.storage.from("product-images").getPublicUrl(path);
+          const url = pub?.publicUrl || null;
+          if (!url) throw new Error("Failed to get public URL for image.");
+          return { url, index };
+        });
+
+        const uploaded = await Promise.all(uploads);
+        imageUrls = uploaded.map((u) => u.url);
+
+        const rows = uploaded.map((u) => ({
+          product_id: product.id,
+          url: u.url,
+          is_primary: u.index === 0,
+          position: u.index,
+        }));
+        const { error: imgErr } = await supabase
+          .from("product_images")
+          .insert(rows);
+        if (imgErr) throw imgErr;
+      }
+
+      const newItem = {
+        id: product.id,
+        title: product.name,
+        category: product.category || "Uncategorized",
+        description: product.description || "",
+        price: product.base_price,
+        stock: invRow.quantity_on_hand ?? 0,
+        views: 0,
+        sold: 0,
+        sku: product.sku || "",
+        active: product.status === "active",
+        image: imageUrls[0] || "",
+        images: imageUrls,
+        length: product.length_cm ?? 0,
+        width: product.width_cm ?? 0,
+        height: product.height_cm ?? 0,
+      };
+      setItems((prev) => [newItem, ...prev]);
+      toast.success("Product added.");
+    } catch (e) {
+      console.error("Add product failed", e);
+      toast.error(e?.message || "Failed to add product.");
+    }
   };
 
   return (
@@ -150,10 +348,10 @@ export default function Inventory() {
 
       {/* Metric cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Metric label="Total Products" value={stats.total} />
-        <Metric label="Active" value={stats.active} />
-        <Metric label="Low Stock" value={stats.low} />
-        <Metric label="Out of Stock" value={stats.oos} />
+        <Metric label="Total Products" value={loading ? "-" : stats.total} />
+        <Metric label="Active" value={loading ? "-" : stats.active} />
+        <Metric label="Low Stock" value={loading ? "-" : stats.low} />
+        <Metric label="Out of Stock" value={loading ? "-" : stats.oos} />
       </div>
 
       {/* Search + filters */}
@@ -202,23 +400,29 @@ export default function Inventory() {
           {filtered.map((p) => (
             <li key={p.id} className="px-5 py-3">
               <div className="flex items-center gap-4">
-                <img
-                  src={p.image}
-                  alt={p.title}
-                  className="h-16 w-24 object-cover rounded-lg border border-[var(--line-amber)]"
-                />
-                <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-y-1 gap-x-4">
-                  <div className="col-span-2">
-                    <div className="font-medium text-[var(--brown-700)]">
-                      {p.title}
+                <button
+                  type="button"
+                  onClick={() => setView(p)}
+                  className="flex flex-1 items-center gap-4 text-left hover:bg-[var(--cream-50)] rounded-xl px-2 py-1 -mx-2"
+                >
+                  <img
+                    src={p.image}
+                    alt={p.title}
+                    className="h-16 w-24 object-cover rounded-lg border border-[var(--line-amber)] flex-shrink-0"
+                  />
+                  <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-y-1 gap-x-4">
+                    <div className="col-span-2">
+                      <div className="font-medium text-[var(--brown-700)]">
+                        {p.title}
+                      </div>
+                      <div className="text-xs text-gray-600">{p.category}</div>
                     </div>
-                    <div className="text-xs text-gray-600">{p.category}</div>
+                    <Info label="Price" value={<b>{peso(p.price)}</b>} />
+                    <Info label="Stock" value={`${p.stock} ${p.stock === 1 ? "unit" : "units"}`} />
+                    <Info label="SKU" value={p.sku || "—"} />
+                    <Info label="Sold" value={p.sold} />
                   </div>
-                  <Info label="Price" value={<b>{peso(p.price)}</b>} />
-                  <Info label="Stock" value={`${p.stock} ${p.stock === 1 ? "unit" : "units"}`} />
-                  <Info label="Views" value={p.views} />
-                  <Info label="Sold" value={p.sold} />
-                </div>
+                </button>
 
                 {/* 3-dots menu */}
                 <div className="relative">
@@ -231,9 +435,6 @@ export default function Inventory() {
                   </button>
                   {menu === p.id && (
                     <Menu onClose={() => setMenu(null)}>
-                      <MenuItem onClick={() => { setView(p); setMenu(null); }}>
-                        View details
-                      </MenuItem>
                       <MenuItem onClick={() => { setEdit(p); setMenu(null); }}>
                         Edit product
                       </MenuItem>
@@ -256,36 +457,8 @@ export default function Inventory() {
 
       {/* View details modal */}
       {view && (
-        <Modal onClose={() => setView(null)} maxWidth="520px">
-          <div className="space-y-4">
-            <img
-              src={view.image}
-              alt={view.title}
-              className="w-full h-56 object-cover rounded-xl border border-[var(--line-amber)]"
-            />
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <Field label="Product Name" value={view.title} />
-              <Field label="Category" value={view.category} />
-              <Field label="Price" value={peso(view.price)} />
-              <Field label="Stock" value={`${view.stock} units`} />
-              <Field label="Views" value={view.views} />
-              <Field label="Total Sold" value={view.sold} />
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                className="rounded-lg border border-[var(--line-amber)] px-4 py-2 text-sm hover:bg-[var(--cream-50)]"
-                onClick={() => setView(null)}
-              >
-                Close
-              </button>
-              <button
-                className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95"
-                onClick={() => { setEdit(view); setView(null); }}
-              >
-                Edit Product
-              </button>
-            </div>
-          </div>
+        <Modal onClose={() => setView(null)} maxWidth="560px">
+          <ViewProductDetails view={view} onClose={() => setView(null)} onEdit={(v) => { setEdit(v); setView(null); }} />
         </Modal>
       )}
 
@@ -294,8 +467,8 @@ export default function Inventory() {
         <EditModal
           item={edit}
           onCancel={() => setEdit(null)}
-          onSave={(updated) => {
-            updateItem(edit.id, updated);
+          onSave={async (updated) => {
+            await updateItem(edit.id, updated);
             setEdit(null);
           }}
         />
@@ -314,8 +487,8 @@ export default function Inventory() {
             height: 0,
           }}
           onCancel={() => setAdd(false)}
-          onSave={(newItem) => {
-            addItem(newItem);
+          onSave={async (newItem) => {
+            await addItem(newItem);
             setAdd(false);
           }}
         />
@@ -327,12 +500,116 @@ export default function Inventory() {
           title="Delete Product?"
           body="This product will be removed from your inventory."
           onCancel={() => setConfirm(null)}
-          onConfirm={() => {
-            removeItem(confirm);
+          onConfirm={async () => {
+            await removeItem(confirm);
             setConfirm(null);
           }}
         />
       )}
+    </div>
+  );
+}
+
+function ViewProductDetails({ view, onClose, onEdit }) {
+  const [mainIndex, setMainIndex] = useState(0);
+  const images = view.images && view.images.length ? view.images : (view.image ? [view.image] : []);
+  const mainImage = images[mainIndex] || images[0] || "";
+
+  return (
+    <div className="space-y-4">
+      {/* Image + basic header */}
+      <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-start">
+        <div className="space-y-2">
+          <div className="rounded-xl border border-[var(--line-amber)] overflow-hidden bg-[var(--cream-50)]">
+            <img
+              src={mainImage}
+              alt={view.title}
+              className="w-full h-56 object-cover"
+            />
+          </div>
+          {images.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pt-1">
+              {images.map((img, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setMainIndex(idx)}
+                  className={`h-14 w-20 rounded-lg border ${
+                    idx === mainIndex
+                      ? "border-[var(--orange-600)]"
+                      : "border-[var(--line-amber)] opacity-80"
+                  } overflow-hidden flex-shrink-0 bg-white`}
+                >
+                  <img
+                    src={img}
+                    alt={`Thumb ${idx + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--brown-700)]">
+              {view.title}
+            </h2>
+            <p className="text-xs text-gray-600 mt-0.5">{view.category}</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-lg border border-[var(--line-amber)] bg-[var(--cream-50)] p-3">
+              <div className="text-xs text-gray-600">Price</div>
+              <div className="mt-1 text-[var(--brown-700)] font-semibold">{peso(view.price)}</div>
+            </div>
+            <div className="rounded-lg border border-[var(--line-amber)] bg-[var(--cream-50)] p-3">
+              <div className="text-xs text-gray-600">Stock</div>
+              <div className="mt-1 text-[var(--brown-700)] font-semibold">{view.stock} units</div>
+            </div>
+            <div className="rounded-lg border border-[var(--line-amber)] bg-white p-3">
+              <div className="text-xs text-gray-600">SKU</div>
+              <div className="mt-1 text-[var(--brown-700)] font-semibold">{view.sku || "—"}</div>
+            </div>
+            <div className="rounded-lg border border-[var(--line-amber)] bg-white p-3">
+              <div className="text-xs text-gray-600">Total Sold</div>
+              <div className="mt-1 text-[var(--brown-700)] font-semibold">{view.sold}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Details grid */}
+      <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-4 space-y-3 text-sm">
+        <div className="grid md:grid-cols-3 gap-3">
+          <Field label="Length (cm)" value={view.length != null ? `${view.length}` : "-"} />
+          <Field label="Width (cm)" value={view.width != null ? `${view.width}` : "-"} />
+          <Field label="Height (cm)" value={view.height != null ? `${view.height}` : "-"} />
+        </div>
+
+        <div className="mt-2">
+          <div className="text-xs text-gray-600 mb-1">Description</div>
+          <div className="text-sm text-[var(--brown-700)] whitespace-pre-line">
+            {view.description || "No description provided."}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <button
+          className="rounded-lg border border-[var(--line-amber)] px-4 py-2 text-sm hover:bg-[var(--cream-50)]"
+          onClick={onClose}
+        >
+          Close
+        </button>
+        <button
+          className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95"
+          onClick={() => onEdit(view)}
+        >
+          Edit Product
+        </button>
+      </div>
     </div>
   );
 }
@@ -460,25 +737,38 @@ function EditModal({ item, onCancel, onSave }) {
     length: item.length || 0,
     width: item.width || 0,
     height: item.height || 0,
-    image: item.image || "", // <-- add image
+    images: (() => {
+      const imgs = item.images || (item.image ? [item.image] : []);
+      return imgs.slice(0, 4);
+    })(),
+    files: [],
   });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  const handleImage = (e) => {
-    const file = e.target.files[0];
+  const handleImageSlot = (index, e) => {
+    const file = (e.target.files || [])[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onloadend = () => set("image", reader.result); // store base64
+    reader.onloadend = () => {
+      setForm((prev) => {
+        const images = [...(prev.images || [])];
+        const files = [...(prev.files || [])];
+        images[index] = reader.result;
+        files[index] = file;
+        return { ...prev, images, files };
+      });
+    };
     reader.readAsDataURL(file);
   };
 
   const submit = (e) => {
     e.preventDefault();
-    if (!form.image) {
-      alert("Please upload an image for the product.");
+    if (!form.images || !form.images.length) {
+      alert("Please upload at least one image for the product.");
       return;
     }
+    const validFiles = (form.files || []).filter(Boolean).slice(0, 4);
     onSave({
       title: form.title,
       category: form.category,
@@ -489,7 +779,7 @@ function EditModal({ item, onCancel, onSave }) {
       height: Number(form.height) || 0,
       sku: form.sku,
       description: form.description,
-      image: form.image,
+      files: validFiles,
     });
   };
 
@@ -500,35 +790,36 @@ function EditModal({ item, onCancel, onSave }) {
           {item.title ? "Edit Product" : "Add Product"}
         </h3>
 
-        {/* Image Upload */}
-<div>
-  <label className="text-xs text-gray-600 mb-1 block">Product Image</label>
-  <div className="w-full h-40 rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] flex items-center justify-center overflow-hidden relative">
-    {form.image ? (
-      <img
-        src={form.image}
-        alt="Preview"
-        className="w-full h-full object-cover"
-      />
-    ) : (
-      <span className="text-gray-500 text-sm">Choose File</span>
-    )}
-    <input
-      type="file"
-      accept="image/*"
-      onChange={(e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onloadend = () => set("image", reader.result);
-        reader.readAsDataURL(file);
-      }}
-      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-    />
-  </div>
-</div>
-
-
+        {/* Images Upload */}
+        <div>
+          <label className="text-xs text-gray-600 mb-1 block">Product Images (up to 4)</label>
+          <div className="w-full rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-3">
+            <div className="grid grid-cols-2 gap-3">
+              {[0, 1, 2, 3].map((idx) => (
+                <label
+                  key={idx}
+                  className="relative h-28 rounded-lg border border-dashed border-[var(--line-amber)] bg-white flex items-center justify-center cursor-pointer overflow-hidden"
+                >
+                  {form.images && form.images[idx] ? (
+                    <img
+                      src={form.images[idx]}
+                      alt={`Preview ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-xs text-gray-500">Choose file</span>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    onChange={(e) => handleImageSlot(idx, e)}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {/* Name & Category */}
         <div className="grid md:grid-cols-2 gap-3">

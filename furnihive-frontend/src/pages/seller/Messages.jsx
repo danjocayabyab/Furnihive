@@ -64,8 +64,8 @@ const demoMessages = {
   c_robert: [msg("customer", "Great! I'll visit your showroom this weekend.", "9:12 AM")],
 };
 
-function msg(sender, text, timeLabel) {
-  return { id: cryptoRandom(), sender, text, timeLabel, createdAt: Date.now() };
+function msg(sender, text, timeLabel, extra = {}) {
+  return { id: cryptoRandom(), sender, text, timeLabel, createdAt: Date.now(), ...extra };
 }
 
 function cryptoRandom() {
@@ -86,6 +86,7 @@ export default function SellerMessages() {
   const [query, setQuery] = useState("");
   const [text, setText] = useState("");
   const listEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const active = useMemo(
     () => threads.find((t) => t.id === activeId),
@@ -135,6 +136,21 @@ export default function SellerMessages() {
       //   body: JSON.stringify({ text: body }),
       // });
     },
+    async sendAttachment(threadId, attachment) {
+      const isImage = attachment.isImage;
+      const fallbackText = isImage
+        ? "Sent a photo"
+        : `Sent a file: ${attachment.name}`;
+
+      setMessagesById((prev) => ({
+        ...prev,
+        [threadId]: [
+          ...(prev[threadId] || []),
+          msg("seller", fallbackText, timeNow(), { attachment }),
+        ],
+      }));
+      updateSnippet(threadId, fallbackText);
+    },
   };
 
   function timeNow() {
@@ -180,9 +196,30 @@ export default function SellerMessages() {
     setText("");
   }
 
+  function onPickFile() {
+    fileInputRef.current?.click();
+  }
+
+  function onFileChange(e) {
+    const file = (e.target.files || [])[0];
+    if (!file) return;
+
+    const isImage = file.type.startsWith("image/");
+    const url = URL.createObjectURL(file);
+
+    api.sendAttachment(activeId, {
+      name: file.name,
+      url,
+      isImage,
+    });
+
+    // reset input so selecting the same file again still triggers change
+    e.target.value = "";
+  }
+
   // ---- UI
   return (
-    <div className="max-w-6xl mx-auto px-4 py-5">
+    <div className="h-[calc(100vh-80px)] max-w-6xl mx-auto px-4 py-5">
       {/* header */}
       <div className="mb-4 flex items-center gap-3">
         <button
@@ -201,9 +238,9 @@ export default function SellerMessages() {
         )}
       </div>
 
-      <div className="grid md:grid-cols-[320px,1fr] gap-4">
+      <div className="flex h-[calc(100%-56px)] gap-4">
         {/* left: conversation list */}
-        <aside className="rounded-2xl border border-[var(--line-amber)] bg-white p-3">
+        <aside className="w-[320px] rounded-2xl border border-[var(--line-amber)] bg-white p-3 flex flex-col">
           <div className="px-2 pb-3">
             <div className="font-medium text-[var(--brown-700)] mb-2">
               Customer Conversations
@@ -219,7 +256,7 @@ export default function SellerMessages() {
             </div>
           </div>
 
-          <div className="divide-y divide-[var(--line-amber)]/70">
+          <div className="divide-y divide-[var(--line-amber)]/70 flex-1 overflow-y-auto">
             {filteredThreads.map((t) => (
               <button
                 key={t.id}
@@ -265,7 +302,7 @@ export default function SellerMessages() {
         </aside>
 
         {/* right: thread */}
-        <section className="rounded-2xl border border-[var(--line-amber)] bg-white flex flex-col">
+        <section className="flex-1 rounded-2xl border border-[var(--line-amber)] bg-white flex flex-col min-w-0">
           {/* thread header */}
 <div className="p-4 border-b border-[var(--line-amber)] flex items-center gap-3">
   <img
@@ -294,7 +331,14 @@ export default function SellerMessages() {
             onSubmit={onSend}
             className="p-3 border-t border-[var(--line-amber)] flex items-center gap-2"
           >
-            <span className="text-[var(--orange-700)]">🧷</span>
+            <button
+              type="button"
+              onClick={onPickFile}
+              className="text-[var(--orange-700)] px-1"
+              title="Attach file or photo"
+            >
+              🧷
+            </button>
             <input
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -305,6 +349,7 @@ export default function SellerMessages() {
               type="button"
               className="rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm hover:bg-[var(--cream-50)]"
               title="Emoji"
+              onClick={() => setText((prev) => prev + " 🙂")}
             >
               🙂
             </button>
@@ -316,6 +361,13 @@ export default function SellerMessages() {
               ➤
             </button>
           </form>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            className="hidden"
+            onChange={onFileChange}
+          />
         </section>
       </div>
     </div>
@@ -334,7 +386,28 @@ function ChatBubble({ mine, m }) {
             : "bg-[var(--cream-50)] text-[var(--brown-700)] border-[var(--line-amber)]"
         }`}
       >
-        <div>{m.text}</div>
+        <div className="space-y-2">
+          {m.attachment && m.attachment.isImage && m.attachment.url && (
+            <div className="rounded-lg overflow-hidden border border-[var(--line-amber)] bg-[var(--cream-50)]">
+              <img
+                src={m.attachment.url}
+                alt={m.attachment.name || "Attachment"}
+                className="max-h-60 w-full object-cover"
+              />
+            </div>
+          )}
+
+          {m.attachment && !m.attachment.isImage && (
+            <div className="flex items-center gap-2 rounded-lg border border-[var(--line-amber)] bg-[var(--cream-50)] px-3 py-2 text-xs">
+              <span>📎</span>
+              <span className="truncate">
+                {m.attachment.name || "File attachment"}
+              </span>
+            </div>
+          )}
+
+          {m.text && <div>{m.text}</div>}
+        </div>
         <div
           className={`mt-1 text-[10px] ${
             mine ? "text-white/80" : "text-gray-600"

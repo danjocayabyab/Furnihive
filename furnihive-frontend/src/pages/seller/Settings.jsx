@@ -1,18 +1,105 @@
 // src/pages/seller/Settings.jsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
+import { supabase } from "../../lib/supabaseClient";
+import toast from "react-hot-toast";
 
 /**
  * Seller Settings
  * Tabs:
  * - Overview ✅
- * - Store Info ✅ (with Verification section)
- * - Profile
+ * - Store & Profile Info ✅ (with Verification section)
  */
 
 export default function SellerSettings() {
   const navigate = useNavigate();
+  const { user: authUser, profile, refreshProfile, refreshUser } = useAuth();
   const [tab, setTab] = useState("overview"); // Default tab
+  const [store, setStore] = useState({
+    name: "",
+    description: "",
+    phone: "",
+    email: "",
+    address: "",
+    hoursWeekday: ["", ""],
+    hoursWeekend: ["", ""],
+    logo: "",
+  });
+  const [storeRecordId, setStoreRecordId] = useState(null);
+  const [savingStore, setSavingStore] = useState(false);
+
+  useEffect(() => {
+    if (!authUser?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("stores")
+        .select(
+          "id, name, description, phone, email, address, weekday_start, weekday_end, weekend_start, weekend_end, logo_url"
+        )
+        .eq("owner_id", authUser.id)
+        .maybeSingle();
+      if (cancelled || error || !data) return;
+      setStoreRecordId(data.id);
+      setStore((prev) => ({
+        ...prev,
+        name: data.name ?? prev.name,
+        description: data.description ?? prev.description,
+        phone: data.phone ?? prev.phone,
+        email: data.email ?? prev.email,
+        address: data.address ?? prev.address,
+        hoursWeekday: [data.weekday_start || prev.hoursWeekday[0], data.weekday_end || prev.hoursWeekday[1]],
+        hoursWeekend: [data.weekend_start || prev.hoursWeekend[0], data.weekend_end || prev.hoursWeekend[1]],
+        logo: data.logo_url || prev.logo,
+      }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id]);
+
+  const handleSaveStore = async () => {
+    if (!authUser?.id) {
+      toast.error("You must be logged in to save store information.");
+      return;
+    }
+    try {
+      setSavingStore(true);
+      const payload = {
+        owner_id: authUser.id,
+        name: store.name,
+        description: store.description,
+        phone: store.phone,
+        email: store.email,
+        address: store.address,
+        weekday_start: store.hoursWeekday?.[0] || null,
+        weekday_end: store.hoursWeekday?.[1] || null,
+        weekend_start: store.hoursWeekend?.[0] || null,
+        weekend_end: store.hoursWeekend?.[1] || null,
+        logo_url: store.logo || null,
+      };
+
+      if (storeRecordId) {
+        const { error } = await supabase.from("stores").update(payload).eq("id", storeRecordId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from("stores")
+          .insert(payload)
+          .select("id")
+          .single();
+        if (error) throw error;
+        if (data?.id) setStoreRecordId(data.id);
+      }
+
+      toast.success("Store information saved.");
+    } catch (e) {
+      toast.error(e?.message || "Failed to save store information.");
+    } finally {
+      setSavingStore(false);
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
@@ -40,8 +127,7 @@ export default function SellerSettings() {
         <div className="flex flex-wrap gap-2">
           {[
             ["overview", "Overview"],
-            ["store", "Store Info"],
-            ["profile", "Profile"],
+            ["store", "Store & Profile Info"],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -59,16 +145,31 @@ export default function SellerSettings() {
       </div>
 
       {/* Tab Content */}
-      {tab === "overview" && <OverviewTab />}
-      {tab === "store" && <StoreInfoTab />}
-      {tab === "profile" && <ProfileTab />}
+      {tab === "overview" && <OverviewTab store={store} />}
+      {tab === "store" && (
+        <StoreInfoTab
+          store={store}
+          setStore={setStore}
+          onSaveStore={handleSaveStore}
+          savingStore={savingStore}
+        />
+      )}
     </div>
   );
 }
 
 /* ---------------------- OVERVIEW TAB ---------------------- */
 
-function OverviewTab() {
+function OverviewTab({ store }) {
+  const { user, profile } = useAuth();
+  const md = user?.user_metadata || {};
+  const fullName = (md.first_name || md.last_name)
+    ? `${md.first_name ?? ""} ${md.last_name ?? ""}`.trim()
+    : (user?.email ?? "-");
+  const email = user?.email ?? "-";
+  const mobile = md.phone ?? "-";
+  const accountType = (profile?.role || md.role || "buyer") === "seller" ? "Seller" : "Buyer";
+  const isVerified = !!profile?.seller_approved;
   return (
     <div className="space-y-5">
       {/* Store Snapshot */}
@@ -82,23 +183,21 @@ function OverviewTab() {
 
         <div className="flex items-start gap-4">
           <img
-            src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=300&auto=format&fit=crop"
+            src={store.logo}
             alt="Store logo"
             className="h-16 w-16 rounded-full object-cover border border-[var(--line-amber)]"
           />
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-[var(--brown-700)]">
-              Manila Furniture Co.
+              {store.name}
             </div>
-            <div className="text-sm text-gray-700">
-              We offer high-quality, locally-made furniture for every room in
-              your home. Family-owned business serving Metro Manila since 2015.
-            </div>
+            <div className="text-sm text-gray-700">{store.description}</div>
 
-            <div className="mt-2 flex items-center gap-2">
-              <Badge color="green">Verified Seller</Badge>
-              <Badge color="purple">Premium Member</Badge>
-            </div>
+            {isVerified && (
+              <div className="mt-2 flex items-center gap-2">
+                <Badge color="green">Verified Seller</Badge>
+              </div>
+            )}
           </div>
         </div>
 
@@ -106,16 +205,16 @@ function OverviewTab() {
 
         <div className="grid sm:grid-cols-2 gap-4 text-sm">
           <OverviewRow icon="📍" label="Address">
-            123 Furniture St, Quezon City, Metro Manila, 1100
+            {store.address}
           </OverviewRow>
           <OverviewRow icon="📞" label="Phone Number">
-            +63 912 345 6789
+            {store.phone}
           </OverviewRow>
           <OverviewRow icon="✉️" label="Email Address">
-            contact@manilafurniture.ph
+            {store.email}
           </OverviewRow>
           <OverviewRow icon="⏰" label="Business Hours">
-            Mon–Fri: 9AM–6PM • Sat–Sun: 10AM–5PM
+            Mon–Fri: {store.hoursWeekday[0]}–{store.hoursWeekday[1]} • Sat–Sun: {store.hoursWeekend[0]}–{store.hoursWeekend[1]}
           </OverviewRow>
         </div>
       </section>
@@ -128,33 +227,22 @@ function OverviewTab() {
         <p className="text-sm text-gray-600 mb-4">Account owner details</p>
 
         <div className="grid sm:grid-cols-2 gap-4 text-sm">
-          <OverviewRow label="Full Name">Juan Santos</OverviewRow>
-          <OverviewRow label="Email">juan.santos@email.com</OverviewRow>
-          <OverviewRow label="Mobile Number">+63 912 345 6789</OverviewRow>
-          <OverviewRow label="Account Type">Premium Seller</OverviewRow>
+          <OverviewRow label="Full Name">{fullName}</OverviewRow>
+          <OverviewRow label="Email">{email}</OverviewRow>
+          <OverviewRow label="Mobile Number">{mobile}</OverviewRow>
+          <OverviewRow label="Account Type">{accountType}</OverviewRow>
         </div>
       </section>
     </div>
   );
 }
 
-/* ---------------------- STORE TAB (with Verification) ---------------------- */
+/* ---------------------- STORE TAB (with Verification + Profile) ---------------------- */
 
-function StoreInfoTab() {
-  const [store, setStore] = useState({
-    name: "Manila Furniture Co.",
-    description:
-      "We offer high-quality, locally-made furniture for every room in your home. Family-owned business serving Metro Manila since 2015.",
-    phone: "+63 912 345 6789",
-    email: "contact@manilafurniture.ph",
-    address: "123 Furniture St, Quezon City, Metro Manila, 1100",
-    hoursWeekday: ["9:00 AM", "6:00 PM"],
-    hoursWeekend: ["10:00 AM", "5:00 PM"],
-    logo: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=300&auto=format&fit=crop",
-  });
-
+function StoreInfoTab({ store, setStore, onSaveStore, savingStore }) {
   const [files, setFiles] = useState([]);
   const [verified, setVerified] = useState(false);
+  const { user: authUser, profile, refreshProfile, refreshUser } = useAuth();
 
   const handleChange = (field, value) => {
     setStore((prev) => ({ ...prev, [field]: value }));
@@ -182,11 +270,67 @@ function StoreInfoTab() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmitVerification = () => {
-    alert(
-      "Your verification documents have been sent to the admin for review. You’ll be notified once approved."
-    );
-    // TODO: connect to Supabase upload + verification table
+  const handleSubmitVerification = async () => {
+    if (!authUser?.id) {
+      toast.error("You must be logged in to submit verification.");
+      return;
+    }
+    if (!files.length) {
+      toast.error("Please attach at least one document before submitting.");
+      return;
+    }
+
+    try {
+      // 1) Create verification row in DB
+      const { data: verification, error: insertErr } = await supabase
+        .from("store_verifications")
+        .insert({
+          seller_id: authUser.id,
+          status: "pending",
+          notes: null,
+          files: [],
+        })
+        .select("id")
+        .single();
+
+      if (insertErr) throw insertErr;
+      if (!verification?.id) throw new Error("Failed to create verification record.");
+
+      // 2) Upload each file to storage bucket
+      const uploads = files.map(async (file) => {
+        const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+        const path = `${authUser.id}/${verification.id}/${Date.now()}-${safeName}`;
+        const { error: uploadErr } = await supabase
+          .storage
+          .from("store-verifications")
+          .upload(path, file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+        if (uploadErr) throw uploadErr;
+        return {
+          path,
+          name: file.name,
+          size: file.size,
+        };
+      });
+
+      const uploadedFiles = await Promise.all(uploads);
+
+      // 3) Update verification row with file metadata
+      const { error: updateErr } = await supabase
+        .from("store_verifications")
+        .update({ files: uploadedFiles })
+        .eq("id", verification.id);
+      if (updateErr) throw updateErr;
+
+      setFiles([]);
+      setVerified(false); // stays pending until admin approves
+      toast.success("Your verification documents have been submitted for review.");
+    } catch (e) {
+      console.error("Verification submit failed", e);
+      toast.error(e?.message || "Failed to submit verification documents.");
+    }
   };
 
   return (
@@ -297,11 +441,23 @@ function StoreInfoTab() {
         </div>
 
         <div className="pt-2">
-          <button className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95">
-            Save Changes
+          <button
+            onClick={onSaveStore}
+            disabled={savingStore}
+            className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {savingStore ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </section>
+
+      {/* Personal & Bank Info (Profile) */}
+      <ProfileTab
+        authUser={authUser}
+        profile={profile}
+        refreshProfile={refreshProfile}
+        refreshUser={refreshUser}
+      />
 
       {/* Verification Section */}
       <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
@@ -375,19 +531,62 @@ function StoreInfoTab() {
 
 /* ---------------------- PROFILE TAB ---------------------- */
 
-function ProfileTab() {
-  const [profile, setProfile] = useState({
-    firstName: "Juan",
-    lastName: "Santos",
-    email: "juan.santos@email.com",
-    mobile: "+63 912 345 6789",
-    bankName: "",
-    accountName: "",
-    accountNumber: "",
-  });
+function ProfileTab({ authUser, profile, refreshProfile, refreshUser }) {
+  const [firstName, setFirstName] = useState(profile?.first_name || authUser?.user_metadata?.first_name || "");
+  const [lastName, setLastName] = useState(profile?.last_name || authUser?.user_metadata?.last_name || "");
+  const [email, setEmail] = useState(authUser?.email || "");
+  const [mobile, setMobile] = useState(profile?.phone || authUser?.user_metadata?.phone || "");
+  const [saving, setSaving] = useState(false);
 
-  const handleChange = (field, value) => {
-    setProfile((prev) => ({ ...prev, [field]: value }));
+  const handleUpdateProfile = async () => {
+    if (!authUser?.id) {
+      toast.error("You must be logged in to update your profile.");
+      return;
+    }
+    try {
+      setSaving(true);
+      const cleanPhone = (mobile || "").replace(/\s|-/g, "");
+      const phoneOk = /^((\+?63)|0)9\d{9}$/.test(cleanPhone);
+      if (mobile && !phoneOk) {
+        toast.error("Please enter a valid PH mobile number (e.g., 09171234567 or +639171234567).");
+        setSaving(false);
+        return;
+      }
+
+      const update = {
+        first_name: firstName,
+        last_name: lastName,
+        phone: mobile,
+      };
+      const { error } = await supabase
+        .from("profiles")
+        .update(update)
+        .eq("id", authUser.id);
+      if (error) throw error;
+
+      const fullName = `${firstName || ""} ${lastName || ""}`.trim();
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            first_name: firstName || null,
+            last_name: lastName || null,
+            full_name: fullName || null,
+            name: fullName || null,
+            phone: mobile || null,
+          },
+        });
+        await refreshUser?.();
+      } catch (metaErr) {
+        console.warn("Auth metadata update failed (non-fatal):", metaErr);
+      }
+
+      await refreshProfile?.();
+      toast.success("Profile updated.");
+    } catch (e) {
+      toast.error(e?.message || "Failed to update profile.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -401,59 +600,34 @@ function ProfileTab() {
         <div className="grid sm:grid-cols-2 gap-4">
           <LabeledInput
             label="First Name"
-            value={profile.firstName}
-            onChange={(e) => handleChange("firstName", e.target.value)}
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
           />
           <LabeledInput
             label="Last Name"
-            value={profile.lastName}
-            onChange={(e) => handleChange("lastName", e.target.value)}
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
           />
           <LabeledInput
             label="Email Address"
-            value={profile.email}
-            onChange={(e) => handleChange("email", e.target.value)}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
           <LabeledInput
             label="Mobile Number"
-            value={profile.mobile}
-            onChange={(e) => handleChange("mobile", e.target.value)}
+            value={mobile}
+            onChange={(e) => setMobile(e.target.value)}
           />
         </div>
 
         <div className="pt-3">
-          <button className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95">
-            Update Profile
+          <button
+            onClick={handleUpdateProfile}
+            disabled={saving}
+            className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {saving ? "Saving..." : "Update Profile"}
           </button>
-        </div>
-      </section>
-
-      {/* Bank Info */}
-      <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <h3 className="font-semibold text-[var(--brown-700)] mb-4">
-          Bank Account
-        </h3>
-        <div className="grid gap-4">
-          <LabeledInput
-            label="Bank Name"
-            value={profile.bankName}
-            onChange={(e) => handleChange("bankName", e.target.value)}
-          />
-          <LabeledInput
-            label="Account Name"
-            value={profile.accountName}
-            onChange={(e) => handleChange("accountName", e.target.value)}
-          />
-          <LabeledInput
-            label="Account Number"
-            value={profile.accountNumber}
-            onChange={(e) => handleChange("accountNumber", e.target.value)}
-          />
-          <div className="pt-2">
-            <button className="rounded-lg border border-[var(--line-amber)] px-4 py-2 text-sm hover:bg-[var(--cream-50)]">
-              Save Bank Details
-            </button>
-          </div>
         </div>
       </section>
     </div>
