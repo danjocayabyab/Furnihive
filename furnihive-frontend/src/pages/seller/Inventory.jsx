@@ -41,7 +41,7 @@ export default function Inventory() {
           .from("products")
           .select(
             `id, seller_id, name, description, category, base_price, status,
-             sku, length_cm, width_cm, height_cm,
+             sku, length_cm, width_cm, height_cm, stock_qty,
              product_images ( url, is_primary, position ),
              inventory_items ( quantity_on_hand )`
           )
@@ -59,7 +59,7 @@ export default function Inventory() {
             category: p.category || "Uncategorized",
             description: p.description || "",
             price: p.base_price,
-            stock: p.inventory_items?.[0]?.quantity_on_hand ?? 0,
+            stock: (p.stock_qty ?? null) != null ? p.stock_qty : (p.inventory_items?.[0]?.quantity_on_hand ?? 0),
             views: 0,
             sold: 0,
             sku: p.sku || "",
@@ -124,6 +124,9 @@ export default function Inventory() {
         width_cm: changes.width,
         height_cm: changes.height,
       };
+      if (typeof changes.stock === "number") {
+        productPayload.stock_qty = changes.stock;
+      }
       const { error: prodErr } = await supabase
         .from("products")
         .update(productPayload)
@@ -300,8 +303,9 @@ export default function Inventory() {
           width_cm: data.width,
           height_cm: data.height,
           status: "active",
+          stock_qty: data.stock,
         })
-        .select("id, name, description, category, base_price, status, sku, length_cm, width_cm, height_cm")
+        .select("id, name, description, category, base_price, status, sku, length_cm, width_cm, height_cm, stock_qty")
         .single();
       if (prodErr) throw prodErr;
 
@@ -356,7 +360,7 @@ export default function Inventory() {
         category: product.category || "Uncategorized",
         description: product.description || "",
         price: product.base_price,
-        stock: invRow.quantity_on_hand ?? 0,
+        stock: (product.stock_qty ?? null) != null ? product.stock_qty : (invRow.quantity_on_hand ?? 0),
         views: 0,
         sold: 0,
         sku: product.sku || "",
