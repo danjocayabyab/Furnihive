@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../../lib/supabaseClient";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
 
 /**
  * Replace the mock data with your API data later.
@@ -10,32 +12,12 @@ import { useNavigate } from "react-router-dom";
 
 export default function SellerEngagement() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const sellerId = user?.id;
 
-  /* ---------------- Mock data (swap with fetch) ---------------- */
-  const [reviews, setReviews] = useState([
-    {
-      id: "r1",
-      product: "Modern Sectional Sofa",
-      customer: "Maria Santos",
-      dateISO: "2025-10-03",
-      rating: 5,
-      text:
-        "This sofa exceeded my expectations. The quality is outstanding and it's very comfortable.",
-      status: "replied",
-      reply: "Thank you, Maria! We're so happy you love the sofa. 😊",
-    },
-    {
-      id: "r2",
-      product: "Solid Wood Dining Set",
-      customer: "Juan dela Cruz",
-      dateISO: "2025-10-02",
-      rating: 4,
-      text:
-        "Beautiful dining set, exactly as described. Only issue was a slight delay in delivery.",
-      status: "pending",
-      reply: "",
-    },
-  ]);
+  /* ---------------- Reviews: loaded from Supabase ---------------- */
+  const [reviews, setReviews] = useState([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
 
   const [inquiries, setInquiries] = useState([
     {
@@ -75,9 +57,20 @@ export default function SellerEngagement() {
   const openReply = (type, id, initial = "") =>
     setReplyCtx({ type, id, initial });
 
-  const submitReply = (text) => {
+  const submitReply = async (text) => {
     if (!replyCtx) return;
     if (replyCtx.type === "review") {
+      try {
+        await supabase
+          .from("reviews")
+          .update({
+            seller_reply: text,
+            seller_reply_created_at: new Date().toISOString(),
+          })
+          .eq("id", replyCtx.id);
+      } catch {
+        // ignore error; fall back to local state update
+      }
       setReviews((prev) =>
         prev.map((r) =>
           r.id === replyCtx.id ? { ...r, reply: text, status: "replied" } : r
@@ -95,6 +88,101 @@ export default function SellerEngagement() {
     }
     closeModal();
   };
+
+  /* ---------------- Load reviews for this seller ---------------- */
+  useEffect(() => {
+    if (!sellerId) {
+      setReviews([]);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setLoadingReviews(true);
+      try {
+        console.log("ENGAGEMENT sellerId", sellerId);
+        // Step 1: find all orders that include this seller's items
+        const { data: items, error: itemsErr } = await supabase
+          .from("order_items")
+          .select("order_id, title, buyer_name")
+          .eq("seller_id", sellerId);
+        console.log("ENGAGEMENT order_items", { error: itemsErr, count: items?.length, sample: items?.[0] });
+
+        if (itemsErr || !items?.length || cancelled) {
+          if (!cancelled) setReviews([]);
+          return;
+        }
+
+        const metaByOrder = new Map();
+        items.forEach((row) => {
+          if (!row?.order_id) return;
+          if (!metaByOrder.has(row.order_id)) {
+            metaByOrder.set(row.order_id, {
+              product: row.title || "",
+              customer: row.buyer_name || "Customer",
+            });
+          }
+        });
+
+        const orderIds = Array.from(metaByOrder.keys());
+        if (!orderIds.length) {
+          setReviews([]);
+          return;
+        }
+
+        // Step 2: load all reviews attached to those orders
+        let query = supabase
+          .from("reviews")
+          .select(
+            "id, order_id, rating, text, image_url, created_at, seller_reply, seller_reply_created_at"
+          );
+
+        if (orderIds.length === 1) {
+          query = query.eq("order_id", orderIds[0]);
+        } else {
+          query = query.in("order_id", orderIds);
+        }
+
+        const { data: revRows, error: revErr } = await query.order("created_at", { ascending: false });
+        console.log("ENGAGEMENT reviews query", { orderIds, error: revErr, count: revRows?.length, first: revRows?.[0] });
+
+        if (revErr || !revRows || cancelled) return;
+
+        const mapped = revRows.map((r) => {
+          let images = [];
+          if (r.image_url) {
+            try {
+              const parsed = JSON.parse(r.image_url);
+              if (Array.isArray(parsed)) images = parsed;
+            } catch {
+              // ignore parse error
+            }
+          }
+          const meta = metaByOrder.get(r.order_id) || {};
+          const reply = r.seller_reply || "";
+          return {
+            id: r.id,
+            product: meta.product || "",
+            customer: meta.customer || "Customer",
+            dateISO: r.created_at,
+            rating: r.rating,
+            text: r.text,
+            status: reply ? "replied" : "pending",
+            reply,
+            images,
+          };
+        });
+
+        if (!cancelled) setReviews(mapped);
+      } finally {
+        if (!cancelled) setLoadingReviews(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerId]);
 
   const markInquiryRead = (id) =>
     setInquiries((prev) =>

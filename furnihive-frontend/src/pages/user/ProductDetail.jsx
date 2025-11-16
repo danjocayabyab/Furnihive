@@ -1,5 +1,5 @@
 // src/pages/user/ProductDetail.jsx
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMemo, useState, useEffect } from "react";
 import Button from "../../components/ui/Button.jsx";
 import ReviewSummary from "../../components/reviews/ReviewSummary.jsx";
@@ -14,6 +14,7 @@ const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [sp] = useSearchParams();
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -21,8 +22,11 @@ export default function ProductDetail() {
 
   const [selectedColor, setSelectedColor] = useState("Charcoal Gray");
   const [qty, setQty] = useState(1);
-  const [tab, setTab] = useState("description");
+  const [tab, setTab] = useState(sp.get("tab") || "description");
   const [mainIndex, setMainIndex] = useState(0);
+  const [productReviews, setProductReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,6 +129,94 @@ export default function ProductDetail() {
     };
   }, [id]);
 
+  // Load reviews for this product based on order_items -> reviews
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!id) {
+        setProductReviews([]);
+        return;
+      }
+      setReviewsLoading(true);
+      try {
+        const { data: items, error: itemsErr } = await supabase
+          .from("order_items")
+          .select("order_id")
+          .eq("product_id", id);
+        if (itemsErr) throw itemsErr;
+        const orderIds = Array.from(new Set((items || []).map((r) => r.order_id).filter(Boolean)));
+        if (!orderIds.length) {
+          if (!cancelled) setProductReviews([]);
+          return;
+        }
+
+        const { data: revs, error: revErr } = await supabase
+          .from("reviews")
+          .select(
+            "id, order_id, user_id, rating, text, image_url, created_at, seller_reply, seller_reply_created_at"
+          )
+          .in("order_id", orderIds)
+          .order("created_at", { ascending: false });
+        if (revErr) throw revErr;
+
+        // Load basic profile info for reviewers so we can show avatar + name
+        const userIds = Array.from(new Set((revs || []).map((r) => r.user_id).filter(Boolean)));
+        const profilesById = new Map();
+        if (userIds.length) {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id, first_name, last_name, full_name, avatar_url");
+          (profs || []).forEach((p) => {
+            if (!p?.id) return;
+            profilesById.set(p.id, p);
+          });
+        }
+
+        const mapped = (revs || []).map((r) => {
+          let images = [];
+          if (r.image_url) {
+            try {
+              const parsed = JSON.parse(r.image_url);
+              if (Array.isArray(parsed)) {
+                images = parsed;
+              }
+            } catch {
+              // if it's already a plain URL string, fall through below
+            }
+            if (!images.length && typeof r.image_url === "string") {
+              images = [r.image_url];
+            }
+          }
+
+          const prof = r.user_id ? profilesById.get(r.user_id) || null : null;
+          const buyerNameParts = [prof?.first_name, prof?.last_name].filter(Boolean);
+          const buyerName = (buyerNameParts.join(" ").trim() || prof?.full_name || "").trim();
+          const avatarUrl = prof?.avatar_url || null;
+
+          return {
+            id: r.id,
+            rating: r.rating,
+            text: r.text,
+            date: (r.created_at || "").slice(0, 10),
+            images,
+            buyerName,
+            avatarUrl,
+            sellerReply: r.seller_reply || "",
+            sellerReplyDate: r.seller_reply_created_at || null,
+          };
+        });
+        if (!cancelled) setProductReviews(mapped);
+      } catch {
+        if (!cancelled) setProductReviews([]);
+      } finally {
+        if (!cancelled) setReviewsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
   const cart = useCart();
   const addToCartCtx = typeof cart.add === "function" ? cart.add : cart.addItem;
   const { showAddToCart } = useUI();
@@ -179,6 +271,19 @@ export default function ProductDetail() {
     });
   };
 
+  const reviewCount = productReviews.length;
+  const averageRating = reviewCount
+    ? productReviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / reviewCount
+    : 0;
+  const dist = productReviews.reduce(
+    (acc, r) => {
+      const k = Number(r.rating || 0);
+      if (k >= 1 && k <= 5) acc[k] = (acc[k] || 0) + 1;
+      return acc;
+    },
+    { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+  );
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 space-y-8">
       {/* Header with back button */}
@@ -196,7 +301,9 @@ export default function ProductDetail() {
           <span>/</span>
           <span>{product?.category || "Living Room"}</span>
           <span>/</span>
-          <span className="text-[var(--brown-700)] font-semibold">{product?.title || (loading ? "Loading..." : "")}</span>
+          <span className="text-[var(--brown-700)] font-semibold">
+            {product?.title || (loading ? "Loading..." : "")}
+          </span>
         </div>
       </div>
 
@@ -242,20 +349,24 @@ export default function ProductDetail() {
 
           {/* Summary */}
           <div className="space-y-4">
-            <h1 className="text-2xl font-semibold text-[var(--brown-700)]">{product?.title || (loading ? "Loading..." : "")}</h1>
+            <h1 className="text-2xl font-semibold text-[var(--brown-700)]">
+              {product?.title || (loading ? "Loading..." : "")}
+            </h1>
             <p className="text-sm text-gray-600">
               by{" "}
-              <span className="text-[var(--orange-600)]">
-                {product?.seller || ""}
-              </span>
+              <span className="text-[var(--orange-600)]">{product?.seller || ""}</span>
             </p>
 
             {/* Rating */}
-            <div className="text-sm text-yellow-600">⭐ {Number(product?.rating || 0).toFixed(1)} ({product?.reviews || 0} reviews)</div>
+            <div className="text-sm text-yellow-600">
+              ⭐ {Number(product?.rating || 0).toFixed(1)} ({product?.reviews || 0} reviews)
+            </div>
 
             {/* Price */}
             <div className="flex items-center gap-3">
-              <div className="text-2xl font-bold text-[var(--brown-700)]">{peso(product?.price || 0)}</div>
+              <div className="text-2xl font-bold text-[var(--brown-700)]">
+                {peso(product?.price || 0)}
+              </div>
               {product?.oldPrice && (
                 <>
                   <div className="text-gray-500 line-through">{peso(product.oldPrice)}</div>
@@ -270,22 +381,40 @@ export default function ProductDetail() {
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-gray-700">Quantity:</span>
               <div className="flex items-center border rounded-lg border-[var(--line-amber)]">
-                <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="px-3 py-1 hover:bg-[var(--cream-50)]">
+                <button
+                  onClick={() => setQty((q) => Math.max(1, q - 1))}
+                  className="px-3 py-1 hover:bg-[var(--cream-50)]"
+                >
                   −
                 </button>
                 <span className="px-4">{qty}</span>
-                <button onClick={() => setQty((q) => q + 1)} className="px-3 py-1 hover:bg-[var(--cream-50)]">
+                <button
+                  onClick={() => setQty((q) => q + 1)}
+                  className="px-3 py-1 hover:bg-[var(--cream-50)]"
+                >
                   +
                 </button>
               </div>
-              <span className="text-xs text-gray-500">{typeof product?.stock_qty === "number" && product?.stock_qty >= 0 ? `${product.stock_qty} items available` : ""}</span>
+              <span className="text-xs text-gray-500">
+                {typeof product?.stock_qty === "number" && product?.stock_qty >= 0
+                  ? `${product.stock_qty} items available`
+                  : ""}
+              </span>
             </div>
 
             {/* Actions */}
-            <Button className="w-full" onClick={handleAddToCart} disabled={product?.outOfStock}>
+            <Button
+              className="w-full"
+              onClick={handleAddToCart}
+              disabled={product?.outOfStock}
+            >
               {product?.outOfStock ? "Out of Stock" : "Add to Cart"}
             </Button>
-            <Button className="w-full" onClick={handleBuyNow} disabled={product?.outOfStock}>
+            <Button
+              className="w-full"
+              onClick={handleBuyNow}
+              disabled={product?.outOfStock}
+            >
               {product?.outOfStock
                 ? "Buy Now"
                 : `Buy Now – ${peso(Number(product?.price || 0) * qty)}`}
@@ -297,7 +426,11 @@ export default function ProductDetail() {
                 <div className="font-semibold">{product?.seller || ""}</div>
                 <div className="text-xs text-gray-600">⭐ 4.9 • 2847 sales</div>
               </div>
-              <Button variant="secondary" className="text-xs px-3 py-1" onClick={openChat}>
+              <Button
+                variant="secondary"
+                className="text-xs px-3 py-1"
+                onClick={openChat}
+              >
                 Chat
               </Button>
             </div>
@@ -319,7 +452,7 @@ export default function ProductDetail() {
               >
                 {t === "description" && "Description"}
                 {t === "specs" && "Specifications"}
-                {t === "reviews" && `Reviews (${product?.reviews || 0})`}
+                {t === "reviews" && `Reviews (${reviewCount})`}
               </button>
             ))}
           </div>
@@ -365,45 +498,124 @@ export default function ProductDetail() {
           {tab === "reviews" && (
             <div className="mt-4 space-y-4">
               <ReviewSummary
-                average={4.8}
-                total={product.reviews}
-                dist={{ 5: 78, 4: 32, 3: 12, 2: 4, 1: 1 }}
+                average={Number(averageRating.toFixed(1))}
+                total={reviewCount}
+                dist={dist}
               />
               <div className="space-y-4 mt-4">
-                {[
-                  {
-                    name: "Maria Santos",
-                    verified: true,
-                    rating: 5,
-                    date: "2024-12-15",
-                    text:
-                      "Excellent quality sofa! Very comfortable and the delivery was prompt. Highly recommended for families.",
-                  },
-                  {
-                    name: "Juan dela Cruz",
-                    verified: true,
-                    rating: 4,
-                    date: "2024-12-10",
-                    text:
-                      "Good value for money. The fabric is soft and durable. Assembly was straightforward.",
-                  },
-                  {
-                    name: "Anna Reyes",
-                    verified: false,
-                    rating: 5,
-                    date: "2024-12-05",
-                    text:
-                      "Perfect fit for my living room! The color matches exactly as shown in the pictures.",
-                  },
-                ].map((r, i) => (
-                  // Remove helpful and reply by not passing those props
-                  <ReviewCard key={i} r={{ ...r }} showActions={false} />
-                ))}
+                {reviewsLoading && (
+                  <div className="text-sm text-gray-500">Loading reviews...</div>
+                )}
+                {!reviewsLoading && !productReviews.length && (
+                  <div className="text-sm text-gray-500">No reviews yet for this product.</div>
+                )}
+                {!reviewsLoading &&
+                  productReviews.map((r) => (
+                    <div
+                      key={r.id}
+                      className="rounded-2xl border border-[var(--line-amber)] bg-white p-4"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          {r.avatarUrl ? (
+                            <img
+                              src={r.avatarUrl}
+                              alt={r.buyerName || "Buyer"}
+                              className="h-8 w-8 rounded-full object-cover border border-[var(--line-amber)]"
+                            />
+                          ) : (
+                            <div className="h-8 w-8 rounded-full bg-[var(--cream-50)] border border-[var(--line-amber)] flex items-center justify-center text-[10px] text-[var(--brown-700)]">
+                              {(r.buyerName || "Buyer").slice(0, 1).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="text-xs font-semibold text-[var(--brown-700)]">
+                            {r.buyerName || "Buyer"}
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-600">{r.date}</div>
+                      </div>
+                      <div className="text-xs text-yellow-500 mb-1">
+                        {"★".repeat(Number(r.rating || 0))}
+                        {"☆".repeat(Math.max(0, 5 - Number(r.rating || 0)))}
+                        <span className="ml-1 text-[11px] text-gray-600">({r.rating}/5)</span>
+                      </div>
+                      <div className="mt-1 flex flex-col gap-3 md:flex-row md:items-start">
+                        <div className="md:flex-1">
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{r.text}</p>
+
+                          {Array.isArray(r.images) && r.images.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {r.images.map((url, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => setPreviewImage(url)}
+                                  className="h-20 w-20 rounded-lg border border-[var(--line-amber)] overflow-hidden bg-white"
+                                >
+                                  <img
+                                    src={url}
+                                    alt="Review image"
+                                    className="h-full w-full object-cover"
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {r.sellerReply && (
+                          <div className="md:w-1/3 rounded-lg border border-[var(--line-amber)] bg-[var(--cream-50)] p-3 text-sm ml-auto">
+                            <div className="text-xs font-semibold text-[var(--brown-700)] mb-1 text-right md:text-left">
+                              Seller reply
+                            </div>
+                            <div className="text-sm text-gray-700 whitespace-pre-wrap text-right md:text-left">
+                              {r.sellerReply}
+                            </div>
+                            {r.sellerReplyDate && (
+                              <div className="mt-1 text-[11px] text-gray-500 text-right md:text-left">
+                                {new Date(r.sellerReplyDate).toLocaleDateString("en-PH", {
+                                  year: "numeric",
+                                  month: "short",
+                                  day: "2-digit",
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
               </div>
             </div>
           )}
         </div>
       </div>
+      {previewImage && (
+        <div className="fixed inset-0 bg-black/60 z-50 grid place-items-center p-4" onClick={() => setPreviewImage(null)}>
+          <div
+            className="bg-white rounded-2xl overflow-hidden max-w-3xl w-full border border-[var(--line-amber)] shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center px-4 py-2 border-b border-[var(--line-amber)]">
+              <div className="text-sm font-semibold text-[var(--brown-700)]">Review photo</div>
+              <button
+                type="button"
+                className="text-sm text-gray-600"
+                onClick={() => setPreviewImage(null)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="bg-black flex items-center justify-center max-h-[80vh]">
+              <img
+                src={previewImage}
+                alt="Review image preview"
+                className="max-h-[80vh] w-auto object-contain"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

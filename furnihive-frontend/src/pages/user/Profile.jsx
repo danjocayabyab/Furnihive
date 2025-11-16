@@ -1,5 +1,5 @@
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import Button from "../../components/ui/Button.jsx";
 import { logout } from "../../lib/auth.js";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
@@ -107,12 +107,13 @@ export default function Profile() {
 
       const orderIds = data.map((o) => o.id).filter(Boolean);
 
-      // Derive per-order status from order_items so buyer matches seller view
+      // Derive per-order status and primary product from order_items so buyer matches seller view
       const statusByOrder = new Map();
+      const primaryProductByOrder = new Map();
       if (orderIds.length) {
         const { data: items } = await supabase
           .from("order_items")
-          .select("order_id, status")
+          .select("order_id, product_id, title, status")
           .in("order_id", orderIds);
 
         const priority = { Delivered: 3, Shipped: 2, Processing: 1, Pending: 0 };
@@ -135,6 +136,14 @@ export default function Profile() {
           if (!current || priority[normalized] > priority[current]) {
             statusByOrder.set(oid, normalized);
           }
+
+          // Capture the first product encountered per order as the primary product
+          if (!primaryProductByOrder.has(oid) && row.product_id) {
+            primaryProductByOrder.set(oid, {
+              productId: row.product_id,
+              title: row.title || null,
+            });
+          }
         });
       }
 
@@ -143,21 +152,25 @@ export default function Profile() {
         statusByOrder: Array.from(statusByOrder.entries()),
       });
 
-      const mapped = data.map((o) => ({
-        id: o.id,
-        date: o.created_at ? o.created_at.slice(0, 10) : "",
-        items: o.item_count || 0,
-        title: o.summary_title || "Order",
-        price: Number(o.total_amount || 0),
-        // Status is now driven primarily by order_items.status so it matches seller view
-        status: statusByOrder.get(o.id) || "Processing",
-        image: o.summary_image || "",
-        seller: o.seller_display || "",
-        color: o.color || "",
-        quantity: o.item_count || 0,
-        address: [],
-        shippingFee: 0,
-      }));
+      const mapped = data.map((o) => {
+        const primary = primaryProductByOrder.get(o.id) || null;
+        return {
+          id: o.id,
+          date: o.created_at ? o.created_at.slice(0, 10) : "",
+          items: o.item_count || 0,
+          title: primary?.title || o.summary_title || "Order",
+          price: Number(o.total_amount || 0),
+          // Status is now driven primarily by order_items.status so it matches seller view
+          status: statusByOrder.get(o.id) || "Processing",
+          image: o.summary_image || "",
+          seller: o.seller_display || "",
+          color: o.color || "",
+          quantity: o.item_count || 0,
+          productId: primary?.productId || null,
+          address: [],
+          shippingFee: 0,
+        };
+      });
 
       setOrders(mapped);
     }
@@ -204,18 +217,108 @@ export default function Profile() {
 
   const money = (n) => `₱${Number(n).toLocaleString()}`;
 
-  const handleSubmitReview = ({ orderId, product, rating, text }) => {
-    const newReview = {
-      id: `rev-${Date.now()}`,
-      orderId,
-      product,
-      rating,
-      text,
-      date: new Date().toISOString().slice(0, 10),
-    };
-    setReviews((r) => [newReview, ...r]);
-    setReviewFor(null);
-    setTab("reviews");
+  const handleSubmitReview = async ({ orderId, product, rating, text, imageFiles, existingReviewId, existingImages = [] }) => {
+    if (!text?.trim()) return;
+
+    const files = Array.isArray(imageFiles) ? imageFiles : imageFiles ? [imageFiles] : [];
+    const imageUrls = [];
+    try {
+      // Optional multi-image upload to review-images bucket
+      for (const file of files) {
+        if (!file) continue;
+        const ext = (file.name || "jpg").split(".").pop() || "jpg";
+        const path = `${authUser?.id || "anon"}/${orderId}-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2)}.${ext}`;
+        const { error: uploadErr } = await supabase
+          .storage
+          .from("review-images")
+          .upload(path, file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+        if (!uploadErr) {
+          const { data: pub } = supabase.storage
+            .from("review-images")
+            .getPublicUrl(path);
+          if (pub?.publicUrl) imageUrls.push(pub.publicUrl);
+        }
+      }
+
+      const combinedImages = [...existingImages, ...imageUrls];
+
+      // Persist review in Supabase (table: public.reviews)
+      let saved = null;
+      try {
+        if (existingReviewId) {
+          const { data, error } = await supabase
+            .from("reviews")
+            .update({
+              rating,
+              text: text.trim(),
+              image_url: combinedImages.length ? JSON.stringify(combinedImages) : null,
+            })
+            .eq("id", existingReviewId)
+            .select("id, created_at, image_url")
+            .single();
+          if (!error && data) saved = data;
+        } else {
+          const { data, error } = await supabase
+            .from("reviews")
+            .insert({
+              user_id: authUser?.id || null,
+              order_id: orderId,
+              rating,
+              text: text.trim(),
+              // store JSON-encoded array of URLs in image_url column
+              image_url: combinedImages.length ? JSON.stringify(combinedImages) : null,
+            })
+            .select("id, created_at, image_url")
+            .single();
+          if (!error && data) saved = data;
+        }
+      } catch {
+        // ignore; we'll still show the local review
+      }
+
+      // Try to infer product info from in-memory orders (for click-through to product page)
+      const orderMatch = orders.find((o) => o.id === orderId);
+      const inferredProductId = orderMatch?.productId || null;
+      const inferredTitle = product || orderMatch?.title || "";
+
+      const nextImages =
+        (saved?.image_url && (() => {
+          try {
+            const parsed = JSON.parse(saved.image_url);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch {
+            return [];
+          }
+        })()) || combinedImages;
+
+      const newReview = {
+        id: saved?.id || existingReviewId || `rev-${Date.now()}`,
+        orderId,
+        productId: inferredProductId,
+        product: inferredTitle,
+        rating,
+        text: text.trim(),
+        date: (saved?.created_at || new Date().toISOString()).slice(0, 10),
+        images: nextImages,
+      };
+
+      setReviews((prev) => {
+        const idx = prev.findIndex((r) => r.orderId === orderId);
+        if (idx === -1) return [newReview, ...prev];
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], ...newReview };
+        return copy;
+      });
+      setReviewFor(null);
+      setTab("reviews");
+    } catch {
+      // best-effort
+    }
   };
 
   const handleMarkReceived = async (orderId) => {
@@ -244,6 +347,88 @@ export default function Profile() {
       prev && prev.id === orderId ? { ...prev, status: "Delivered" } : prev
     );
   };
+
+  // Load existing reviews for this user's orders so they persist across refresh
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!authUser?.id) {
+        setReviews([]);
+        return;
+      }
+      // First get all order ids and seller names for this buyer
+      const { data: ordersRows, error: ordersErr } = await supabase
+        .from("orders")
+        .select("id, seller_display")
+        .eq("user_id", authUser.id);
+      if (cancelled || ordersErr || !ordersRows?.length) {
+        setReviews([]);
+        return;
+      }
+      const orderIds = Array.from(new Set(ordersRows.map((o) => o.id).filter(Boolean)));
+      const orderMetaById = new Map();
+      ordersRows.forEach((o) => {
+        if (!o?.id) return;
+        orderMetaById.set(o.id, {
+          seller: o.seller_display || "",
+        });
+      });
+
+      // Then load all reviews attached to any of those orders (regardless of user_id)
+      const { data, error } = await supabase
+        .from("reviews")
+        .select("id, order_id, rating, text, image_url, created_at")
+        .in("order_id", orderIds)
+        .order("created_at", { ascending: false });
+      if (cancelled || error || !data) return;
+      const productByOrder = new Map();
+      if (orderIds.length) {
+        const { data: items } = await supabase
+          .from("order_items")
+          .select("order_id, product_id, title")
+          .in("order_id", orderIds);
+        (items || []).forEach((row) => {
+          const oid = row.order_id;
+          if (!oid || !row.product_id) return;
+          if (!productByOrder.has(oid)) {
+            productByOrder.set(oid, {
+              productId: row.product_id,
+              title: row.title || "",
+            });
+          }
+        });
+      }
+
+      const mapped = data.map((r) => {
+        let images = [];
+        if (r.image_url) {
+          try {
+            const parsed = JSON.parse(r.image_url);
+            if (Array.isArray(parsed)) images = parsed;
+          } catch {
+            // ignore parse error
+          }
+        }
+        const prod = productByOrder.get(r.order_id) || null;
+        const meta = orderMetaById.get(r.order_id) || null;
+        return {
+          id: r.id,
+          orderId: r.order_id,
+          productId: prod?.productId || null,
+          product: prod?.title || "",
+          rating: r.rating,
+          text: r.text,
+          date: (r.created_at || "").slice(0, 10),
+          seller: meta?.seller || "",
+          images,
+        };
+      });
+      setReviews(mapped);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id]);
 
   const handleLogout = () => {
     logout();
@@ -349,16 +534,24 @@ export default function Profile() {
         <OverviewPanel
           money={money}
           orders={orders}
+          reviews={reviews}
           onViewDetails={setDetailsFor}
-          onWriteReview={setReviewFor}
+          onWriteReview={(order) => {
+            const existing = reviews.find((r) => r.orderId === order.id) || null;
+            setReviewFor(existing ? { ...order, existingReview: existing } : order);
+          }}
         />
       )}
       {tab === "orders" && (
         <OrdersPanel
           money={money}
           orders={orders}
+          reviews={reviews}
           onViewDetails={setDetailsFor}
-          onWriteReview={setReviewFor}
+          onWriteReview={(order) => {
+            const existing = reviews.find((r) => r.orderId === order.id) || null;
+            setReviewFor(existing ? { ...order, existingReview: existing } : order);
+          }}
         />
       )}
       {tab === "reviews" && <ReviewsPanel reviews={reviews} />}
@@ -384,7 +577,7 @@ export default function Profile() {
 }
 
 /* ---------- Panels ---------- */
-function OverviewPanel({ money, orders, onViewDetails, onWriteReview }) {
+function OverviewPanel({ money, orders, reviews, onViewDetails, onWriteReview }) {
   return (
     <div className="grid lg:grid-cols-[1fr,360px] gap-6">
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white">
@@ -393,10 +586,65 @@ function OverviewPanel({ money, orders, onViewDetails, onWriteReview }) {
           <span className="text-sm text-gray-600">{orders.length} total</span>
         </div>
         <ul className="divide-y divide-[var(--line-amber)]/70">
-          {orders.map((o) => (
-            <li key={o.id} className="px-5 py-4">
-              <OrderRow o={o} money={money} />
-              <div className="mt-3 flex items-center gap-2">
+          {orders.map((o) => {
+            const hasReview = reviews.some((r) => r.orderId === o.id);
+            return (
+              <li key={o.id} className="px-5 py-4">
+                <OrderRow o={o} money={money} />
+                <div className="mt-3 flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    className="px-3 py-1.5 text-sm"
+                    onClick={() => onViewDetails(o)}
+                  >
+                    View Details
+                  </Button>
+                  <Button className="px-3 py-1.5 text-sm" onClick={() => onWriteReview(o)}>
+                    {hasReview ? "Edit Review" : "Write Review"}
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function OrdersPanel({ money, orders, reviews, onViewDetails, onWriteReview }) {
+  return (
+    <div className="space-y-4">
+      {orders.map((o) => {
+        const hasReview = reviews.some((r) => r.orderId === o.id);
+        return (
+          <div key={o.id} className="rounded-2xl border border-[var(--line-amber)] bg-white p-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-sm font-semibold text-[var(--brown-700)]">
+                  {formatOrderId(o.id)}
+                </div>
+                <div className="text-xs text-gray-600">Placed on {formatOrderDate(o.date)}</div>
+              </div>
+              <span className={`text-xs px-2 py-1 rounded-full ${STATUS_STYLES[o.status]}`}>
+                {o.status}
+              </span>
+            </div>
+
+            <div className="mt-3 flex items-center gap-3">
+              <img
+                src={o.image}
+                alt={o.title}
+                className="h-16 w-20 object-cover rounded-lg border border-[var(--line-amber)]"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-[var(--brown-700)] font-medium truncate">{o.title}</div>
+                <div className="text-xs text-gray-600">
+                  {o.items} item{o.items > 1 ? "s" : ""} • {money(o.price)}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
                 <Button
                   variant="secondary"
                   className="px-3 py-1.5 text-sm"
@@ -405,63 +653,20 @@ function OverviewPanel({ money, orders, onViewDetails, onWriteReview }) {
                   View Details
                 </Button>
                 <Button className="px-3 py-1.5 text-sm" onClick={() => onWriteReview(o)}>
-                  Write Review
+                  {hasReview ? "Edit Review" : "Write Review"}
                 </Button>
               </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-function OrdersPanel({ money, orders, onViewDetails, onWriteReview }) {
-  return (
-    <div className="space-y-4">
-      {orders.map((o) => (
-        <div key={o.id} className="rounded-2xl border border-[var(--line-amber)] bg-white p-4">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-sm font-semibold text-[var(--brown-700)]">
-                {formatOrderId(o.id)}
-              </div>
-              <div className="text-xs text-gray-600">Placed on {formatOrderDate(o.date)}</div>
-            </div>
-            <span className={`text-xs px-2 py-1 rounded-full ${STATUS_STYLES[o.status]}`}>
-              {o.status}
-            </span>
-          </div>
-
-          <div className="mt-3 flex items-center gap-3">
-            <img
-              src={o.image}
-              alt={o.title}
-              className="h-16 w-20 object-cover rounded-lg border border-[var(--line-amber)]"
-            />
-            <div className="flex-1 min-w-0">
-              <div className="text-[var(--brown-700)] font-medium truncate">{o.title}</div>
-              <div className="text-xs text-gray-600">
-                {o.items} item{o.items > 1 ? "s" : ""} • {money(o.price)}
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button variant="secondary" className="px-3 py-1.5 text-sm" onClick={() => onViewDetails(o)}>
-                View Details
-              </Button>
-              <Button className="px-3 py-1.5 text-sm" onClick={() => onWriteReview(o)}>
-                Write Review
-              </Button>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
 function ReviewsPanel({ reviews }) {
+  const navigate = useNavigate();
+
   if (!reviews.length) {
     return (
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-6 text-center text-gray-600">
@@ -472,22 +677,51 @@ function ReviewsPanel({ reviews }) {
 
   return (
     <div className="space-y-4">
-      {reviews.map((r) => (
-        <div
-          key={r.id}
-          className="rounded-2xl border border-[var(--line-amber)] bg-white p-4 flex gap-3"
-        >
-          <div className="text-2xl">⭐</div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <div className="font-semibold text-[var(--brown-700)]">{r.product}</div>
-              <span className="text-xs text-gray-600">({r.rating}/5)</span>
-              <span className="ml-auto text-xs text-gray-600">{r.date}</span>
+      {reviews.map((r) => {
+        const handleClick = () => {
+          if (r.productId) {
+            navigate(`/product/${r.productId}?tab=reviews`);
+          }
+        };
+        return (
+          <button
+            key={r.id}
+            type="button"
+            onClick={handleClick}
+            className="w-full text-left rounded-2xl border border-[var(--line-amber)] bg-white p-4 hover:bg-[var(--cream-50)] transition"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="font-semibold text-[var(--brown-700)] truncate">
+                    {r.product || "Product"}
+                  </div>
+                  {r.seller && (
+                    <span className="text-[11px] text-gray-500 truncate">by {r.seller}</span>
+                  )}
+                  <span className="ml-auto text-[11px] text-gray-500">
+                    {formatOrderDate(r.date)}
+                  </span>
+                </div>
+                <div className="text-xs text-yellow-600 mb-1">⭐ {r.rating}/5</div>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{r.text}</p>
+                {Array.isArray(r.images) && r.images.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {r.images.map((url, idx) => (
+                      <img
+                        key={idx}
+                        src={url}
+                        alt={r.product || "Review image"}
+                        className="h-20 w-20 object-cover rounded-lg border border-[var(--line-amber)]"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-            <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{r.text}</p>
-          </div>
-        </div>
-      ))}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -572,14 +806,10 @@ function OrderDetailsModal({ order, onClose, money, onMarkReceived }) {
             <div className="text-xs text-gray-600">Order ID: {formatOrderId(order.id)}</div>
             <div className="text-xs text-gray-600">Date: {formatOrderDate(order.date)}</div>
             <div className="text-xs text-gray-600">Seller: {order.seller}</div>
-            <div className="text-xs text-gray-600">Color: {order.color}</div>
             <div className="text-xs text-gray-600">Qty: {order.quantity}</div>
           </div>
           <div className="text-right">
             <div className="text-sm font-bold text-[var(--brown-700)]">{money(order.price)}</div>
-            <div className="text-sm font-semibold text-[var(--brown-700)] mt-1">
-              Total: {money(order.price + (order.shippingFee || 0))}
-            </div>
           </div>
         </div>
 
@@ -626,16 +856,26 @@ function OrderDetailsModal({ order, onClose, money, onMarkReceived }) {
 
 /* ---------- Write Review Modal ---------- */
 function WriteReviewModal({ order, onClose, onSubmit }) {
-  const [rating, setRating] = useState(5);
-  const [text, setText] = useState("");
+  const existing = order?.existingReview || null;
+  const [rating, setRating] = useState(existing?.rating || 5);
+  const [text, setText] = useState(existing?.text || "");
+  const [imageFiles, setImageFiles] = useState([]);
+  const [existingImages, setExistingImages] = useState(
+    Array.isArray(existing?.images) ? existing.images : []
+  );
+  const fileInputRef = useRef(null);
 
   const submit = () => {
     if (!text.trim()) return;
     onSubmit({
       orderId: order.id,
+      productId: order.productId || null,
       product: order.title,
       rating,
       text: text.trim(),
+      imageFiles,
+      existingReviewId: existing?.id,
+      existingImages,
     });
   };
 
@@ -655,7 +895,7 @@ function WriteReviewModal({ order, onClose, onSubmit }) {
           />
           <div>
             <div className="text-sm font-semibold text-[var(--brown-700)]">{order.title}</div>
-            <div className="text-xs text-gray-600">Order {order.id}</div>
+            <div className="text-xs text-gray-600">Order {formatOrderId(order.id)}</div>
           </div>
         </div>
 
@@ -685,6 +925,74 @@ function WriteReviewModal({ order, onClose, onSubmit }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold mb-1 text-[var(--brown-700)]">Add photo(s) (optional)</label>
+          <div className="border border-[var(--line-amber)] rounded-xl p-3 bg-[var(--cream-50)]">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const selected = Array.from(e.target.files || []);
+                if (!selected.length) return;
+                setImageFiles((prev) => [...prev, ...selected]);
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center rounded-lg border border-[var(--line-amber)] bg-white px-3 py-1.5 text-[11px] font-medium text-[var(--brown-700)] hover:bg-[var(--cream-50)]"
+            >
+              Choose files
+            </button>
+            {(existingImages.length > 0 || imageFiles.length > 0) && (
+              <div className="mt-3 space-y-2">
+                {existingImages.map((url, idx) => (
+                  <div
+                    key={`existing-${idx}`}
+                    className="w-full flex items-center justify-between rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-[11px]"
+                  >
+                    <div className="flex items-center gap-2 text-[var(--brown-700)]">
+                      <img
+                        src={url}
+                        alt="Review image"
+                        className="h-10 w-10 object-cover rounded-md border border-[var(--line-amber)]"
+                      />
+                      <span className="truncate max-w-[180px]">Existing photo {idx + 1}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-[10px] text-red-500"
+                      onClick={() => setExistingImages((prev) => prev.filter((_, i) => i !== idx))}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+
+                {imageFiles.map((file, idx) => {
+                  const ext = (file.name || "").split(".").pop() || "FILE";
+                  return (
+                    <div
+                      key={`new-${idx}`}
+                      className="w-full flex items-center justify-between rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-[11px]"
+                    >
+                      <div className="flex items-center gap-2 text-[var(--brown-700)]">
+                        <span className="truncate max-w-[220px]">{file.name}</span>
+                      </div>
+                      <div className="text-[10px] text-gray-500 uppercase">
+                        {ext}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-end gap-2">
