@@ -1,4 +1,6 @@
 // src/admin/ApplicationModal.jsx
+import { supabase } from "../lib/supabaseClient";
+
 export default function ApplicationModal({
   open,
   onClose,
@@ -16,9 +18,8 @@ export default function ApplicationModal({
     </div>
   );
 
-  const Field = ({ icon, children }) => (
+  const Field = ({ children }) => (
     <div className="flex items-start gap-2">
-      <span className="pt-0.5">{icon}</span>
       <div>{children}</div>
     </div>
   );
@@ -37,17 +38,45 @@ export default function ApplicationModal({
     );
   };
 
-  const DocItem = ({ name, status = "Verified" }) => (
-    <div className="w-full flex items-center justify-between rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2">
-      <div className="flex items-center gap-2 text-[var(--brown-700)]">
-        <span>📄</span>
-        <span className="text-sm">{name}</span>
-      </div>
-      <span className="px-2 py-0.5 text-xs rounded-full border bg-green-100 text-green-700 border-green-200">
-        {status}
-      </span>
-    </div>
-  );
+  const DocItem = ({ doc }) => {
+    const name = typeof doc === "string" ? doc : doc.name || "Document";
+    const path = typeof doc === "string" ? null : doc.path || null;
+
+    let url = null;
+    if (path) {
+      const { data: pub } = supabase.storage
+        .from("store-verifications")
+        .getPublicUrl(path);
+      url = pub?.publicUrl || null;
+    }
+
+    const handleOpen = () => {
+      if (!url) return;
+      window.open(url, "_blank", "noopener,noreferrer");
+    };
+
+    return (
+      <button
+        type="button"
+        onClick={handleOpen}
+        disabled={!url}
+        className={`w-full flex items-center justify-between rounded-lg border px-3 py-2 text-left ${
+          url
+            ? "border-[var(--line-amber)] bg-white hover:bg-[var(--cream-50)] cursor-pointer"
+            : "border-gray-200 bg-gray-50 cursor-default"
+        }`}
+      >
+        <div className="flex items-center gap-2 text-[var(--brown-700)]">
+          <span className="text-sm truncate max-w-[220px]">{name}</span>
+        </div>
+        {url && (
+          <span className="px-2 py-0.5 text-xs rounded-full border bg-green-100 text-green-700 border-green-200">
+            View
+          </span>
+        )}
+      </button>
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-[60]">
@@ -73,7 +102,7 @@ export default function ApplicationModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>Email</Label>
-                <Field icon={"✉️"}>
+                <Field>
                   <div className="text-[var(--brown-700)]">
                     {data.email || "—"}
                   </div>
@@ -81,7 +110,7 @@ export default function ApplicationModal({
               </div>
               <div>
                 <Label>Phone</Label>
-                <Field icon={"📞"}>
+                <Field>
                   <div className="text-[var(--brown-700)]">
                     {data.phone || "—"}
                   </div>
@@ -95,17 +124,9 @@ export default function ApplicationModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>Location</Label>
-                <Field icon={"📍"}>
+                <Field>
                   <div className="text-[var(--brown-700)]">
                     {data.location || "—"}
-                  </div>
-                </Field>
-              </div>
-              <div>
-                <Label>Business Address</Label>
-                <Field icon={"🏢"}>
-                  <div className="text-[var(--brown-700)]">
-                    {data.address || "—"}
                   </div>
                 </Field>
               </div>
@@ -134,7 +155,7 @@ export default function ApplicationModal({
             </div>
 
             <div className="mt-4">
-              <Label>Business Description</Label>
+              <Label>Note</Label>
               <p className="text-[var(--brown-700)]/90 leading-relaxed text-sm">
                 {data.description ||
                   "No description provided. This section will include a short overview of the business and product lines."}
@@ -147,17 +168,13 @@ export default function ApplicationModal({
             <div>
               <Label>Submitted Documents</Label>
               <div className="mt-2 space-y-2">
-                {(data.documents?.length
-                  ? data.documents
-                  : [
-                      "Business Registration",
-                      "Tax Identification",
-                      "Product Catalog",
-                      "References",
-                    ]
-                ).map((d, i) => (
-                  <DocItem key={i} name={typeof d === "string" ? d : d.name} />
-                ))}
+                {data.documents?.length ? (
+                  data.documents.map((d, i) => <DocItem key={i} doc={d} />)
+                ) : (
+                  <p className="text-sm text-[var(--brown-700)]/70">
+                    No documents were submitted.
+                  </p>
+                )}
               </div>
             </div>
           </div>

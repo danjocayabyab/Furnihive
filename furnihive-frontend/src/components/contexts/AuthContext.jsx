@@ -14,7 +14,7 @@ export function AuthProvider({ children }) {
     if (!u) {
       setProfile(null);
       setIsAdmin(false);
-      return;
+      return null;
     }
     const md = u.user_metadata || {};
     // Always load base profile from profiles
@@ -27,26 +27,31 @@ export function AuthProvider({ children }) {
       .single();
     if (!prof.error && prof.data) {
       setProfile(prof.data);
-    } else {
-      // create minimal profile if missing
-      const candidate = {
-        id: u.id,
-        role: md.role || "buyer",
-        first_name: md.first_name || null,
-        last_name: md.last_name || null,
-        store_name: md.store_name || null,
-        phone: md.phone || null,
-        seller_approved: md.role === "seller" ? true : null,
-      };
-      const up = await supabase
-        .from("profiles")
-        .upsert(candidate, { onConflict: "id" })
-        .select(
-          "id, role, seller_approved, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path"
-        )
-        .single();
-      if (!up.error && up.data) setProfile(up.data);
+      return prof.data;
     }
+
+    // create minimal profile if missing
+    const candidate = {
+      id: u.id,
+      role: md.role || "buyer",
+      first_name: md.first_name || null,
+      last_name: md.last_name || null,
+      store_name: md.store_name || null,
+      phone: md.phone || null,
+      seller_approved: md.role === "seller" ? true : null,
+    };
+    const up = await supabase
+      .from("profiles")
+      .upsert(candidate, { onConflict: "id" })
+      .select(
+        "id, role, seller_approved, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path"
+      )
+      .single();
+    if (!up.error && up.data) {
+      setProfile(up.data);
+      return up.data;
+    }
+    return null;
   }
 
   async function loadAdmin(u) {
@@ -94,8 +99,8 @@ export function AuthProvider({ children }) {
 
   const refreshProfile = async () => {
     if (!user) return null;
-    await loadProfile(user);
-    return profile;
+    const latest = await loadProfile(user);
+    return latest;
   };
 
   const refreshUser = async () => {
