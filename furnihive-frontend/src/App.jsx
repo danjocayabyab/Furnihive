@@ -15,6 +15,7 @@ import AccountSettings from "./pages/user/AccountSettings.jsx";
 import Messages from "./pages/user/Messages.jsx";
 import Cart from "./pages/user/Cart.jsx";
 import Checkout, { CheckoutSuccess } from "./pages/user/Checkout.jsx";
+import UserSupport from "./pages/user/Support.jsx";
 
 /* ---------- Seller Layout + Pages ---------- */
 import SellerLayout from "./layouts/SellerLayout.jsx";
@@ -26,6 +27,7 @@ import SellerAnalytics from "./pages/seller/Analytics.jsx";
 import SellerEngagement from "./pages/seller/Engagement.jsx";
 import SellerMessages from "./pages/seller/Messages.jsx";
 import SellerSettings from "./pages/seller/Settings.jsx";
+import SellerSupport from "./pages/seller/Support.jsx";
 
 
 
@@ -96,6 +98,7 @@ export default function App() {
         <Route path="/product/:id" element={<ProductDetail />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/profile/settings" element={<AccountSettings />} />
+        <Route path="/support" element={<UserSupport />} />
         <Route path="/messages" element={<Messages />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/checkout" element={<Checkout />} />
@@ -119,6 +122,7 @@ export default function App() {
         <Route path="engagement" element={<SellerEngagement />} />
         <Route path="messages" element={<SellerMessages />} />
         <Route path="settings" element={<SellerSettings />} />
+        <Route path="support" element={<SellerSupport />} />
       </Route>
 
 

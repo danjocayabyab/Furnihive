@@ -21,6 +21,7 @@ export default function SellerDashboard() {
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
 
   const isVerified = !!profile?.seller_approved;
+  const isSuspended = !!profile?.suspended;
 
   // Track initial verification state so we only show welcome when transitioning
   const initialVerifiedRef = useRef(isVerified);
@@ -53,10 +54,15 @@ export default function SellerDashboard() {
 
   useEffect(() => {
     if (!authUser?.id) return;
+    if (isSuspended) {
+      toast.error("Your account has been suspended. Please contact support.");
+      setVerifyModalOpen(false);
+      return;
+    }
     if (!isVerified) {
       setVerifyModalOpen(true);
     }
-  }, [authUser?.id, isVerified]);
+  }, [authUser?.id, isVerified, isSuspended]);
 
   // When seller becomes verified (after admin approval), hide verification gate
   // and show a one-time welcome message.
@@ -202,6 +208,30 @@ export default function SellerDashboard() {
       cancelled = true;
     };
   }, [authUser?.id]);
+
+  if (isSuspended) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-10 space-y-4">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800">
+          <div className="font-semibold text-red-900 mb-1">Account suspended</div>
+          <p className="mb-2">
+            Your seller account has been suspended by an administrator. You cannot access seller
+            tools or manage your store while suspended.
+          </p>
+          <p className="text-xs text-red-900/80 mb-3">
+            If you believe this is a mistake or would like to appeal, please contact support.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate("/seller/support")}
+            className="rounded-xl bg-[var(--orange-600)] px-4 py-2.5 text-white text-sm font-medium hover:brightness-95"
+          >
+            Contact support
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
@@ -544,7 +574,7 @@ export default function SellerDashboard() {
         </aside>
       </div>
 
-      {!isVerified && (
+      {!isVerified && !isSuspended && (
         <VerificationModal
           open={verifyModalOpen}
           onClose={() => setVerifyModalOpen(false)}

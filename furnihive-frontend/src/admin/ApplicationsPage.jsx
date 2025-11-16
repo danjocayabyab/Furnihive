@@ -100,7 +100,17 @@ export default function ApplicationsPage() {
     setApps((data || []).map(normalize));               // normalize here
     setLoading(false);
   };
-  useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    // Initial load
+    reload();
+
+    // Auto-refresh every 30 seconds while admin is on this page
+    const id = setInterval(() => {
+      reload();
+    }, 30000);
+
+    return () => clearInterval(id);
+  }, []);
 
   // banners
   const counts = useMemo(() => {

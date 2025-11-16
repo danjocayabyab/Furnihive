@@ -12,6 +12,9 @@ export default function Checkout() {
   const navigate = useNavigate();
   const { items, clearCart } = useCart();
   const location = useLocation();
+  const { profile } = useAuth();
+
+  const isSuspended = !!profile?.suspended;
 
   const selectedIds = Array.isArray(location.state?.selectedItems)
     ? location.state.selectedItems
@@ -128,6 +131,39 @@ export default function Checkout() {
     clearCart();
     navigate("/checkout/success", { state: { total: totals.total } });
   };
+
+  if (isSuspended) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-10">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800">
+          <div className="font-semibold text-red-900 mb-1">Account suspended</div>
+          <p className="mb-2">
+            Your account has been suspended by an administrator. You can still browse products, but
+            placing new orders is currently disabled.
+          </p>
+          <p className="text-xs text-red-900/80 mb-3">
+            If you believe this is a mistake or would like to appeal, please contact support.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate("/logout")}
+              className="rounded-xl border border-[var(--line-amber)] px-4 py-2.5 text-sm font-medium text-[var(--brown-700)] hover:bg-[var(--cream-50)]"
+            >
+              Log out
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/support")}
+              className="rounded-xl bg-[var(--orange-600)] px-4 py-2.5 text-white text-sm font-medium hover:brightness-95"
+            >
+              Contact support
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">

@@ -70,6 +70,7 @@ export default function Profile() {
   const tab = sp.get("tab") ?? "overview";
   const setTab = (t) => setSp({ tab: t });
   const { user: authUser, profile, refreshProfile } = useAuth();
+  const isSuspended = !!profile?.suspended;
   const [avatarSrc, setAvatarSrc] = useState("");
   const [defaultAddress, setDefaultAddress] = useState("");
 
@@ -78,6 +79,39 @@ export default function Profile() {
     refreshProfile?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (isSuspended) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-10">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800">
+          <div className="font-semibold text-red-900 mb-1">Account suspended</div>
+          <p className="mb-2">
+            Your account has been suspended by an administrator. You can still browse products, but
+            accessing your profile and order history is currently disabled.
+          </p>
+          <p className="text-xs text-red-900/80 mb-3">
+            If you believe this is a mistake or would like to appeal, please contact support.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate("/logout")}
+              className="rounded-xl border border-[var(--line-amber)] px-4 py-2.5 text-sm font-medium text-[var(--brown-700)] hover:bg-[var(--cream-50)]"
+            >
+              Log out
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/support")}
+              className="rounded-xl bg-[var(--orange-600)] px-4 py-2.5 text-white text-sm font-medium hover:brightness-95"
+            >
+              Contact support
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     const md = authUser?.user_metadata || {};
