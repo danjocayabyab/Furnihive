@@ -138,6 +138,11 @@ export default function Profile() {
         });
       }
 
+      console.log("ORDERS STATUS DEBUG", {
+        orderIds,
+        statusByOrder: Array.from(statusByOrder.entries()),
+      });
+
       const mapped = data.map((o) => ({
         id: o.id,
         date: o.created_at ? o.created_at.slice(0, 10) : "",
@@ -216,11 +221,18 @@ export default function Profile() {
   const handleMarkReceived = async (orderId) => {
     if (!orderId) return;
     try {
+      // Update buyer-facing summary row
       await supabase
         .from("orders")
         .update({ status: "Delivered" })
         .eq("id", orderId)
         .eq("user_id", authUser?.id || "");
+
+      // Update per-seller order_items rows so seller view matches
+      await supabase
+        .from("order_items")
+        .update({ status: "Delivered" })
+        .eq("order_id", orderId);
     } catch {
       // ignore errors; still update local state for UX
     }
@@ -538,7 +550,7 @@ function OrderRow({ o, money }) {
 
 /* ---------- Modals ---------- */
 
-function OrderDetailsModal({ order, onClose, money }) {
+function OrderDetailsModal({ order, onClose, money, onMarkReceived }) {
   const statuses = ["Processing", "Shipped", "Delivered"];
 
   return (
@@ -599,7 +611,12 @@ function OrderDetailsModal({ order, onClose, money }) {
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          {order.status !== "Delivered" && (
+            <Button onClick={() => onMarkReceived?.(order.id)}>
+              Mark as Received
+            </Button>
+          )}
           <Button variant="secondary" onClick={onClose}>Close</Button>
         </div>
       </div>
