@@ -5,9 +5,28 @@ import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
 
+function formatOrderId(id) {
+  if (!id) return "Order";
+  return `ORD-${String(id).slice(0, 8).toUpperCase()}`;
+}
+
+function formatOrderDate(dateISO) {
+  if (!dateISO) return "";
+  const d = new Date(dateISO);
+  if (Number.isNaN(d.getTime())) return String(dateISO);
+  return d.toLocaleString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function SellerDashboard() {
   const navigate = useNavigate();
   const { user: authUser, profile, refreshProfile } = useAuth();
+  const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
   const [storeName, setStoreName] = useState(profile?.store_name || "your store");
   const [stats, setStats] = useState({
     totalSales: 0,
@@ -16,6 +35,9 @@ export default function SellerDashboard() {
     lowStockItems: 0,
   });
   const [loadingStats, setLoadingStats] = useState(true);
+  const [topProducts, setTopProducts] = useState([]);
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [lowStockProducts, setLowStockProducts] = useState([]);
   const [verifyModalOpen, setVerifyModalOpen] = useState(false);
   const [files, setFiles] = useState([]);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
@@ -44,6 +66,171 @@ export default function SellerDashboard() {
         }
       } catch (e) {
         console.error("Failed to load store for dashboard", e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id]);
+
+  // Load recent orders for this seller from order_items
+  useEffect(() => {
+    if (!authUser?.id) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data: rows, error } = await supabase
+          .from("order_items")
+          .select(
+            "order_id, title, qty, unit_price, created_at, status, buyer_name, buyer_address, payment_method, image, seller_id"
+          )
+          .eq("seller_id", authUser.id);
+
+        if (error || !rows) {
+          if (!cancelled) setRecentOrders([]);
+          return;
+        }
+
+        const byOrder = new Map();
+        rows.forEach((r) => {
+          if (!r?.order_id) return;
+          const key = r.order_id;
+          if (!byOrder.has(key)) {
+            byOrder.set(key, {
+              id: key,
+              product: r.title || "Product",
+              total: 0,
+              status: (r.status || "pending").toLowerCase(),
+              customer: r.buyer_name || "Customer",
+              dateISO: r.created_at || null,
+              image: r.image || "",
+              qty: Number(r.qty || 0) || 0,
+              address: r.buyer_address || "",
+              payment: r.payment_method || "",
+            });
+          }
+          const entry = byOrder.get(key);
+          const qty = Number(r.qty || 0) || 0;
+          const price = Number(r.unit_price || 0) || 0;
+          entry.total += qty * price;
+          // Use most recent status/date among items
+          if (r.created_at && (!entry.dateISO || r.created_at > entry.dateISO)) {
+            entry.dateISO = r.created_at;
+          }
+          if (r.status) {
+            entry.status = r.status.toLowerCase();
+          }
+          // Prefer a non-empty image/payment/address from any row
+          if (!entry.image && r.image) entry.image = r.image;
+          if (!entry.payment && r.payment_method) entry.payment = r.payment_method;
+          if (!entry.address && r.buyer_address) entry.address = r.buyer_address;
+        });
+
+        const list = Array.from(byOrder.values())
+          .sort((a, b) => {
+            const tb = b.dateISO ? new Date(b.dateISO).getTime() : 0;
+            const ta = a.dateISO ? new Date(a.dateISO).getTime() : 0;
+            return tb - ta;
+          })
+          .slice(0, 4);
+
+        if (!cancelled) setRecentOrders(list);
+      } catch {
+        if (!cancelled) setRecentOrders([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id]);
+
+  // Load top products based on order_items for this seller
+  useEffect(() => {
+    if (!authUser?.id) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data: rows, error } = await supabase
+          .from("order_items")
+          .select("product_id, title, unit_price, qty, seller_id")
+          .eq("seller_id", authUser.id);
+
+        if (error || !rows) {
+          if (!cancelled) setTopProducts([]);
+          return;
+        }
+
+        const byProduct = new Map();
+        rows.forEach((r) => {
+          if (!r?.product_id) return;
+          const key = r.product_id;
+          if (!byProduct.has(key)) {
+            byProduct.set(key, {
+              productId: key,
+              title: r.title || "Product",
+              unitsSold: 0,
+              revenue: 0,
+              price: 0,
+              category: "",
+              stock: null,
+              sku: "",
+              image: "",
+            });
+          }
+          const entry = byProduct.get(key);
+          const qty = Number(r.qty || 0) || 0;
+          const price = Number(r.unit_price || 0) || 0;
+          entry.unitsSold += qty;
+          entry.revenue += qty * price;
+          if (!entry.price) entry.price = price;
+        });
+
+        const baseList = Array.from(byProduct.values()).filter((p) => p.unitsSold > 0);
+        if (!baseList.length) {
+          if (!cancelled) setTopProducts([]);
+          return;
+        }
+
+        // Enrich with product details (category, stock, sku, image)
+        const productIds = baseList.map((p) => p.productId);
+        const { data: products, error: prodErr } = await supabase
+          .from("products")
+          .select(
+            "id, name, category, base_price, sku, stock_qty, product_images ( url, is_primary, position )"
+          )
+          .in("id", productIds);
+
+        if (!prodErr && products) {
+          products.forEach((p) => {
+            const entry = byProduct.get(p.id);
+            if (!entry) return;
+            entry.title = entry.title || p.name || "Product";
+            entry.category = p.category || "";
+            entry.price = p.base_price != null ? Number(p.base_price) : entry.price;
+            entry.stock = (p.stock_qty ?? null) != null ? p.stock_qty : null;
+            entry.sku = p.sku || "";
+            const imgs = (p.product_images || []).slice().sort((a, b) => {
+              const pa = a.position ?? 0;
+              const pb = b.position ?? 0;
+              return pa - pb;
+            });
+            const primary = imgs.find((i) => i.is_primary) || imgs[0] || null;
+            entry.image = primary?.url || "";
+          });
+        }
+
+        const list = Array.from(byProduct.values())
+          .filter((p) => p.unitsSold > 0)
+          .sort((a, b) => b.unitsSold - a.unitsSold)
+          .slice(0, 5);
+
+        if (!cancelled) setTopProducts(list);
+      } catch {
+        if (!cancelled) setTopProducts([]);
       }
     })();
 
@@ -195,14 +382,22 @@ export default function SellerDashboard() {
         const activeProducts = list.filter((p) => p.status !== "archived");
         const productsListed = activeProducts.length;
 
-        const lowStockItems = activeProducts.filter((p) => {
-          const qtyFromProduct =
-            (p.stock_qty ?? null) != null
-              ? p.stock_qty
-              : p.inventory_items?.[0]?.quantity_on_hand ?? 0;
-          const qty = Number(qtyFromProduct) || 0;
-          return qty > 0 && qty <= 2;
-        }).length;
+        const lowStock = activeProducts
+          .map((p) => {
+            const qtyFromProduct =
+              (p.stock_qty ?? null) != null
+                ? p.stock_qty
+                : p.inventory_items?.[0]?.quantity_on_hand ?? 0;
+            const qty = Number(qtyFromProduct) || 0;
+            return {
+              id: p.id,
+              name: p.name || "Product",
+              stock: qty,
+            };
+          })
+          .filter((p) => p.stock > 0 && p.stock <= 2);
+
+        const lowStockItems = lowStock.length;
 
         if (!cancelled) {
           setStats({
@@ -211,6 +406,7 @@ export default function SellerDashboard() {
             productsListed,
             lowStockItems,
           });
+          setLowStockProducts(lowStock);
         }
       } catch (e) {
         console.error("Failed to load dashboard stats", e);
@@ -404,7 +600,7 @@ export default function SellerDashboard() {
         />
 
         <NavButton
-          label="Engagement"
+          label="Customer Reviews"
           
           onClick={() => {
             if (!isVerified) {
@@ -424,12 +620,8 @@ export default function SellerDashboard() {
           <section className="rounded-2xl border border-[var(--line-amber)] bg-white">
             <div className="px-5 py-4 border-b border-[var(--line-amber)] flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-[var(--brown-700)]">
-                  Top Products
-                </h3>
-                <p className="text-xs text-gray-600">
-                  Your best selling items this month
-                </p>
+                <h3 className="font-semibold text-[var(--brown-700)]">Top Products</h3>
+                <p className="text-xs text-gray-600">Your best selling items</p>
               </div>
               {/* ✅ Navigates to Analytics */}
               <button
@@ -441,35 +633,63 @@ export default function SellerDashboard() {
             </div>
 
             <ul className="divide-y divide-[var(--line-amber)]/70">
-              {[
-                {
-                  title: "Modern Sectional Sofa",
-                  price: "₱45,999",
-                  sold: "54 units sold",
-                },
-                {
-                  title: "Solid Wood Dining Set",
-                  price: "₱35,500",
-                  sold: "32 units sold",
-                },
-                {
-                  title: "Queen Size Bed Frame",
-                  price: "₱28,500",
-                  sold: "28 units sold",
-                },
-              ].map((p, i) => (
-                <li
-                  key={i}
-                  className="px-5 py-3 flex items-center justify-between"
-                >
-                  <div>
-                    <div className="font-medium text-[var(--brown-700)] text-sm">
-                      {p.title}
+              {topProducts.length === 0 && (
+                <li className="px-5 py-4 text-sm text-gray-500">
+                  No sales yet. Once customers start ordering, your best-selling items will appear here.
+                </li>
+              )}
+              {topProducts.map((p) => (
+                <li key={p.productId} className="px-5 py-3">
+                  <div className="flex items-center gap-4">
+                    {/* Left: image + basic info */}
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="h-16 w-24 rounded-lg border border-[var(--line-amber)] overflow-hidden bg-[var(--cream-50)] flex-shrink-0">
+                        {p.image ? (
+                          <img
+                            src={p.image}
+                            alt={p.title}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : null}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium text-[var(--brown-700)] text-sm truncate">
+                          {p.title}
+                        </div>
+                        <div className="text-xs text-gray-600 truncate">
+                          {p.category || ""}
+                        </div>
+                        <div className="text-[11px] text-gray-600 mt-1">
+                          <span className="font-semibold text-[var(--brown-700)]">Sold </span>
+                          {p.unitsSold}
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-600">{p.sold}</div>
-                  </div>
-                  <div className="text-sm font-semibold text-[var(--brown-700)]">
-                    {p.price}
+
+                    {/* Middle: price / stock / sku */}
+                    <div className="hidden md:grid grid-cols-3 gap-6 items-center text-sm mr-2">
+                      <div>
+                        <div className="text-[11px] text-gray-500 uppercase">Price</div>
+                        <div className="font-semibold text-[var(--brown-700)]">
+                          {peso(p.price || p.revenue)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-gray-500 uppercase">Stock</div>
+                        <div className="font-semibold text-[var(--brown-700)]">
+                          {p.stock != null ? `${p.stock} ${p.stock === 1 ? "unit" : "units"}` : "-"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-gray-500 uppercase">SKU</div>
+                        <div className="font-semibold text-[var(--brown-700)]">{p.sku || "—"}</div>
+                      </div>
+                    </div>
+
+                    {/* Mobile revenue summary (no actions button) */}
+                    <div className="md:hidden text-xs text-gray-500 mr-2">
+                      {peso(p.revenue)} total
+                    </div>
                   </div>
                 </li>
               ))}
@@ -497,49 +717,55 @@ export default function SellerDashboard() {
             </div>
 
             <ul className="divide-y divide-[var(--line-amber)]/70">
-              {[
-                {
-                  id: "ORD-2025-1244",
-                  product: "Modern Sectional Sofa",
-                  total: "₱45,999",
-                  status: "pending",
-                  customer: "Maria Santos",
-                },
-                {
-                  id: "ORD-2025-1243",
-                  product: "Solid Wood Dining Set",
-                  total: "₱35,500",
-                  status: "processing",
-                  customer: "Juan dela Cruz",
-                },
-                {
-                  id: "ORD-2025-1242",
-                  product: "Queen Size Bed Frame",
-                  total: "₱28,500",
-                  status: "shipped",
-                  customer: "Anna Reyes",
-                },
-                {
-                  id: "ORD-2025-1241",
-                  product: "Office Desk & Chair",
-                  total: "₱18,500",
-                  status: "delivered",
-                  customer: "Carlos Mendoza",
-                },
-              ].map((o) => (
+              {recentOrders.length === 0 && (
+                <li className="px-5 py-4 text-sm text-gray-500">
+                  No recent orders yet.
+                </li>
+              )}
+              {recentOrders.map((o) => (
                 <li key={o.id} className="px-5 py-3">
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-[var(--brown-700)] truncate">
-                        {o.id}
+                  <div className="flex items-center gap-4">
+                    {/* Left: image + rich order info */}
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <div className="h-16 w-24 rounded-lg border border-[var(--line-amber)] overflow-hidden bg-[var(--cream-50)] flex-shrink-0">
+                        {o.image ? (
+                          <img
+                            src={o.image}
+                            alt={o.product}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : null}
                       </div>
-                      <div className="text-xs text-gray-600 truncate">
-                        {o.product} — Customer: {o.customer}
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-semibold text-[var(--brown-700)] truncate">
+                            {formatOrderId(o.id)}
+                          </div>
+                          <StatusPill status={o.status} />
+                        </div>
+                        <div className="text-[11px] text-gray-600">
+                          {formatOrderDate(o.dateISO)}
+                        </div>
+                        <div className="text-sm text-[var(--brown-700)] truncate">
+                          {o.product}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          Qty: {o.qty || 1}
+                        </div>
+                        <div className="text-xs text-gray-600 truncate">
+                          {o.customer} — {o.address}
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm font-semibold">{o.total}</div>
-                      <StatusPill status={o.status} />
+
+                    {/* Right: total + payment method */}
+                    <div className="text-right text-sm flex-shrink-0">
+                      <div className="font-semibold text-[var(--brown-700)]">
+                        {peso(o.total)}
+                      </div>
+                      <div className="text-[11px] text-gray-600 mt-0.5">
+                        {o.payment || ""}
+                      </div>
                     </div>
                   </div>
                 </li>
@@ -559,16 +785,17 @@ export default function SellerDashboard() {
             </p>
           </div>
           <div className="p-4 space-y-3">
-            {[
-              { name: "Velvet Armchair", stock: 2 },
-              { name: "Coffee Table Set", stock: 1 },
-              { name: "Bookshelf Unit", stock: 1 },
-            ].map((p, i) => (
+            {lowStockProducts.length === 0 && (
+              <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] px-4 py-3 text-sm text-gray-600">
+                No low stock items.
+              </div>
+            )}
+            {lowStockProducts.map((p) => (
               <div
-                key={i}
+                key={p.id}
                 className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700"
               >
-                <div>{p.name}</div>
+                <div className="truncate max-w-[180px]">{p.name}</div>
                 <span className="text-xs">Only {p.stock} left</span>
               </div>
             ))}

@@ -3,13 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
 
-/**
- * Replace the mock data with your API data later.
- * The only contract used below:
- *  - Review: { id, product, customer, dateISO, rating, text, status: "pending"|"replied", reply? }
- *  - Inquiry: { id, customer, dateISO, subject, message, status: "unread"|"read", reply? }
- */
-
 export default function SellerEngagement() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -18,74 +11,38 @@ export default function SellerEngagement() {
   /* ---------------- Reviews: loaded from Supabase ---------------- */
   const [reviews, setReviews] = useState([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
+  const [expandedIds, setExpandedIds] = useState([]); // which review cards are expanded
 
-  const [inquiries, setInquiries] = useState([
-    {
-      id: "q1",
-      customer: "Carlos Mendoza",
-      dateISO: "2025-10-04",
-      subject: "Custom color options for dining table",
-      message:
-        "Hi! I'm interested in your solid wood dining table but would like it in a darker finish.",
-      status: "unread",
-      reply: "",
-    },
-    {
-      id: "q2",
-      customer: "Lisa Garcia",
-      dateISO: "2025-10-04",
-      subject: "Delivery to Cebu",
-      message:
-        "Do you deliver to Cebu City? I'm interested in ordering a sofa set.",
-      status: "unread",
-      reply: "",
-    },
-  ]);
-
-  /* ---------------- Derived counts ---------------- */
+  /* ---------------- KPI counts ---------------- */
   const kpis = useMemo(() => {
     const totalReviews = reviews.length;
-    const totalInquiries = inquiries.length;
-    const unread = inquiries.filter((i) => i.status === "unread").length;
-    return { totalReviews, totalInquiries, unread };
-  }, [reviews, inquiries]);
+    return { totalReviews };
+  }, [reviews]);
 
   /* ---------------- Reply modal state ---------------- */
-  const [replyCtx, setReplyCtx] = useState(null); // { type: 'review'|'inquiry', id, initial }
+  const [replyCtx, setReplyCtx] = useState(null); // { id, initial }
   const closeModal = () => setReplyCtx(null);
 
-  const openReply = (type, id, initial = "") =>
-    setReplyCtx({ type, id, initial });
+  const openReply = (id, initial = "") => setReplyCtx({ id, initial });
 
   const submitReply = async (text) => {
     if (!replyCtx) return;
-    if (replyCtx.type === "review") {
-      try {
-        await supabase
-          .from("reviews")
-          .update({
-            seller_reply: text,
-            seller_reply_created_at: new Date().toISOString(),
-          })
-          .eq("id", replyCtx.id);
-      } catch {
-        // ignore error; fall back to local state update
-      }
-      setReviews((prev) =>
-        prev.map((r) =>
-          r.id === replyCtx.id ? { ...r, reply: text, status: "replied" } : r
-        )
-      );
-    } else {
-      // inquiry
-      setInquiries((prev) =>
-        prev.map((q) =>
-          q.id === replyCtx.id
-            ? { ...q, reply: text, status: "read" }
-            : q
-        )
-      );
+    try {
+      await supabase
+        .from("reviews")
+        .update({
+          seller_reply: text,
+          seller_reply_created_at: new Date().toISOString(),
+        })
+        .eq("id", replyCtx.id);
+    } catch {
+      // ignore error; fall back to local state update
     }
+    setReviews((prev) =>
+      prev.map((r) =>
+        r.id === replyCtx.id ? { ...r, reply: text, status: "replied" } : r
+      )
+    );
     closeModal();
   };
 
@@ -184,11 +141,6 @@ export default function SellerEngagement() {
     };
   }, [sellerId]);
 
-  const markInquiryRead = (id) =>
-    setInquiries((prev) =>
-      prev.map((q) => (q.id === id ? { ...q, status: "read" } : q))
-    );
-
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
       {/* Header */}
@@ -201,30 +153,21 @@ export default function SellerEngagement() {
           ←
         </button>
         <div>
-          <h1 className="text-xl font-semibold text-[var(--brown-700)]">
-            Customer Engagement
-          </h1>
+          <h1 className="text-xl font-semibold text-[var(--brown-700)]">Review Engagement</h1>
           <p className="text-xs text-gray-600">
-            Manage reviews and customer inquiries
+            Manage product reviews and your replies to customers
           </p>
         </div>
       </div>
 
       {/* KPI cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <KPI label="Total Reviews" value={kpis.totalReviews}  />
-        <KPI label="Inquiries" value={kpis.totalInquiries}  />
-        <KPI
-          label="Unread"
-          value={kpis.unread}
-          
-          accent="text-red-600"
-        />
+        <KPI label="Total Reviews" value={kpis.totalReviews} />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Reviews */}
-        <section className="rounded-2xl border border-[var(--line-amber)] bg-white">
+        <section className="rounded-2xl border border-[var(--line-amber)] bg-white lg:col-span-2">
           <div className="px-5 py-4 border-b border-[var(--line-amber)]">
             <h3 className="font-semibold text-[var(--brown-700)]">
               Recent Reviews
@@ -235,110 +178,82 @@ export default function SellerEngagement() {
           </div>
 
           <ul className="p-4 space-y-4">
-            {reviews.map((r) => (
-              <li
-                key={r.id}
-                className="rounded-xl border border-[var(--line-amber)] bg-[var(--amber-50)]/40 p-4"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="font-medium text-[var(--brown-700)] text-sm">
-                    {r.customer}
-                    <span className="text-xs text-gray-600 ml-2">
-                      {new Date(r.dateISO).toLocaleDateString()}
-                    </span>
+            {reviews.map((r) => {
+              const isExpanded = expandedIds.includes(r.id);
+              return (
+                <li
+                  key={r.id}
+                  className="rounded-xl border border-[var(--line-amber)] bg-[var(--amber-50)]/40 p-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium text-[var(--brown-700)] text-sm">
+                      {r.customer}
+                      <span className="text-xs text-gray-600 ml-2">
+                        {new Date(r.dateISO).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <StatusPill color={r.status === "replied" ? "green" : "amber"}>
+                      {r.status === "replied" ? "Replied" : "Pending"}
+                    </StatusPill>
                   </div>
-                  <StatusPill
-                    color={r.status === "replied" ? "green" : "amber"}
-                  >
-                    {r.status === "replied" ? "Replied" : "Pending"}
-                  </StatusPill>
-                </div>
 
-                <div className="mt-1 text-xs text-gray-600">{r.product}</div>
+                  <div className="mt-1 text-xs text-gray-600">{r.product}</div>
 
-                <Stars n={r.rating} />
+                  <Stars n={r.rating} />
 
-                <p className="mt-2 text-sm text-[var(--brown-700)]">{r.text}</p>
+                  {isExpanded && (
+                    <>
+                      <p className="mt-2 text-sm text-[var(--brown-700)]">{r.text}</p>
 
-                {r.reply && (
-                  <div className="mt-3 rounded-lg border border-[var(--line-amber)] bg-white p-3 text-sm">
-                    <div className="text-gray-600 mb-1">Your reply</div>
-                    <div className="text-[var(--brown-700)]">{r.reply}</div>
-                  </div>
-                )}
+                      {Array.isArray(r.images) && r.images.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {r.images.map((url, idx) => (
+                            <div
+                              key={idx}
+                              className="h-16 w-16 rounded-lg border border-[var(--line-amber)] overflow-hidden bg-white"
+                            >
+                              <img
+                                src={url}
+                                alt="Review image"
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
-                <div className="mt-3">
-                  <button
-                    className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-amber)] px-3 py-1.5 text-sm hover:bg-[var(--cream-50)]"
-                    onClick={() => openReply("review", r.id, r.reply || "")}
-                  >
-                    📝 {r.reply ? "Edit Reply" : "Reply"}
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* Inquiries */}
-        <section className="rounded-2xl border border-[var(--line-amber)] bg-white">
-          <div className="px-5 py-4 border-b border-[var(--line-amber)]">
-            <h3 className="font-semibold text-[var(--brown-700)]">
-              Customer Inquiries
-            </h3>
-            <p className="text-xs text-gray-600">
-              Questions and requests from customers
-            </p>
-          </div>
-
-          <ul className="p-4 space-y-4">
-            {inquiries.map((q) => (
-              <li
-                key={q.id}
-                className="rounded-xl border border-[var(--line-amber)] bg-[var(--amber-50)]/40 p-4"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="font-medium text-[var(--brown-700)] text-sm">
-                    {q.customer}
-                    <span className="text-xs text-gray-600 ml-2">
-                      {new Date(q.dateISO).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <StatusPill color={q.status === "unread" ? "rose" : "green"}>
-                    {q.status === "unread" ? "Unread" : "Read"}
-                  </StatusPill>
-                </div>
-
-                <div className="mt-1 font-medium text-[var(--brown-700)]">
-                  {q.subject}
-                </div>
-                <p className="text-sm text-gray-700 mt-1">{q.message}</p>
-
-                {q.reply && (
-                  <div className="mt-3 rounded-lg border border-[var(--line-amber)] bg-white p-3 text-sm">
-                    <div className="text-gray-600 mb-1">Your response</div>
-                    <div className="text-[var(--brown-700)]">{q.reply}</div>
-                  </div>
-                )}
-
-                <div className="mt-3 flex items-center gap-2">
-                  {q.status === "unread" && (
-                    <button
-                      className="rounded-lg border border-[var(--line-amber)] px-3 py-1.5 text-sm hover:bg-[var(--cream-50)]"
-                      onClick={() => markInquiryRead(q.id)}
-                    >
-                      Mark as Read
-                    </button>
+                      {r.reply && (
+                        <div className="mt-3 rounded-lg border border-[var(--line-amber)] bg-white p-3 text-sm">
+                          <div className="text-gray-600 mb-1">Your reply</div>
+                          <div className="text-[var(--brown-700)]">{r.reply}</div>
+                        </div>
+                      )}
+                    </>
                   )}
-                  <button
-                    className="rounded-lg bg-[var(--orange-600)] text-white px-3 py-1.5 text-sm hover:brightness-95"
-                    onClick={() => openReply("inquiry", q.id, q.reply || "")}
-                  >
-                    Respond
-                  </button>
-                </div>
-              </li>
-            ))}
+
+                  <div className="mt-3 flex items-center gap-2">
+                    <button
+                      className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-amber)] px-3 py-1.5 text-sm hover:bg-[var(--cream-50)]"
+                      onClick={() => openReply(r.id, r.reply || "")}
+                    >
+                      {r.reply ? "Edit Reply" : "Reply"}
+                    </button>
+                    <button
+                      className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-amber)] px-3 py-1.5 text-xs hover:bg-[var(--cream-50)]"
+                      onClick={() =>
+                        setExpandedIds((prev) =>
+                          prev.includes(r.id)
+                            ? prev.filter((id) => id !== r.id)
+                            : [...prev, r.id]
+                        )
+                      }
+                    >
+                      {isExpanded ? "Collapse" : "View"}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </section>
       </div>
