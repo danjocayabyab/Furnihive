@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../components/contexts/AuthContext.jsx";
@@ -10,10 +10,20 @@ export default function AdminLogin() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [awaitingAdmin, setAwaitingAdmin] = useState(false);
 
+  const clearedRef = useRef(false);
   useEffect(() => {
-    if (user && isAdmin) navigate("/admin", { replace: true });
-  }, [user, isAdmin, navigate]);
+    // Always require fresh credentials: clear any existing session when visiting admin login
+    if (clearedRef.current) return; // avoid double-run in React Strict Mode
+    clearedRef.current = true;
+    (async () => {
+      await supabase.auth.signOut();
+      setEmail("");
+      setPassword("");
+      setError("");
+    })();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -33,13 +43,20 @@ export default function AdminLogin() {
         await supabase.auth.signOut();
         throw new Error("This account is not an admin.");
       }
-      navigate("/admin", { replace: true });
+      // Wait for AuthContext to set isAdmin from auth listener before navigating
+      setAwaitingAdmin(true);
     } catch (err) {
       setError(err?.message || "Invalid email or password.");
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (awaitingAdmin && isAdmin) {
+      navigate("/admin", { replace: true });
+    }
+  }, [awaitingAdmin, isAdmin, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#fffaf0] to-[#fff4e6]">

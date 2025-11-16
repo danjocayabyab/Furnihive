@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import UserProfileModal from "./UserProfileModal";
+import { listUsers } from "./api/adminApi";
 
 /* helpers */
 const peso = (n) =>
@@ -27,75 +28,36 @@ function Toast({ show, message, onClose }) {
   );
 }
 
-/* seed */
-const SEED = [
-  {
-    id: "USR-001",
-    name: "John Dela Cruz",
-    email: "john.delacruz@email.com",
-    role: "customer",
-    status: "active",
-    joinDate: "8/15/2024",
-    lastActive: "10/5/2024",
-    days: 446,
-    orders: 5,
-    spent: 45500,
-    recentOrders: [
-      { id: "ORD-001", date: "10/29/2025", amount: 20360, status: "delivered" },
-      { id: "ORD-002", date: "10/22/2025", amount: 16027, status: "processing" },
-      { id: "ORD-003", date: "10/15/2025", amount: 20427, status: "completed" },
-      { id: "ORD-004", date: "10/8/2025",  amount: 20450, status: "completed" },
-      { id: "ORD-005", date: "10/1/2025",  amount: 16308, status: "completed" },
-    ],
-  },
-  {
-    id: "USR-002",
-    name: "Maria Santos",
-    email: "maria.santos@email.com",
-    role: "customer",
-    status: "active",
-    joinDate: "9/20/2024",
-    lastActive: "10/4/2024",
-    days: 410,
-    orders: 3,
-    spent: 28900,
-    recentOrders: [],
-  },
-  {
-    id: "USR-003",
-    name: "Manila Furniture Co.",
-    email: "contact@manilafurniture.com",
-    role: "seller",
-    status: "active",
-    joinDate: "6/10/2024",
-    lastActive: "10/5/2024",
-    days: 512,
-    sales: 25,
-    revenue: 125000,
-    recentOrders: [],
-  },
-  {
-    id: "USR-004",
-    name: "Carlos Rivera",
-    email: "carlos.rivera@email.com",
-    role: "customer",
-    status: "suspended",
-    joinDate: "6/1/2024",
-    lastActive: "10/2/2024",
-    days: 520,
-    orders: 1,
-    spent: 7500,
-    recentOrders: [],
-  },
-];
+/* seed removed; loading from Supabase */
 
 export default function UsersPage() {
-  const [users, setUsers] = useState(SEED);
+  const [users, setUsers] = useState([]);
   const [query, setQuery] = useState("");
   const [role, setRole] = useState("all");
   const [status, setStatus] = useState("all");
 
   const [toast, setToast] = useState({ show: false, message: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const list = await listUsers();
+        if (alive) setUsers(list);
+      } catch (e) {
+        if (alive) setError(e?.message || "Failed to load users");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // profile modal
   const [open, setOpen] = useState(false);
@@ -180,6 +142,12 @@ export default function UsersPage() {
           </div>
 
           <div className="p-4 space-y-3">
+            {loading && (
+              <div className="text-sm text-[var(--brown-700)]/70">Loading users...</div>
+            )}
+            {error && (
+              <div className="text-sm text-red-600">{error}</div>
+            )}
             {filtered.map((u) => (
               <UserCard key={u.id} user={u} onView={() => onView(u)} onSuspend={() => toggleSuspend(u.id)} />
             ))}

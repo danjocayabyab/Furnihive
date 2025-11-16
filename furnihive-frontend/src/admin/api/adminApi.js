@@ -118,3 +118,51 @@ export async function updateStatus(id, status) {
     status: mapStatus(data.status),
   };
 }
+
+// List users (buyers and sellers) from profiles table for Admin Users tab
+// Maps into the shape expected by UsersPage UI.
+export async function listUsers() {
+  // Prefer secure RPC which joins auth.users (email) with profiles, admin-gated by RLS
+  const { data: rpcData, error: rpcErr } = await supabase.rpc("admin_list_users");
+
+  let rows = null;
+  if (!rpcErr && rpcData) {
+    rows = rpcData;
+  } else {
+    // Fallback: read from profiles without email
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        "id, role, seller_approved, first_name, last_name, phone, store_name, avatar_url"
+      )
+      .order("created_at", { ascending: false });
+    if (error) throw (rpcErr || error);
+    rows = data || [];
+  }
+
+  const toName = (p) => {
+    const role = String(p.role || "").toLowerCase();
+    if (role === "seller" && p.store_name) return p.store_name;
+    const fn = p.first_name || "";
+    const ln = p.last_name || "";
+    const full = `${fn} ${ln}`.trim();
+    return full || "Unnamed User";
+  };
+
+  return rows.map((p) => ({
+    id: p.id,
+    name: toName(p),
+    email: p.email || "",
+    role: String(p.role || "buyer").toLowerCase() === "seller" ? "seller" : "customer",
+    status: "active", // No suspension column; default to active
+    joinDate: "",
+    lastActive: "",
+    days: 0,
+    orders: 0,
+    spent: 0,
+    sales: 0,
+    revenue: 0,
+    phone: p.phone || "",
+    avatarUrl: p.avatar_url || "",
+  }));
+}
