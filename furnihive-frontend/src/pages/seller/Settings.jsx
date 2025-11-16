@@ -240,8 +240,6 @@ function OverviewTab({ store }) {
 /* ---------------------- STORE TAB (with Verification + Profile) ---------------------- */
 
 function StoreInfoTab({ store, setStore, onSaveStore, savingStore }) {
-  const [files, setFiles] = useState([]);
-  const [verified, setVerified] = useState(false);
   const { user: authUser, profile, refreshProfile, refreshUser } = useAuth();
 
   const handleChange = (field, value) => {
@@ -257,79 +255,6 @@ function StoreInfoTab({ store, setStore, onSaveStore, savingStore }) {
         setStore((prev) => ({ ...prev, logo: reader.result }));
       };
       reader.readAsDataURL(file);
-    }
-  };
-
-  // Verification files
-  const handleFileChange = (e) => {
-    const newFiles = Array.from(e.target.files);
-    setFiles((prev) => [...prev, ...newFiles]);
-  };
-
-  const handleRemoveFile = (index) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleSubmitVerification = async () => {
-    if (!authUser?.id) {
-      toast.error("You must be logged in to submit verification.");
-      return;
-    }
-    if (!files.length) {
-      toast.error("Please attach at least one document before submitting.");
-      return;
-    }
-
-    try {
-      // 1) Create verification row in DB
-      const { data: verification, error: insertErr } = await supabase
-        .from("store_verifications")
-        .insert({
-          seller_id: authUser.id,
-          status: "pending",
-          notes: null,
-          files: [],
-        })
-        .select("id")
-        .single();
-
-      if (insertErr) throw insertErr;
-      if (!verification?.id) throw new Error("Failed to create verification record.");
-
-      // 2) Upload each file to storage bucket
-      const uploads = files.map(async (file) => {
-        const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
-        const path = `${authUser.id}/${verification.id}/${Date.now()}-${safeName}`;
-        const { error: uploadErr } = await supabase
-          .storage
-          .from("store-verifications")
-          .upload(path, file, {
-            cacheControl: "3600",
-            upsert: false,
-          });
-        if (uploadErr) throw uploadErr;
-        return {
-          path,
-          name: file.name,
-          size: file.size,
-        };
-      });
-
-      const uploadedFiles = await Promise.all(uploads);
-
-      // 3) Update verification row with file metadata
-      const { error: updateErr } = await supabase
-        .from("store_verifications")
-        .update({ files: uploadedFiles })
-        .eq("id", verification.id);
-      if (updateErr) throw updateErr;
-
-      setFiles([]);
-      setVerified(false); // stays pending until admin approves
-      toast.success("Your verification documents have been submitted for review.");
-    } catch (e) {
-      console.error("Verification submit failed", e);
-      toast.error(e?.message || "Failed to submit verification documents.");
     }
   };
 
@@ -458,73 +383,6 @@ function StoreInfoTab({ store, setStore, onSaveStore, savingStore }) {
         refreshProfile={refreshProfile}
         refreshUser={refreshUser}
       />
-
-      {/* Verification Section */}
-      <section className="rounded-2xl border border-[var(--line-amber)] bg-white p-5">
-        <h3 className="font-semibold text-[var(--brown-700)] mb-1">
-          Store Verification
-        </h3>
-        <p className="text-sm text-gray-600 mb-4">
-          Upload official business documents for verification. Accepted files:
-          <b> PDF, JPG, PNG, DOCX</b>.
-        </p>
-
-        {verified ? (
-          <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-700 flex items-center gap-2">
-            ✅ Your account is verified. Thank you for submitting your documents!
-          </div>
-        ) : (
-          <>
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-              onChange={handleFileChange}
-              className="block w-full border border-[var(--line-amber)] rounded-lg px-3 py-2 text-sm bg-white"
-            />
-
-            {files.length > 0 && (
-              <div className="mt-3 space-y-1">
-                <h4 className="text-sm font-medium text-[var(--brown-700)]">
-                  Files to upload:
-                </h4>
-                <ul className="text-sm list-disc pl-5 text-gray-700 space-y-1">
-                  {files.map((f, i) => (
-                    <li key={i} className="flex justify-between items-center">
-                      <span>
-                        {f.name}{" "}
-                        <span className="text-gray-500 text-xs">
-                          ({(f.size / 1024).toFixed(1)} KB)
-                        </span>
-                      </span>
-                      <button
-                        onClick={() => handleRemoveFile(i)}
-                        className="text-red-500 text-xs ml-2 hover:text-red-700"
-                      >
-                        ❌
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="pt-3">
-              <button
-                onClick={handleSubmitVerification}
-                disabled={files.length === 0}
-                className={`rounded-lg px-4 py-2 text-sm text-white ${
-                  files.length === 0
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-[var(--orange-600)] hover:brightness-95"
-                }`}
-              >
-                Submit for Verification
-              </button>
-            </div>
-          </>
-        )}
-      </section>
     </div>
   );
 }

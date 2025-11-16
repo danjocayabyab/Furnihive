@@ -134,13 +134,17 @@ export default function ApplicationsPage() {
       description:
         d.description ||
         "We are a furniture company specializing in modern and contemporary pieces. Our business has been operating for over 5 years with a strong customer base in the local market.",
+      // Preserve real documents array (even if empty). Only fall back
+      // to mock entries when documents is truly missing/null.
       documents:
-        d.documents || [
-          { name: "Business Registration" },
-          { name: "Tax Identification" },
-          { name: "Product Catalog" },
-          { name: "References" },
-        ],
+        Array.isArray(d.documents)
+          ? d.documents
+          : [
+              { name: "Business Registration" },
+              { name: "Tax Identification" },
+              { name: "Product Catalog" },
+              { name: "References" },
+            ],
     }));
     setOpen(true);
   };
@@ -199,6 +203,30 @@ export default function ApplicationsPage() {
                 </option>
               ))}
             </select>
+          </div>
+        </div>
+
+        {/* Status filter buttons with counts */}
+        <div className="px-5 pt-3 pb-1 border-b border-[var(--line-amber)]/40">
+          <div className="flex flex-wrap gap-2">
+            {[ 
+              ["all", `All (${counts.total})`],
+              ["pending", `Pending (${counts.pending})`],
+              ["approved", `Approved (${counts.approved})`],
+              ["rejected", `Rejected (${counts.rejected})`],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setStatus(key)}
+                className={`rounded-full px-3 py-1 text-xs md:text-sm border ${
+                  status === key
+                    ? "bg-[var(--orange-600)] border-[var(--orange-600)] text-white"
+                    : "border-[var(--line-amber)] hover:bg-[var(--cream-50)] text-[var(--brown-700)]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
