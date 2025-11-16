@@ -234,10 +234,36 @@ export default function SellerDashboard() {
                 type="button"
                 onClick={async () => {
                   const latest = await refreshProfile();
-                  if (latest?.seller_approved) {
-                    toast.success("You are now verified! Welcome.");
-                  } else {
-                    toast("Still pending admin approval. Please try again later.");
+                  try {
+                    // Check the latest verification application status
+                    let latestStatus = null;
+                    if (authUser?.id) {
+                      const { data: appRow } = await supabase
+                        .from("store_verifications")
+                        .select("status")
+                        .eq("seller_id", authUser.id)
+                        .order("created_at", { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
+                      latestStatus = appRow?.status?.toString().toLowerCase() || null;
+                    }
+
+                    if (latest?.seller_approved) {
+                      toast.success("You are now verified! Welcome.");
+                    } else if (latestStatus === "rejected") {
+                      toast.error(
+                        "Your verification application was rejected by the admin. Please review your details and submit a new application."
+                      );
+                    } else {
+                      toast("Still pending admin approval. Please try again later.");
+                    }
+                  } catch (e) {
+                    console.warn("Failed to check verification status", e);
+                    if (latest?.seller_approved) {
+                      toast.success("You are now verified! Welcome.");
+                    } else {
+                      toast("Still pending admin approval. Please try again later.");
+                    }
                   }
                 }}
                 className="inline-flex items-center rounded-lg border border-[var(--line-amber)] bg-[var(--orange-600)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-95"
