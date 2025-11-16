@@ -5,57 +5,6 @@ import { logout } from "../../lib/auth.js";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
 import { supabase } from "../../lib/supabaseClient";
 
-/* ---------- Mock data (swap with API later) ---------- */
-// replaced by AuthContext values
-
-const initialOrders = [
-  {
-    id: "ORD-2024-001",
-    date: "2024-12-20",
-    items: 1,
-    title: "Modern Sectional Sofa",
-    price: 45999,
-    status: "Delivered",
-    image:
-      "https://images.unsplash.com/photo-1493666438817-866a91353ca9?q=80&w=800&auto=format&fit=crop",
-    seller: "Manila Furniture Co.",
-    color: "Charcoal Gray",
-    quantity: 1,
-    address: ["123 Katipunan Ave, Loyola Heights", "Quezon City, Metro Manila 1108"],
-    shippingFee: 0,
-  },
-  {
-    id: "ORD-2024-002",
-    date: "2024-12-18",
-    items: 1,
-    title: "Solid Wood Dining Set",
-    price: 35500,
-    status: "Shipped",
-    image:
-      "https://images.unsplash.com/photo-1524758631624-e2822e304c36?q=80&w=800&auto=format&fit=crop",
-    seller: "Cebu Woodworks",
-    color: "Natural",
-    quantity: 1,
-    address: ["45 Ayala Ave, CBD", "Makati, Metro Manila 1226"],
-    shippingFee: 500,
-  },
-  {
-    id: "ORD-2024-003",
-    date: "2024-12-15",
-    items: 2,
-    title: "Premium Bed Frame + Mattress",
-    price: 28999,
-    status: "Processing",
-    image:
-      "https://images.unsplash.com/photo-1505691938895-1758d7feb511?q=80&w=800&auto=format&fit=crop",
-    seller: "Davao Sleep Solutions",
-    color: "Walnut",
-    quantity: 2,
-    address: ["Blk 7 Lot 12 Commonwealth", "QC, Metro Manila 1118"],
-    shippingFee: 500,
-  },
-];
-
 const STATUS_STYLES = {
   Delivered: "bg-green-100 text-green-700 border border-green-200",
   Shipped: "bg-sky-100 text-sky-700 border border-sky-200",
@@ -136,6 +85,84 @@ export default function Profile() {
     };
   }, [authUser, profile]);
 
+  // Load real orders for this user from Supabase
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOrders() {
+      if (!authUser?.id) {
+        setOrders([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("orders")
+        .select(
+          "id, created_at, total_amount, item_count, summary_title, summary_image, status, seller_display, color"
+        )
+        .eq("user_id", authUser.id)
+        .order("created_at", { ascending: false });
+
+      if (cancelled || error || !data) return;
+
+      const orderIds = data.map((o) => o.id).filter(Boolean);
+
+      // Derive per-order status from order_items so buyer matches seller view
+      const statusByOrder = new Map();
+      if (orderIds.length) {
+        const { data: items } = await supabase
+          .from("order_items")
+          .select("order_id, status")
+          .in("order_id", orderIds);
+
+        const priority = { Delivered: 3, Shipped: 2, Processing: 1, Pending: 0 };
+        (items || []).forEach((row) => {
+          const oid = row.order_id;
+          if (!oid) return;
+          const raw = (row.status || "").toString();
+          const normalized =
+            /delivered/i.test(raw)
+              ? "Delivered"
+              : /shipped/i.test(raw)
+              ? "Shipped"
+              : /process/i.test(raw)
+              ? "Processing"
+              : /pending/i.test(raw)
+              ? "Pending"
+              : null;
+          if (!normalized) return;
+          const current = statusByOrder.get(oid);
+          if (!current || priority[normalized] > priority[current]) {
+            statusByOrder.set(oid, normalized);
+          }
+        });
+      }
+
+      const mapped = data.map((o) => ({
+        id: o.id,
+        date: o.created_at ? o.created_at.slice(0, 10) : "",
+        items: o.item_count || 0,
+        title: o.summary_title || "Order",
+        price: Number(o.total_amount || 0),
+        // Status is now driven primarily by order_items.status so it matches seller view
+        status: statusByOrder.get(o.id) || "Processing",
+        image: o.summary_image || "",
+        seller: o.seller_display || "",
+        color: o.color || "",
+        quantity: o.item_count || 0,
+        address: [],
+        shippingFee: 0,
+      }));
+
+      setOrders(mapped);
+    }
+
+    loadOrders();
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id]);
+
   useEffect(() => {
     let cancelled = false;
     async function loadDefaultAddress() {
@@ -163,7 +190,7 @@ export default function Profile() {
     };
   }, [authUser?.id]);
 
-  const [orders] = useState(initialOrders);
+  const [orders, setOrders] = useState([]);
   const [reviews, setReviews] = useState([]);
 
   // Modals
@@ -184,6 +211,26 @@ export default function Profile() {
     setReviews((r) => [newReview, ...r]);
     setReviewFor(null);
     setTab("reviews");
+  };
+
+  const handleMarkReceived = async (orderId) => {
+    if (!orderId) return;
+    try {
+      await supabase
+        .from("orders")
+        .update({ status: "Delivered" })
+        .eq("id", orderId)
+        .eq("user_id", authUser?.id || "");
+    } catch {
+      // ignore errors; still update local state for UX
+    }
+
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: "Delivered" } : o))
+    );
+    setDetailsFor((prev) =>
+      prev && prev.id === orderId ? { ...prev, status: "Delivered" } : prev
+    );
   };
 
   const handleLogout = () => {
@@ -306,7 +353,12 @@ export default function Profile() {
 
       {/* Modals */}
       {detailsFor && (
-        <OrderDetailsModal order={detailsFor} onClose={() => setDetailsFor(null)} money={money} />
+        <OrderDetailsModal
+          order={detailsFor}
+          onClose={() => setDetailsFor(null)}
+          money={money}
+          onMarkReceived={handleMarkReceived}
+        />
       )}
       {reviewFor && (
         <WriteReviewModal
@@ -359,8 +411,10 @@ function OrdersPanel({ money, orders, onViewDetails, onWriteReview }) {
         <div key={o.id} className="rounded-2xl border border-[var(--line-amber)] bg-white p-4">
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-sm font-semibold text-[var(--brown-700)]">{o.id}</div>
-              <div className="text-xs text-gray-600">Placed on {o.date}</div>
+              <div className="text-sm font-semibold text-[var(--brown-700)]">
+                {formatOrderId(o.id)}
+              </div>
+              <div className="text-xs text-gray-600">Placed on {formatOrderDate(o.date)}</div>
             </div>
             <span className={`text-xs px-2 py-1 rounded-full ${STATUS_STYLES[o.status]}`}>
               {o.status}
@@ -442,7 +496,25 @@ function TabButton({ active, onClick, children }) {
   );
 }
 
+function formatOrderId(id) {
+  if (!id) return "Order";
+  return `ORD-${String(id).slice(0, 8).toUpperCase()}`;
+}
+
+function formatOrderDate(date) {
+  if (!date) return "";
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return String(date);
+  return d.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
 function OrderRow({ o, money }) {
+  const displayId = formatOrderId(o.id);
+  const displayDate = formatOrderDate(o.date);
   return (
     <div className="flex items-center gap-3">
       <img
@@ -451,10 +523,10 @@ function OrderRow({ o, money }) {
         className="h-14 w-20 object-cover rounded-lg border border-[var(--line-amber)]"
       />
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-[var(--brown-700)] truncate">{o.id}</div>
+        <div className="text-sm font-semibold text-[var(--brown-700)] truncate">{displayId}</div>
         <div className="text-sm text-[var(--brown-700)] truncate">{o.title}</div>
         <div className="text-xs text-gray-600">
-          {o.date} • {money(o.price)}
+          {displayDate} • {money(o.price)}
         </div>
       </div>
       <span className={`text-xs px-2 py-1 rounded-full ${STATUS_STYLES[o.status]}`}>
@@ -485,15 +557,14 @@ function OrderDetailsModal({ order, onClose, money }) {
           />
           <div className="flex-1">
             <div className="font-semibold text-[var(--brown-700)]">{order.title}</div>
-            <div className="text-xs text-gray-600">Order ID: {order.id}</div>
-            <div className="text-xs text-gray-600">Date: {order.date}</div>
+            <div className="text-xs text-gray-600">Order ID: {formatOrderId(order.id)}</div>
+            <div className="text-xs text-gray-600">Date: {formatOrderDate(order.date)}</div>
             <div className="text-xs text-gray-600">Seller: {order.seller}</div>
             <div className="text-xs text-gray-600">Color: {order.color}</div>
             <div className="text-xs text-gray-600">Qty: {order.quantity}</div>
           </div>
           <div className="text-right">
             <div className="text-sm font-bold text-[var(--brown-700)]">{money(order.price)}</div>
-            <div className="text-xs text-gray-600">Shipping: {order.shippingFee ? money(order.shippingFee) : "FREE"}</div>
             <div className="text-sm font-semibold text-[var(--brown-700)] mt-1">
               Total: {money(order.price + (order.shippingFee || 0))}
             </div>

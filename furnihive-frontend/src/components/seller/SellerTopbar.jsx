@@ -2,14 +2,22 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import useSellerNotifications from "../../seller/lib/useNotifications.js";
 import { logout } from "../../lib/auth.js";
+import { useAuth } from "../contexts/AuthContext.jsx";
+import { supabase } from "../../lib/supabaseClient";
 
 export default function SellerTopbar() {
   const navigate = useNavigate();
   const [accountOpen, setAccountOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
+  const { user } = useAuth();
+  const sellerId = user?.id;
+
   // Seller-specific notification bus (separate from Admin)
   const { items, unread, markRead, markAllRead } = useSellerNotifications();
+
+  // Unread messages across all conversations for this seller
+  const [msgUnread, setMsgUnread] = useState(0);
 
   const accountRef = useRef(null);
   const notifRef = useRef(null);
@@ -27,6 +35,54 @@ export default function SellerTopbar() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  // Poll seller conversations for unread message count
+  useEffect(() => {
+    if (!sellerId) return;
+
+    let cancelled = false;
+
+    async function loadUnread() {
+      const { data, error } = await supabase
+        .from("conversations")
+        .select("seller_unread_count")
+        .eq("seller_id", sellerId);
+
+      if (cancelled || error || !data) return;
+
+      const total = data.reduce(
+        (n, c) => n + (Number.isFinite(c.seller_unread_count) ? c.seller_unread_count : 0),
+        0
+      );
+      setMsgUnread(total);
+    }
+
+    loadUnread();
+    const id = setInterval(loadUnread, 30000);
+
+    // Realtime: update unread count immediately when conversations change
+    const channel = supabase
+      .channel(`seller-unread-${sellerId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'conversations',
+          filter: `seller_id=eq.${sellerId}`,
+        },
+        () => {
+          if (!cancelled) loadUnread();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+       supabase.removeChannel(channel);
+    };
+  }, [sellerId]);
 
   const handleLogout = () => {
     logout();

@@ -68,9 +68,7 @@ export default function UserSupport() {
         <p className="text-sm text-[var(--brown-700)]/80 mb-3">
           If you have questions about your account, orders, or need help with a suspension, please send us a ticket below.
         </p>
-        <p className="text-sm text-[var(--brown-700)]/80">
-          You can also reach us via email at <span className="font-medium">support@furnihive.com</span>.
-        </p>
+        
       </div>
 
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white px-5 py-4 shadow-card space-y-4">

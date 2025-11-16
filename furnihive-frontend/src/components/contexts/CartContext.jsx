@@ -3,22 +3,26 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useRef } fro
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "./AuthContext.jsx";
 
-const STORAGE_KEY = "fh_cart_v1";
+const STORAGE_KEY_BASE = "fh_cart_v1";
+
+function storageKeyForUser(userId) {
+  return userId ? `${STORAGE_KEY_BASE}_${userId}` : `${STORAGE_KEY_BASE}_guest`;
+}
 
 const CartContext = createContext(null);
 
-function loadFromStorage() {
+function loadFromStorage(userId) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKeyForUser(userId));
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
 }
 
-function saveToStorage(items) {
+function saveToStorage(userId, items) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    localStorage.setItem(storageKeyForUser(userId), JSON.stringify(items));
   } catch {}
 }
 
@@ -46,6 +50,9 @@ function reducer(state, action) {
     }
     case "CLEAR":
       return [];
+    case "SET": {
+      return Array.isArray(action.payload) ? action.payload : [];
+    }
     default:
       return state;
   }
@@ -53,10 +60,21 @@ function reducer(state, action) {
 
 export function CartProvider({ children }) {
   const { user, profile } = useAuth();
-  const [items, dispatch] = useReducer(reducer, [], loadFromStorage);
+  const [items, dispatch] = useReducer(reducer, []);
   const cartIdRef = useRef(null);
 
-  useEffect(() => saveToStorage(items), [items]);
+  // Persist cart per user (or guest) in localStorage
+  useEffect(() => {
+    const userId = user?.id || null;
+    saveToStorage(userId, items);
+  }, [items, user?.id]);
+
+  // When user changes, hydrate cart from the appropriate storage bucket
+  useEffect(() => {
+    const userId = user?.id || null;
+    const stored = loadFromStorage(userId);
+    dispatch({ type: "SET", payload: stored });
+  }, [user?.id]);
 
   useEffect(() => {
     let cancelled = false;

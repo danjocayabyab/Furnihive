@@ -69,9 +69,7 @@ export default function SellerSupport() {
         <p className="text-sm text-[var(--brown-700)]/80 mb-3">
           Need help with your seller account, verification, or a suspension? Send us a ticket and our team will review your case.
         </p>
-        <p className="text-sm text-[var(--brown-700)]/80">
-          You can also reach us via email at <span className="font-medium">support@furnihive.com</span>.
-        </p>
+        
       </div>
 
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white px-5 py-4 shadow-card space-y-4">

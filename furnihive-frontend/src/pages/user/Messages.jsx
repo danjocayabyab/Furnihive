@@ -176,13 +176,34 @@ export default function Messages() {
         text: txt,
       });
 
-      await supabase
-        .from("conversations")
-        .update({
-          last_message: txt,
-          last_message_at: new Date().toISOString(),
-        })
-        .eq("id", conversationId);
+      // Increment seller_unread_count so the seller sees a new unread message
+      try {
+        const { data: convo } = await supabase
+          .from("conversations")
+          .select("seller_unread_count")
+          .eq("id", conversationId)
+          .single();
+
+        const nextUnread = (convo?.seller_unread_count || 0) + 1;
+
+        await supabase
+          .from("conversations")
+          .update({
+            last_message: txt,
+            last_message_at: new Date().toISOString(),
+            seller_unread_count: nextUnread,
+          })
+          .eq("id", conversationId);
+      } catch {
+        // best-effort; if this fails the message still sends
+        await supabase
+          .from("conversations")
+          .update({
+            last_message: txt,
+            last_message_at: new Date().toISOString(),
+          })
+          .eq("id", conversationId);
+      }
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn("Failed to send message", e?.message || e);
@@ -613,9 +634,6 @@ export default function Messages() {
                       <span className="rounded-full border border-[var(--line-amber)] bg-[var(--amber-50)] px-1.5 text-[10px] text-[var(--orange-700)]">
                         {active.role}
                       </span>
-                    </div>
-                    <div className={`text-[11px] ${active.online ? "text-emerald-600" : "text-gray-500"}`}>
-                      {active.online ? "Online" : "Offline"}
                     </div>
                   </div>
                 </div>

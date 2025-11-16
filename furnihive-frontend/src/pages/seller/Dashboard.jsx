@@ -65,13 +65,28 @@ export default function SellerDashboard() {
   }, [authUser?.id, isVerified, isSuspended]);
 
   // When seller becomes verified (after admin approval), hide verification gate
-  // and show a one-time welcome message.
+  // and show a one-time welcome message per account, remembered in localStorage.
   useEffect(() => {
-    if (!initialVerifiedRef.current && isVerified) {
+    if (!authUser?.id) return;
+    if (!isVerified) return;
+
+    const key = `fh_seller_verified_seen_${authUser.id}`;
+    const seen = (() => {
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    })();
+
+    if (!seen) {
       setVerifyModalOpen(false);
       setShowWelcomeModal(true);
+      try {
+        localStorage.setItem(key, "1");
+      } catch {}
     }
-  }, [isVerified]);
+  }, [authUser?.id, isVerified]);
 
   // While verified, periodically refresh profile so that if an admin later
   // rejects the application, seller_approved will update and the gate will

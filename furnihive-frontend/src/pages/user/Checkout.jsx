@@ -12,7 +12,7 @@ export default function Checkout() {
   const navigate = useNavigate();
   const { items, clearCart } = useCart();
   const location = useLocation();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
 
   const isSuspended = !!profile?.suspended;
 
@@ -126,8 +126,65 @@ export default function Checkout() {
       ? card.name && card.number && card.exp && card.cvv
       : true) && agree;
 
-  const placeOrder = () => {
-    // Normally: await api.post('/orders', { items, ship, payMethod, cardLast4... })
+  const placeOrder = async () => {
+    if (!checkoutItems.length) return;
+
+    const first = checkoutItems[0];
+    const itemCount = checkoutItems.reduce((n, it) => n + (it.qty || 1), 0);
+
+    // Build buyer display name and shipping address snapshot for sellers
+    const buyerName = `${ship.firstName || ""} ${ship.lastName || ""}`.trim() || null;
+    const addrParts = [];
+    if (ship.street) addrParts.push(ship.street);
+    const cityProv = [ship.city, ship.province].filter(Boolean).join(", ");
+    const withPostal = [cityProv, ship.zip].filter(Boolean).join(" ");
+    if (withPostal) addrParts.push(withPostal);
+    const buyerAddress = addrParts.join(" · ") || null;
+
+    // Persist basic order summary to Supabase
+    try {
+      const { data: created, error: orderErr } = await supabase
+        .from("orders")
+        .insert({
+        user_id: user?.id || null,
+        total_amount: totals.total,
+        item_count: itemCount,
+        summary_title: first.title,
+        summary_image: first.image || null,
+        seller_display: first.seller || null,
+        color: first.color || null,
+        status: "Pending",
+      })
+        .select("id")
+        .single();
+
+      if (!orderErr && created?.id) {
+        const orderId = created.id;
+        const itemsPayload = checkoutItems
+          .filter((it) => it.seller_id) // only items with a known seller
+          .map((it) => ({
+            order_id: orderId,
+            seller_id: it.seller_id,
+            product_id: it.id,
+            title: it.title,
+            image: it.image || null,
+            qty: it.qty || 1,
+            unit_price: Number(it.price || 0),
+            shipping_fee: 0,
+            buyer_name: buyerName,
+            buyer_address: buyerAddress,
+            payment_method: payMethod || null,
+            status: "Pending",
+          }));
+
+        if (itemsPayload.length) {
+          await supabase.from("order_items").insert(itemsPayload);
+        }
+      }
+    } catch {
+      // best-effort; even if this fails, still clear cart and show success UI
+    }
+
     clearCart();
     navigate("/checkout/success", { state: { total: totals.total } });
   };
@@ -243,7 +300,6 @@ export default function Checkout() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium text-[var(--brown-700)] text-sm">{it.title}</div>
-                  <div className="text-xs text-gray-600">Color: {it.color || "Default"}</div>
                   <div className="text-[11px] text-gray-600">Sold by: {it.seller || "Manila Furniture Co."}</div>
                   <div className="text-sm font-semibold">{peso((it.price || 0) * (it.qty || 1))}</div>
                 </div>

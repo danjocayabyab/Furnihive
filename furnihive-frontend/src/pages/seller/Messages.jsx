@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
+import { addNotification } from "../../seller/lib/notifications.js";
 
 /**
  * Seller Messages
@@ -67,13 +68,13 @@ export default function SellerMessages() {
 
   function onPickThread(id) {
     setActiveId(id);
-    setThreads((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, unread: 0 } : t))
-    );
+    // Mark all conversations as read locally when seller views messages
+    setThreads((prev) => prev.map((t) => ({ ...t, unread: 0 })));
+    // And clear unread counts in the database for this seller so the badge clears
     supabase
       .from("conversations")
       .update({ seller_unread_count: 0 })
-      .eq("id", id);
+      .eq("seller_id", sellerId);
   }
 
   const filteredThreads = useMemo(() => {
@@ -215,7 +216,8 @@ export default function SellerMessages() {
           buyerRole: "buyer",
           lastSnippet: c.last_message || "",
           lastAt: c.last_message_at,
-          unread: c.seller_unread_count || 0,
+          // Do not show per-thread unread badges for sellers
+          unread: 0,
           avatar: b.avatar_url || "",
           online,
         };
@@ -326,10 +328,24 @@ export default function SellerMessages() {
                 : {}
             );
 
-            return {
+            const next = {
               ...prev,
               [activeId]: [...existing, mapped],
             };
+
+            // Also push a seller notification for this new buyer message
+            if (m.sender_role === 'buyer') {
+              try {
+                addNotification({
+                  title: 'New message from customer',
+                  body: m.text || 'New message received',
+                  link: '/seller/messages',
+                  type: 'info',
+                });
+              } catch {}
+            }
+
+            return next;
           });
         }
       )
@@ -462,19 +478,17 @@ export default function SellerMessages() {
         {/* right: thread */}
         <section className="flex-1 rounded-2xl border border-[var(--line-amber)] bg-white flex flex-col min-w-0">
           {/* thread header */}
-<div className="p-4 border-b border-[var(--line-amber)] flex items-center gap-3">
-  <img
-    src={active?.avatar}
-    className="h-9 w-9 rounded-full object-cover border border-[var(--line-amber)]"
-  />
-  <div>
-    <div className="font-medium text-[var(--brown-700)] leading-tight">
-      {active?.buyerName}
-    </div>
-    <div className="text-[11px] text-green-700">Online</div>
-  </div>
-</div>
-
+          <div className="p-4 border-b border-[var(--line-amber)] flex items-center gap-3">
+            <img
+              src={active?.avatar}
+              className="h-9 w-9 rounded-full object-cover border border-[var(--line-amber)]"
+            />
+            <div>
+              <div className="font-medium text-[var(--brown-700)] leading-tight">
+                {active?.buyerName}
+              </div>
+            </div>
+          </div>
 
           {/* message list */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
