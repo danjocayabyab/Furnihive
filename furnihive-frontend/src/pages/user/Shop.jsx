@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import ProductCard from "../../components/ProductCard.jsx";
 import { supabase } from "../../lib/supabaseClient";
 
 export default function Shop() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   const [checkedCats, setCheckedCats] = useState([]);
@@ -195,12 +196,14 @@ export default function Shop() {
       {/* Page heading */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Link
-            to="/home"
-            className="text-sm text-[var(--orange-600)] hover:underline"
+          <button
+            type="button"
+            onClick={() => navigate("/home")}
+            className="rounded-lg border border-[var(--line-amber)] bg-white w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
+            aria-label="Back to Home"
           >
-            ← Back to Home
-          </Link>
+            ←
+          </button>
           <h1 className="text-xl font-semibold text-[var(--brown-700)]">
             Shop
           </h1>

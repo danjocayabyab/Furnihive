@@ -167,13 +167,24 @@ export default function Checkout() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      {/* Header: back link + steps aligned */}
-      <div className="mb-4 flex items-center gap-2">
-        <Link to="/cart" className="text-sm text-[var(--orange-600)] hover:underline whitespace-nowrap">
-          ← Back to Cart
-        </Link>
-        <div className="flex-1 flex justify-center">
-          <Progress step={step} />
+      {/* Header: back button + steps aligned */}
+      <div className="mb-4 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => navigate("/cart")}
+          className="rounded-lg border border-[var(--line-amber)] bg-white w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
+          aria-label="Back to Cart"
+        >
+          ←
+        </button>
+        <div className="flex-1 flex items-center justify-between gap-2">
+          <div className="hidden sm:block">
+            <h1 className="text-base font-semibold text-[var(--brown-700)]">Checkout</h1>
+            <p className="text-xs text-gray-600">Complete your shipping, payment, and review.</p>
+          </div>
+          <div className="flex-1 flex justify-center">
+            <Progress step={step} />
+          </div>
         </div>
       </div>
 

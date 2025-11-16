@@ -194,31 +194,26 @@ export default function Profile() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 space-y-6">
       {/* Top bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link to="/home" className="text-sm text-[var(--orange-600)] hover:underline">
-            ← Back to Home
-          </Link>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => navigate("/home")}
+          className="rounded-lg border border-[var(--line-amber)] bg-white w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
+          aria-label="Back to Home"
+        >
+          ←
+        </button>
+        <div>
           <h1 className="text-xl font-semibold text-[var(--brown-700)]">My Profile</h1>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="secondary"
-            className="px-3 py-2 text-sm"
-            onClick={() => navigate("/profile/settings")}
-          >
-            Account Settings
-          </Button>
-          <Button className="px-3 py-2 text-sm" onClick={handleLogout}>
-            Logout
-          </Button>
+          <p className="text-xs text-gray-600">View your orders, reviews, and account details.</p>
         </div>
       </div>
 
       {/* Header card */}
       <div className="rounded-2xl overflow-hidden border border-[var(--line-amber)]">
-        <div className="bg-gradient-to-r from-[var(--amber-500)] to-[var(--orange-600)] p-5 text-white flex items-center gap-4">
-          {(() => {
+        <div className="bg-gradient-to-r from-[var(--amber-500)] to-[var(--orange-600)] p-5 text-white flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {(() => {
             const md = authUser?.user_metadata || {};
             const fullName = [
               profile?.first_name || md.first_name,
@@ -257,10 +252,20 @@ export default function Profile() {
                 </>
               );
             })()}
-            <div className="text-xs opacity-90 mt-1 flex items-center gap-3">
-              <span>🪪 Member</span>
-              <span>📍 {defaultAddress || "—"}</span>
+              <div className="text-xs opacity-90 mt-1 flex items-center gap-3">
+                <span>🪪 Member</span>
+                <span>📍 {defaultAddress || "—"}</span>
+              </div>
             </div>
+          </div>
+          <div>
+            <Button
+              variant="secondary"
+              className="px-3 py-1.5 text-sm bg-white text-[var(--orange-600)] border border-white hover:bg-[var(--cream-50)]"
+              onClick={() => navigate("/profile/settings")}
+            >
+              Edit Profile
+            </Button>
           </div>
         </div>
 

@@ -1,16 +1,15 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
 import toast from "react-hot-toast";
 import { createSupportTicket } from "../../lib/supportApi";
 
 const CATEGORIES = ["orders", "payments", "account", "seller", "other"];
-const PRIORITIES = ["low", "normal", "high", "urgent"];
 
 export default function SellerSupport() {
+  const navigate = useNavigate();
   const [subject, setSubject] = useState("");
   const [category, setCategory] = useState("seller");
-  const [priority, setPriority] = useState("normal");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { user, profile } = useAuth();
@@ -28,7 +27,7 @@ export default function SellerSupport() {
         type: "seller",
         subject,
         category,
-        priority,
+        priority: "normal",
         message,
         email: user?.email || md.email || null,
         name:
@@ -40,7 +39,6 @@ export default function SellerSupport() {
       setSubject("");
       setMessage("");
       setCategory("seller");
-      setPriority("normal");
     } catch (e) {
       toast.error(e?.message || "Failed to submit ticket.");
     } finally {
@@ -49,9 +47,25 @@ export default function SellerSupport() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 space-y-4">
+    <div className="mx-auto max-w-3xl px-4 py-6 space-y-4">
+      {/* Header with back button */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => navigate("/seller")}
+          className="rounded-lg border border-[var(--line-amber)] bg-white w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
+          aria-label="Back"
+        >
+          ←
+        </button>
+        <div>
+          <h1 className="text-xl font-semibold text-[var(--brown-700)]">Seller Support</h1>
+          <p className="text-xs text-gray-600">Send a ticket about your seller account, verification, or suspension.</p>
+        </div>
+      </div>
+
       <div className="rounded-2xl border border-[var(--line-amber)] bg-white px-5 py-4 shadow-card">
-        <h1 className="text-lg font-semibold text-[var(--brown-700)] mb-2">Seller Support</h1>
+        <h2 className="text-lg font-semibold text-[var(--brown-700)] mb-2">Contact our team</h2>
         <p className="text-sm text-[var(--brown-700)]/80 mb-3">
           Need help with your seller account, verification, or a suspension? Send us a ticket and our team will review your case.
         </p>
@@ -88,23 +102,6 @@ export default function SellerSupport() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-[var(--brown-700)] mb-1">Priority</label>
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value)}
-              className="w-full rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm outline-none capitalize"
-            >
-              {PRIORITIES.map((p) => (
-                <option key={p} value={p}>
-                  {p.charAt(0).toUpperCase() + p.slice(1)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
         <div>
           <label className="block text-xs font-semibold text-[var(--brown-700)] mb-1">Message</label>
           <textarea
@@ -115,13 +112,7 @@ export default function SellerSupport() {
           />
         </div>
 
-        <div className="flex items-center justify-between gap-2">
-          <Link
-            to="/seller"
-            className="text-sm text-[var(--orange-600)] hover:underline"
-          >
-            Ⴔ Back to seller dashboard
-          </Link>
+        <div className="flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={onSubmit}

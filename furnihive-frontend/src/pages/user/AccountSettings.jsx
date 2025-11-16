@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, Link, useNavigate } from "react-router-dom";
+import Button from "../../components/ui/Button.jsx";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
 import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabaseClient";
@@ -25,8 +26,14 @@ export default function AccountSettings() {
   const [sp, setSp] = useSearchParams();
   const tab = sp.get("tab") || "personal";
   const navigate = useNavigate();
-  const { user: authUser, profile } = useAuth();
+  const { user: authUser, profile, refreshProfile } = useAuth();
   const isSuspended = !!profile?.suspended;
+
+  useEffect(() => {
+    // Ensure we have the freshest profile (including updated suspended flag)
+    refreshProfile?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (isSuspended) {
     return (
@@ -65,10 +72,18 @@ export default function AccountSettings() {
     <div className="mx-auto max-w-5xl px-4 py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link to="/profile" className="text-sm text-[var(--orange-600)] hover:underline">
-          ← Back to Profile
-        </Link>
-        <h1 className="text-xl font-semibold text-[var(--brown-700)]">Account Settings</h1>
+        <button
+          type="button"
+          onClick={() => navigate("/profile")}
+          className="rounded-lg border border-[var(--line-amber)] bg-white w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
+          aria-label="Back to Profile"
+        >
+          ←
+        </button>
+        <div>
+          <h1 className="text-xl font-semibold text-[var(--brown-700)]">Account Settings</h1>
+          <p className="text-xs text-gray-600">Manage your personal info and addresses.</p>
+        </div>
       </div>
 
       {/* Tab bar */}

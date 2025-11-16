@@ -175,15 +175,23 @@ export default function ProductDetail() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 space-y-8">
-      {/* Breadcrumbs */}
-      <div className="text-sm text-gray-600 flex gap-2 flex-wrap">
-        <Link to="/shop" className="text-[var(--orange-600)] hover:underline">
-          Back to Shop
-        </Link>
-        <span>/</span>
-        <span>{product?.category || "Living Room"}</span>
-        <span>/</span>
-        <span className="text-[var(--brown-700)] font-semibold">{product?.title || (loading ? "Loading..." : "")}</span>
+      {/* Header with back button */}
+      <div className="flex items-center gap-3 mb-2">
+        <button
+          type="button"
+          onClick={() => navigate("/shop")}
+          className="rounded-lg border border-[var(--line-amber)] bg-white w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
+          aria-label="Back to Shop"
+        >
+          ←
+        </button>
+        <div className="text-sm text-gray-600 flex flex-wrap gap-1">
+          <span className="text-[var(--orange-600)]">Shop</span>
+          <span>/</span>
+          <span>{product?.category || "Living Room"}</span>
+          <span>/</span>
+          <span className="text-[var(--brown-700)] font-semibold">{product?.title || (loading ? "Loading..." : "")}</span>
+        </div>
       </div>
 
       {/* Product Card */}

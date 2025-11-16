@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import useSellerNotifications from "../../seller/lib/useNotifications.js";
 import { logout } from "../../lib/auth.js";
 
 export default function SellerTopbar() {
   const navigate = useNavigate();
   const [accountOpen, setAccountOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState([
-    { id: 1, text: "New order received", read: false },
-    { id: 2, text: "Product approved", read: false },
-    { id: 3, text: "Verification completed", read: false },
-  ]);
+
+  // Seller-specific notification bus (separate from Admin)
+  const { items, unread, markRead, markAllRead } = useSellerNotifications();
 
   const accountRef = useRef(null);
   const notifRef = useRef(null);
@@ -34,11 +33,10 @@ export default function SellerTopbar() {
     navigate("/login");
   };
 
-  // Mark notifications as read
-  const markAsRead = (id) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
+  const openNotification = (n) => {
+    markRead(n.id);
+    if (n.link) navigate(n.link);
+    setNotifOpen(false);
   };
 
   return (
@@ -59,35 +57,68 @@ export default function SellerTopbar() {
 
         {/* Right: notifications + messages + account */}
         <div className="flex items-center gap-4">
-          {/* Notifications */}
+          {/* Notifications (same pattern as Admin) */}
           <div className="relative" ref={notifRef}>
             <button
               onClick={() => setNotifOpen((s) => !s)}
-              className="relative flex items-center gap-1 px-3 h-9 rounded-full hover:bg-[var(--cream-50)] text-sm font-medium text-[var(--orange-700)]"
+              className="relative grid h-9 w-9 place-items-center rounded-full hover:bg-[var(--cream-50)] text-[var(--orange-700)]"
               title="Notifications"
             >
               ⩍
+              {unread > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--orange-600)] ring-2 ring-white" />
+              )}
             </button>
 
             {notifOpen && (
-              <div className="absolute right-0 mt-1 w-64 rounded-xl border border-[var(--line-amber)] bg-white shadow-card overflow-hidden z-50">
-                {notifications.length === 0 ? (
-                  <div className="p-3 text-sm text-gray-500">No notifications</div>
-                ) : (
-                  <ul>
-                    {notifications.map((n) => (
-                      <li
+              <div className="absolute right-0 mt-1 w-[360px] rounded-xl border border-[var(--line-amber)] bg-white shadow-card overflow-hidden z-50">
+                <div className="px-4 py-2 flex items-center justify-between border-b border-[var(--line-amber)]/60">
+                  <div className="font-medium text-[var(--brown-700)]">Notifications</div>
+                  <button
+                    onClick={markAllRead}
+                    className="text-[12px] px-2 py-1 rounded border border-[var(--line-amber)] hover:bg-[var(--cream-50)]"
+                  >
+                    Mark all as read
+                  </button>
+                </div>
+
+                <div className="max-h-80 overflow-auto">
+                  {items.length === 0 ? (
+                    <div className="px-4 py-6 text-sm text-[var(--brown-700)]/60">No notifications.</div>
+                  ) : (
+                    items.map((n) => (
+                      <button
                         key={n.id}
-                        className={`px-4 py-3 text-sm cursor-pointer hover:bg-[var(--cream-50)] ${
-                          !n.read ? "font-medium bg-[var(--cream-50)]" : ""
+                        onClick={() => openNotification(n)}
+                        className={`w-full text-left px-4 py-3 flex gap-2 items-start border-b border-[var(--line-amber)]/50 hover:bg-[var(--cream-50)] ${
+                          n.read ? "opacity-80" : ""
                         }`}
-                        onClick={() => markAsRead(n.id)}
                       >
-                        {n.text}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                        <span className="mt-0.5 text-[16px]">
+                          {n.type === "success"
+                            ? "✅"
+                            : n.type === "warning"
+                            ? "⚠️"
+                            : n.type === "error"
+                            ? "⛔"
+                            : "🛈"}
+                        </span>
+                        <span className="flex-1">
+                          <div className="text-[13px] font-medium text-[var(--brown-700)]">{n.title}</div>
+                          {n.body && (
+                            <div className="text-[12px] text-[var(--brown-700)]/80">{n.body}</div>
+                          )}
+                          <div className="text-[11px] text-[var(--brown-700)]/50 mt-0.5">
+                            {new Date(n.ts).toLocaleString()}
+                          </div>
+                        </span>
+                        {!n.read && (
+                          <span className="mt-1 h-2 w-2 rounded-full bg-[var(--orange-600)]" />
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -120,6 +151,15 @@ export default function SellerTopbar() {
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--cream-50)]"
                 >
                   Account Settings
+                </button>
+                <button
+                  onClick={() => {
+                    setAccountOpen(false);
+                    navigate("/seller/support");
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--cream-50)] border-t border-[var(--line-amber)]/60"
+                >
+                  Seller Support
                 </button>
                 <button
                   onClick={() => {

@@ -1,6 +1,6 @@
 // src/pages/user/Messages.jsx
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 /** Mock data (same as before) */
 const MOCK_THREADS = [
@@ -74,6 +74,7 @@ const MOCK_MSGS = {
 };
 
 export default function Messages() {
+  const navigate = useNavigate();
   const [threads, setThreads] = useState(MOCK_THREADS);
   const [activeId, setActiveId] = useState(MOCK_THREADS[0].id);
   const [messagesById, setMessagesById] = useState(MOCK_MSGS);
@@ -214,21 +215,23 @@ export default function Messages() {
   return (
     <div className="h-[calc(100vh-80px)] max-w-6xl mx-auto px-4 py-5">
       {/* Page header */}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Link to="/home" className="text-sm text-[var(--orange-600)] hover:underline">
-            ← Back to Home
-          </Link>
-          <div className="flex items-center gap-2">
-            
-            <h1 className="text-xl font-semibold text-[var(--brown-700)]">Messages</h1>
-            {totalUnread(threads) > 0 && (
-              <span className="grid h-5 min-w-[20px] place-items-center rounded-full bg-[var(--orange-600)] px-1.5 text-[11px] font-semibold text-white">
-                {totalUnread(threads)}
-              </span>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/home")}
+            className="rounded-lg border border-[var(--line-amber)] bg-white w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
+            aria-label="Back to Home"
+          >
+            ←
+          </button>
+          <h1 className="text-xl font-semibold text-[var(--brown-700)]">Messages</h1>
         </div>
+        {totalUnread(threads) > 0 && (
+          <span className="ml-2 grid h-5 min-w-[20px] place-items-center rounded-full bg-[var(--orange-600)] px-1.5 text-[11px] font-semibold text-white">
+            {totalUnread(threads)}
+          </span>
+        )}
       </div>
 
       {/* 2-pane layout */}

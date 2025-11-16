@@ -67,7 +67,6 @@ function TicketRow({ t, onView }) {
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Pill cls="bg-amber-50 text-amber-900 border-[var(--line-amber)]/70">{t.category}</Pill>
             <StatusPill status={t.status} />
-            <PriorityPill priority={t.priority} />
           </div>
         </div>
         <div className="col-span-3">
@@ -128,16 +127,12 @@ function TicketDetailsModal({ open, onClose, ticket, onReply, onUpdateStatus, on
                     {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
                   </select>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-[var(--brown-700)]/60">Priority</span>
-                  <select value={ticket.priority} onChange={(e) => onUpdatePriority(e.target.value)} className="h-8 rounded-lg border border-[var(--line-amber)] bg-white px-2 text-sm">
-                    {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
               </div>
 
               <div>
-                <div className="text-[11px] text-[var(--brown-700)]/60">From</div>
+                <div className="text-[11px] text-[var(--brown-700)]/60">
+                  {ticket.type === "seller" ? "Seller" : "Buyer"}
+                </div>
                 <div className="font-medium text-[var(--brown-700)]">{ticket.customer}</div>
                 <div className="text-[12px] text-[var(--brown-700)]/70">{ticket.email}</div>
               </div>
@@ -174,7 +169,7 @@ function TicketDetailsModal({ open, onClose, ticket, onReply, onUpdateStatus, on
                       mine ? "bg-[var(--amber-100)] text-[var(--brown-700)] border-[var(--line-amber)]"
                            : "bg-[var(--cream-50)] text-[var(--brown-700)] border-[var(--line-amber)]"}`}>
                       <div className="text-[11px] opacity-70 mb-0.5">
-                        {m.by === "admin" ? "Admin" : m.by === "seller" ? "Seller" : "Customer"} • {m.at}
+                        {m.by === "admin" ? "Admin" : m.by === "seller" ? "Seller" : "Buyer"} • {m.at}
                       </div>
                       <div className="whitespace-pre-wrap">{m.text}</div>
                     </div>
@@ -267,6 +262,7 @@ export default function CustomerSupportPage() {
         };
         return {
           id: row.id,
+          type: row.type,
           ticketCode,
           subject: row.subject,
           category: row.category,

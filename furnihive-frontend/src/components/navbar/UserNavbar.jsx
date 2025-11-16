@@ -6,6 +6,7 @@ import { useCart } from "../contexts/CartContext.jsx";
 export default function UserNavbar() {
   const navigate = useNavigate();
   const cart = useCart();
+  const [accountOpen, setAccountOpen] = useState(false);
 
   // derive cart badge from context (sum of quantities)
   const cartCount = useMemo(
@@ -85,10 +86,50 @@ export default function UserNavbar() {
             )}
           </NavLink>
 
-          <NavLink to="/profile" className={navItemCls}>
-            <span></span>
-            <span>Account</span>
-          </NavLink>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setAccountOpen((o) => !o)}
+              className="flex items-center gap-2 px-3 py-2 rounded-full text-sm text-[var(--orange-700)] hover:bg-[var(--cream-50)] border border-transparent"
+            >
+              <span>Account</span>
+              <span className="text-xs">▾</span>
+            </button>
+            {accountOpen && (
+              <div className="absolute right-0 mt-2 w-40 rounded-xl border border-[var(--line-amber)] bg-white shadow-card text-sm z-30">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    navigate("/profile");
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-[var(--cream-50)] border-b border-[var(--line-amber)]/60"
+                >
+                  Profile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    navigate("/support");
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-[var(--cream-50)] border-b border-[var(--line-amber)]/60"
+                >
+                  Customer Support
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    navigate("/logout");
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-[var(--cream-50)]"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* (Optional) mobile minimal controls could go here */}
