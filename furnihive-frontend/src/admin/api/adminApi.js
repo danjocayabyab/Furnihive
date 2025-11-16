@@ -26,9 +26,24 @@ export async function listApplications(_status = "all") {
   if (error) throw error;
   const rows = data || [];
 
+  // Fetch store names for all seller_ids to show as application title
+  const sellerIds = rows.map((row) => row.seller_id).filter(Boolean);
+  let storeNamesById = {};
+  if (sellerIds.length) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, store_name")
+      .in("id", sellerIds);
+    (profs || []).forEach((p) => {
+      if (p?.id) storeNamesById[p.id] = p.store_name || null;
+    });
+  }
+
   return rows.map((row) => ({
     _id: row.id?.toString?.() ?? String(row.id),
-    companyName: row.notes || "Seller Application",
+    // Prefer the seller's store name; fall back to location, then notes
+    companyName:
+      storeNamesById[row.seller_id] || row.location || row.notes || "Seller Application",
     email: row.contact_email || "", // shown in ApplicationsPage + modal
     businessType: "Seller",
     location: row.location || "",
@@ -77,7 +92,13 @@ export async function getApplication(id) {
     // Fields used by ApplicationModal (with safe fallbacks)
     phone: data.contact_phone || profile?.phone || "",
     address: "",
-    submittedAt: data.created_at || "",
+    submittedAt: data.created_at
+      ? new Date(data.created_at).toLocaleDateString("en-PH", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })
+      : "",
     description: data.notes || "",
     documents: data.files || [],
   };

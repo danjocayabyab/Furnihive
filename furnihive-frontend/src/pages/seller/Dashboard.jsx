@@ -554,6 +554,7 @@ export default function SellerDashboard() {
           onSubmit={handleSubmitVerification}
           email={authUser?.email || ""}
           storeName={storeName}
+          phone={profile?.phone || authUser?.user_metadata?.phone || ""}
         />
       )}
 
@@ -668,13 +669,20 @@ function VerificationModal({
   onSubmit,
   email,
   storeName,
+  phone,
 }) {
   if (!open) return null;
   const emailRef = useRef(null);
-  const phoneRef = useRef(null);
-  const locationRef = useRef(null);
   const storeNameRef = useRef(null);
-  const notesRef = useRef(null);
+  const [phoneValue, setPhoneValue] = useState("");
+  const cityRef = useRef(null);
+  const [notesValue, setNotesValue] = useState("");
+
+  // Initialize phone from seller profile/metadata when the modal opens
+  useEffect(() => {
+    if (!open) return;
+    setPhoneValue(phone || "");
+  }, [open, phone]);
 
   const Line = () => <hr className="my-4 border-[var(--line-amber)]/50" />;
 
@@ -767,18 +775,21 @@ function VerificationModal({
                 <Field>
                   <input
                     type="text"
-                    ref={phoneRef}
+                    value={phoneValue}
+                    onChange={(e) => setPhoneValue(e.target.value)}
                     className="w-full rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-xs text-[var(--brown-700)] focus:outline-none focus:ring-2 focus:ring-[var(--amber-400)]/40"
                   />
                 </Field>
               </div>
               <div>
-                <Label>Location</Label>
+                <Label>City</Label>
                 <Field>
                   <input
                     type="text"
-                    ref={locationRef}
+                    defaultValue=""
+                    ref={cityRef}
                     className="w-full rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-xs text-[var(--brown-700)] focus:outline-none focus:ring-2 focus:ring-[var(--amber-400)]/40"
+                    placeholder="Enter your city"
                   />
                 </Field>
               </div>
@@ -800,7 +811,8 @@ function VerificationModal({
               <div>
                 <Label>Notes</Label>
                 <textarea
-                  ref={notesRef}
+                  value={notesValue}
+                  onChange={(e) => setNotesValue(e.target.value)}
                   rows={4}
                   className="w-full rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-xs text-[var(--brown-700)] focus:outline-none focus:ring-2 focus:ring-[var(--amber-400)]/40 resize-none"
                   placeholder="Describe your business, permits, or any details that can help the admin verify your account."
@@ -868,9 +880,9 @@ function VerificationModal({
                 onClick={() =>
                   onSubmit({
                     email: emailRef.current?.value || "",
-                    phone: phoneRef.current?.value || "",
-                    location: locationRef.current?.value || "",
-                    notes: notesRef.current?.value || "",
+                    phone: phoneValue || "",
+                    location: cityRef.current?.value || "",
+                    notes: notesValue || "",
                   })
                 }
                 className="h-9 px-3 rounded-lg border border-[var(--line-amber)] bg-[var(--orange-600)] text-white hover:opacity-95 text-xs font-medium"
