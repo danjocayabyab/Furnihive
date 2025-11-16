@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../../lib/supabaseClient";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
 
 /**
  * Seller Messages
@@ -8,61 +10,7 @@ import { useNavigate } from "react-router-dom";
  *  - Designed for smooth backend integration (see "API hooks" section)
  */
 
-const demoConversations = [
-  {
-    id: "c_maria",
-    buyerName: "Maria Santos",
-    buyerRole: "buyer",
-    lastSnippet: "Perfect! I'll take it. Can you deliver it by Friday?",
-    lastAt: Date.now() - 5 * 60 * 1000,
-    unread: 3,
-    avatar:
-      "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=96&h=96&fit=crop&crop=faces",
-  },
-  {
-    id: "c_juan",
-    buyerName: "Juan dela Cruz",
-    buyerRole: "buyer",
-    lastSnippet: "Thank you! Looking forward to receiving my order.",
-    lastAt: Date.now() - 2 * 60 * 60 * 1000,
-    unread: 0,
-    avatar:
-      "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?w=96&h=96&fit=crop&crop=faces",
-  },
-  {
-    id: "c_lisa",
-    buyerName: "Lisa Chen",
-    buyerRole: "buyer",
-    lastSnippet: "Do you have this in a different color?",
-    lastAt: Date.now() - 24 * 60 * 60 * 1000,
-    unread: 0,
-    avatar:
-      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=96&h=96&fit=crop&crop=faces",
-  },
-  {
-    id: "c_robert",
-    buyerName: "Robert Tan",
-    buyerRole: "buyer",
-    lastSnippet: "Great! I'll visit your showroom this weekend.",
-    lastAt: Date.now() - 3 * 24 * 60 * 60 * 1000,
-    unread: 0,
-    avatar:
-      "https://images.unsplash.com/photo-1547425260-76bcadfb4f2c?w=96&h=96&fit=crop&crop=faces",
-  },
-];
-
-const demoMessages = {
-  c_maria: [
-    msg("customer", "Hi! I'm interested in the Modern Sectional Sofa. Is it still available?", "10:30 AM"),
-    msg("seller", "Hello Maria! Yes, the sofa is still available. It's one of our best sellers!", "10:35 AM"),
-    msg("customer", "Great! Can you tell me more about the delivery options?", "10:37 AM"),
-    msg("seller", "We offer free delivery within Metro Manila! Usually takes 3–5 business days.", "10:40 AM"),
-    msg("customer", "Perfect! I'll take it. Can you deliver it by Friday?", "10:42 AM"),
-  ],
-  c_juan: [msg("customer", "Thank you! Looking forward to receiving my order.", "8:10 AM")],
-  c_lisa: [msg("customer", "Do you have this in a different color?", "1:05 PM")],
-  c_robert: [msg("customer", "Great! I'll visit your showroom this weekend.", "9:12 AM")],
-};
+// demoConversations/demoMessages are no longer used; data now comes from Supabase
 
 function msg(sender, text, timeLabel, extra = {}) {
   return { id: cryptoRandom(), sender, text, timeLabel, createdAt: Date.now(), ...extra };
@@ -80,78 +28,23 @@ export default function SellerMessages() {
   const navigate = useNavigate();
 
   // ---- state
-  const [threads, setThreads] = useState(demoConversations);
-  const [activeId, setActiveId] = useState(demoConversations[0].id);
-  const [messagesById, setMessagesById] = useState(demoMessages);
+  const { user } = useAuth();
+  const sellerId = user?.id;
+
+  const [threads, setThreads] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+  const [messagesById, setMessagesById] = useState({});
   const [query, setQuery] = useState("");
   const [text, setText] = useState("");
   const listEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
   const active = useMemo(
-    () => threads.find((t) => t.id === activeId),
+    () => threads.find((t) => t.id === activeId) || null,
     [threads, activeId]
   );
 
   const msgs = messagesById[activeId] || [];
-
-  useEffect(() => {
-    // Scroll to latest message whenever thread or messages change.
-    listEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeId, msgs.length]);
-
-  // ------- API hooks (swap the internals when backend is ready)
-  const api = {
-    // fetch conversation list
-    async loadConversations() {
-      // const res = await fetch('/api/seller/conversations');
-      // setThreads(await res.json());
-      setThreads((t) => t); // demo no-op
-    },
-    // fetch a single thread
-    async loadThread(threadId) {
-      // const res = await fetch(`/api/seller/conversations/${threadId}`);
-      // setMessagesById((prev) => ({ ...prev, [threadId]: await res.json() }));
-      setMessagesById((prev) => ({ ...prev })); // demo no-op
-    },
-    // mark as read
-    async markRead(threadId) {
-      setThreads((prev) =>
-        prev.map((t) => (t.id === threadId ? { ...t, unread: 0 } : t))
-      );
-      // await fetch(`/api/seller/conversations/${threadId}/read`, { method: 'POST' });
-    },
-    // send message (supports WebSocket later)
-    async send(threadId, body) {
-      // optimistic update
-      setMessagesById((prev) => ({
-        ...prev,
-        [threadId]: [...(prev[threadId] || []), msg("seller", body, timeNow())],
-      }));
-      updateSnippet(threadId, body);
-
-      // await fetch(`/api/seller/conversations/${threadId}/messages`, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ text: body }),
-      // });
-    },
-    async sendAttachment(threadId, attachment) {
-      const isImage = attachment.isImage;
-      const fallbackText = isImage
-        ? "Sent a photo"
-        : `Sent a file: ${attachment.name}`;
-
-      setMessagesById((prev) => ({
-        ...prev,
-        [threadId]: [
-          ...(prev[threadId] || []),
-          msg("seller", fallbackText, timeNow(), { attachment }),
-        ],
-      }));
-      updateSnippet(threadId, fallbackText);
-    },
-  };
 
   function timeNow() {
     const d = new Date();
@@ -174,8 +67,13 @@ export default function SellerMessages() {
 
   function onPickThread(id) {
     setActiveId(id);
-    api.markRead(id);
-    api.loadThread(id);
+    setThreads((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, unread: 0 } : t))
+    );
+    supabase
+      .from("conversations")
+      .update({ seller_unread_count: 0 })
+      .eq("id", id);
   }
 
   const filteredThreads = useMemo(() => {
@@ -191,9 +89,35 @@ export default function SellerMessages() {
   async function onSend(e) {
     e?.preventDefault?.();
     const trimmed = text.trim();
-    if (!trimmed) return;
-    await api.send(activeId, trimmed);
+    if (!trimmed || !activeId || !sellerId) return;
+
+    // optimistic update
+    setMessagesById((prev) => ({
+      ...prev,
+      [activeId]: [...(prev[activeId] || []), msg("seller", trimmed, timeNow())],
+    }));
+    updateSnippet(activeId, trimmed);
     setText("");
+
+    try {
+      await supabase.from("messages").insert({
+        conversation_id: activeId,
+        sender_id: sellerId,
+        sender_role: "seller",
+        text: trimmed,
+      });
+
+      await supabase
+        .from("conversations")
+        .update({
+          last_message: trimmed,
+          last_message_at: new Date().toISOString(),
+        })
+        .eq("id", activeId);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("Seller send failed", e?.message || e);
+    }
   }
 
   function onPickFile() {
@@ -202,20 +126,254 @@ export default function SellerMessages() {
 
   function onFileChange(e) {
     const file = (e.target.files || [])[0];
-    if (!file) return;
+    if (!file || !activeId || !sellerId) return;
 
     const isImage = file.type.startsWith("image/");
     const url = URL.createObjectURL(file);
 
-    api.sendAttachment(activeId, {
-      name: file.name,
-      url,
-      isImage,
+    const fallbackText = isImage
+      ? "Sent a photo"
+      : `Sent a file: ${file.name}`;
+
+    setMessagesById((prev) => ({
+      ...prev,
+      [activeId]: [
+        ...(prev[activeId] || []),
+        msg("seller", fallbackText, timeNow(), {
+          attachment: { name: file.name, url, isImage },
+        }),
+      ],
+    }));
+    updateSnippet(activeId, fallbackText);
+
+    // TODO: upload attachment to storage and use real URL
+    supabase.from("messages").insert({
+      conversation_id: activeId,
+      sender_id: sellerId,
+      sender_role: "seller",
+      text: fallbackText,
+      attachment_name: file.name,
+      attachment_type: file.type,
+      attachment_url: url,
     });
 
-    // reset input so selecting the same file again still triggers change
     e.target.value = "";
   }
+
+  // Load conversations for this seller
+  useEffect(() => {
+    if (!sellerId) return;
+    let cancelled = false;
+
+    async function loadConversations() {
+      const { data: convos, error } = await supabase
+        .from("conversations")
+        .select("id, buyer_id, last_message, last_message_at, seller_unread_count")
+        .eq("seller_id", sellerId)
+        .order("last_message_at", { ascending: false });
+
+      if (error || !convos || cancelled) {
+        setThreads([]);
+        return;
+      }
+
+      const buyerIds = Array.from(
+        new Set(convos.map((c) => c.buyer_id).filter(Boolean))
+      );
+      let buyerById = {};
+      if (buyerIds.length) {
+        const { data: buyers } = await supabase
+          .from("profiles")
+          .select("id, first_name, last_name, avatar_url, last_active")
+          .in("id", buyerIds);
+        (buyers || []).forEach((b) => {
+          buyerById[b.id] = b;
+        });
+      }
+
+      const mapped = convos.map((c) => {
+        const b = buyerById[c.buyer_id] || {};
+        const fullName = [b.first_name, b.last_name]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        const shortId = c.buyer_id
+          ? String(c.buyer_id).replace(/-/g, "").slice(0, 4).toUpperCase()
+          : "";
+        const fallback = shortId ? `Customer ${shortId}` : "Customer";
+        const name = fullName || fallback;
+
+        const lastActive = b.last_active ? Date.parse(b.last_active) : null;
+        const online =
+          lastActive && Number.isFinite(lastActive)
+            ? Date.now() - lastActive < 5 * 60 * 1000
+            : false;
+
+        return {
+          id: c.id,
+          buyerName: name,
+          buyerRole: "buyer",
+          lastSnippet: c.last_message || "",
+          lastAt: c.last_message_at,
+          unread: c.seller_unread_count || 0,
+          avatar: b.avatar_url || "",
+          online,
+        };
+      });
+
+      if (!cancelled) {
+        setThreads(mapped);
+        if (!activeId && mapped.length) {
+          setActiveId(mapped[0].id);
+        }
+      }
+    }
+
+    loadConversations();
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerId]);
+
+  // Load messages for active conversation
+  useEffect(() => {
+    if (!activeId) return;
+    let cancelled = false;
+
+    async function loadMessages() {
+      const { data, error } = await supabase
+        .from("messages")
+        .select(
+          "id, sender_id, sender_role, text, attachment_url, attachment_name, attachment_type, created_at"
+        )
+        .eq("conversation_id", activeId)
+        .order("created_at", { ascending: true });
+
+      if (cancelled) return;
+
+      if (error || !data) {
+        setMessagesById((prev) => ({ ...prev, [activeId]: [] }));
+        return;
+      }
+
+      const mapped = data.map((m) =>
+        msg(
+          m.sender_role === "buyer" ? "customer" : "seller",
+          m.text || "",
+          new Date(m.created_at).toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+          }),
+          m.attachment_url
+            ? {
+                attachment: {
+                  url: m.attachment_url,
+                  name: m.attachment_name,
+                  isImage: m.attachment_type?.startsWith("image/") || false,
+                },
+              }
+            : {}
+        )
+      );
+
+      setMessagesById((prev) => ({ ...prev, [activeId]: mapped }));
+    }
+
+    loadMessages();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeId]);
+
+  // Realtime: subscribe to new messages on the active conversation
+  useEffect(() => {
+    if (!activeId || !sellerId) return undefined;
+
+    const channel = supabase
+      .channel(`seller-messages-${activeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${activeId}`,
+        },
+        (payload) => {
+          const m = payload.new;
+          // Skip messages we already added optimistically
+          if (m.sender_id === sellerId) return;
+
+          setMessagesById((prev) => {
+            const existing = prev[activeId] || [];
+            if (existing.some((msg) => msg.id === m.id)) return prev;
+
+            const mapped = msg(
+              m.sender_role === 'buyer' ? 'customer' : 'seller',
+              m.text || '',
+              new Date(m.created_at).toLocaleTimeString([], {
+                hour: 'numeric',
+                minute: '2-digit',
+              }),
+              m.attachment_url
+                ? {
+                    attachment: {
+                      url: m.attachment_url,
+                      name: m.attachment_name,
+                      isImage: m.attachment_type?.startsWith('image/') || false,
+                    },
+                  }
+                : {}
+            );
+
+            return {
+              ...prev,
+              [activeId]: [...existing, mapped],
+            };
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeId, sellerId]);
+
+  // Lightweight polling: refresh buyer online status every 30s based on profiles.last_active
+  useEffect(() => {
+    if (!threads.length) return;
+
+    const interval = setInterval(async () => {
+      const buyerIds = Array.from(
+        new Set(threads.map((t) => t.buyerId).filter(Boolean))
+      );
+      if (!buyerIds.length) return;
+
+      const { data: buyers } = await supabase
+        .from("profiles")
+        .select("id, last_active")
+        .in("id", buyerIds);
+
+      const byId = {};
+      (buyers || []).forEach((b) => {
+        byId[b.id] = b.last_active;
+      });
+
+      setThreads((prev) =>
+        prev.map((t) => {
+          const la = byId[t.buyerId];
+          if (!la) return t;
+          const ms = Date.parse(la);
+          const online =
+            ms && Number.isFinite(ms) ? Date.now() - ms < 5 * 60 * 1000 : false;
+          return { ...t, online };
+        })
+      );
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [threads]);
 
   // ---- UI
   return (
@@ -421,7 +579,15 @@ function ChatBubble({ mine, m }) {
 }
 
 function relativeTime(ts) {
-  const diff = Date.now() - ts;
+  if (!ts) return "";
+
+  // Support both numeric timestamps and ISO strings from Supabase
+  let ms = typeof ts === "number" ? ts : Date.parse(ts);
+  if (!Number.isFinite(ms)) return "";
+
+  const diff = Date.now() - ms;
+  if (!Number.isFinite(diff) || diff < 0) return "just now";
+
   const m = Math.round(diff / 60000);
   if (m < 1) return "just now";
   if (m < 60) return `${m} min ago`;

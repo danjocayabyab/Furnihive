@@ -162,9 +162,15 @@ export default function ProductDetail() {
   };
 
   const openChat = () => {
-    navigate(`/messages?seller=${encodeURIComponent(baseItem.seller)}`, {
+    if (!baseItem) return;
+    const params = new URLSearchParams();
+    if (baseItem.seller) params.set("seller", baseItem.seller);
+    if (baseItem.seller_id) params.set("sellerId", baseItem.seller_id);
+
+    navigate(`/messages?${params.toString()}`, {
       state: {
         seller: {
+          id: baseItem.seller_id,
           name: baseItem.seller,
           product: { id: baseItem.id, title: baseItem.title, image: baseItem.image },
         },
