@@ -121,10 +121,7 @@ export default function Checkout() {
   const canContinueShipping =
     ship.firstName && ship.lastName && ship.email && ship.phone && ship.street && ship.city && ship.zip;
 
-  const canContinuePayment =
-    (payMethod === "card"
-      ? card.name && card.number && card.exp && card.cvv
-      : true) && agree;
+  const canContinuePayment = agree;
 
   const placeOrder = async () => {
     if (!checkoutItems.length) return;
@@ -146,15 +143,15 @@ export default function Checkout() {
       const { data: created, error: orderErr } = await supabase
         .from("orders")
         .insert({
-        user_id: user?.id || null,
-        total_amount: totals.total,
-        item_count: itemCount,
-        summary_title: first.title,
-        summary_image: first.image || null,
-        seller_display: first.seller || null,
-        color: first.color || null,
-        status: "Pending",
-      })
+          user_id: user?.id || null,
+          total_amount: totals.total,
+          item_count: itemCount,
+          summary_title: first.title,
+          summary_image: first.image || null,
+          seller_display: first.seller || null,
+          color: first.color || null,
+          status: "Pending",
+        })
         .select("id")
         .single();
 
@@ -180,11 +177,34 @@ export default function Checkout() {
         if (itemsPayload.length) {
           await supabase.from("order_items").insert(itemsPayload);
         }
+
+        // For cash on delivery, do not redirect to PayMongo; keep local flow
+        if (payMethod === "cod") {
+          clearCart();
+          navigate("/checkout/success", { state: { total: totals.total } });
+          return;
+        }
+
+        // After order + items are saved, request a PayMongo Checkout session
+        const { data: session, error: sessionErr } = await supabase.functions.invoke(
+          "create-checkout-session",
+          {
+            body: { order_id: orderId },
+          }
+        );
+
+        if (!sessionErr && session?.checkout_url) {
+          // Clear cart locally and redirect buyer to PayMongo hosted checkout
+          clearCart();
+          window.location.href = session.checkout_url;
+          return;
+        }
       }
     } catch {
       // best-effort; even if this fails, still clear cart and show success UI
     }
 
+    // Fallback: if anything above fails, keep the old behavior
     clearCart();
     navigate("/checkout/success", { state: { total: totals.total } });
   };
@@ -309,7 +329,10 @@ export default function Checkout() {
             {/* Voucher selection (seller promotions; single-seller carts only) */}
             {applicableVouchers.length > 0 && (
               <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-3 text-sm">
-                <div className="font-semibold text-[var(--brown-700)] mb-1">Apply Voucher</div>
+                <div className="font-semibold text-[var(--brown-700)]">Voucher</div>
+                <div className="mt-0.5 mb-2 text-[11px] text-gray-600">
+                  Select an available voucher to apply a discount to this order.
+                </div>
                 <select
                   className="w-full rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-sm"
                   value={selectedVoucherId || ""}
@@ -341,7 +364,7 @@ export default function Checkout() {
             </div>
 
             <div className="mt-2 rounded-xl bg-[var(--amber-50)] border border-[var(--line-amber)] p-3 text-sm text-[var(--brown-700)]">
-              <div className="font-medium mb-1">📦 Estimated Delivery</div>
+              <div className="font-medium mb-1">Estimated Delivery</div>
               <div className="text-xs text-gray-700">7–10 business days</div>
             </div>
           </div>
@@ -425,7 +448,6 @@ function ShippingForm({ ship, setShip, onNext, disabledNext }) {
               setShowAddressModal(true);
             }}
           >
-            <span className="text-sm">📂</span>
             <span>Saved addresses</span>
           </button>
         )}
@@ -574,7 +596,7 @@ function ShippingForm({ ship, setShip, onNext, disabledNext }) {
                     <div>
                       {[a.city, a.province].filter(Boolean).join(", ")} {a.postal_code}
                     </div>
-                    {a.phone && <div>📞 {a.phone}</div>}
+                    {a.phone && <div>Phone: {a.phone}</div>}
                   </div>
                   <div className="flex justify-end gap-2 pt-1">
                     <button
@@ -651,17 +673,10 @@ function PaymentForm({
         <MethodItem active={payMethod === "cod"} onClick={() => setPayMethod("cod")}>Cash on Delivery</MethodItem>
       </div>
 
-      {/* Card details */}
-      {payMethod === "card" && (
-        <div className="mt-4 grid gap-3">
-          <Field label="Cardholder Name"><Input value={card.name} onChange={set("name")} /></Field>
-          <Field label="Card Number"><Input value={card.number} onChange={set("number")} placeholder="1234 5678 9012 3456" /></Field>
-          <TwoCols>
-            <Field label="Expiry Date"><Input value={card.exp} onChange={set("exp")} placeholder="MM/YY" /></Field>
-            <Field label="CVV"><Input value={card.cvv} onChange={set("cvv")} placeholder="123" /></Field>
-          </TwoCols>
-        </div>
-      )}
+      <div className="mt-3 text-xs text-gray-700 bg-[var(--cream-50)] border border-[var(--line-amber)] rounded-xl p-3">
+        For Card, GCash, and PayMaya, you will be redirected to PayMongo's secure checkout page to
+        complete your payment. We do not store your payment details.
+      </div>
 
       <div className="mt-4 flex items-center gap-2 text-sm">
         <input type="checkbox" className="h-4 w-4" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
@@ -704,6 +719,16 @@ function ReviewForm({ ship, payMethod, card, onBack, onPlace, total }) {
             {payMethod === "paymaya" && "PayMaya"}
             {payMethod === "cod" && "Cash on Delivery"}
           </div>
+          {payMethod !== "cod" && (
+            <div className="mt-2 text-xs text-gray-700">
+              You will be redirected to PayMongo's secure checkout page to complete this payment.
+            </div>
+          )}
+          {payMethod === "cod" && (
+            <div className="mt-2 text-xs text-gray-700">
+              You will pay in cash to the courier upon delivery. No online payment is required.
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2">
@@ -756,7 +781,7 @@ function Progress({ step }) {
               : "border-[var(--line-amber)] text-[var(--orange-600)] bg-white"
           }`}
         >
-          <span>{icon}</span>
+          <span className="text-sm font-semibold">{i}</span>
         </div>
         <div className={`${active ? "text-[var(--brown-700)]" : "text-gray-500"} text-sm hidden sm:block`}>
           {label}
@@ -767,9 +792,9 @@ function Progress({ step }) {
   };
   return (
     <div className="flex items-center justify-center gap-1">
-      <Item i={1} label="Shipping Info" icon="🚚" />
-      <Item i={2} label="Payment" icon="💳" />
-      <Item i={3} label="Review Order" icon="✅" />
+      <Item i={1} label="Shipping Info" />
+      <Item i={2} label="Payment" />
+      <Item i={3} label="Review Order" />
     </div>
   );
 }
@@ -777,7 +802,6 @@ function Progress({ step }) {
 function SectionTitle({ icon, title }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-lg">{icon}</span>
       <h2 className="font-semibold text-[var(--brown-700)]">{title}</h2>
     </div>
   );
