@@ -74,6 +74,8 @@ export default function SellerOrders() {
             payment: row.payment_method || "",
             paymentStatus: "pending",
             paymentProvider: null,
+            payoutStatus: null,
+            payoutNet: 0,
             customer: {
               name: row.buyer_name || "Customer",
               address: row.buyer_address || "",
@@ -113,6 +115,36 @@ export default function SellerOrders() {
             if (row.payment_provider) {
               o.paymentProvider = row.payment_provider;
             }
+          });
+        }
+
+        // Load payout info for this seller across these orders
+        const { data: payoutRows, error: payoutsErr } = await supabase
+          .from("seller_payouts")
+          .select("order_id, seller_id, status, net_amount")
+          .eq("seller_id", sellerId)
+          .in("order_id", orderIds);
+
+        if (!cancelled && !payoutsErr && payoutRows) {
+          // Aggregate per order: total net and combined status
+          const payoutByOrder = new Map();
+          payoutRows.forEach((p) => {
+            const oid = p.order_id;
+            if (!oid) return;
+            const current = payoutByOrder.get(oid) || { net: 0, hasPending: false, hasPaid: false };
+            current.net += Number(p.net_amount || 0);
+            const st = String(p.status || "").toLowerCase();
+            if (st === "pending") current.hasPending = true;
+            if (st === "paid") current.hasPaid = true;
+            payoutByOrder.set(oid, current);
+          });
+
+          payoutByOrder.forEach((val, oid) => {
+            const o = byOrder.get(oid);
+            if (!o) return;
+            if (val.hasPending) o.payoutStatus = "pending";
+            else if (val.hasPaid) o.payoutStatus = "paid";
+            o.payoutNet = val.net;
           });
         }
       }
@@ -315,6 +347,12 @@ export default function SellerOrders() {
                       {peso(totalOf(o))}
                     </div>
                     <div className="text-xs text-gray-600">{o.payment}</div>
+                    {o.payoutStatus && (
+                      <div className="mt-1 text-[11px] text-gray-600">
+                        Payout: {o.payoutStatus === "paid" ? "Paid" : "Pending"} 
+                        {o.payoutNet ? ` · Net ${peso(o.payoutNet)}` : ""}
+                      </div>
+                    )}
 
                     <div className="mt-2 flex items-center justify-end gap-2">
                       <button
@@ -482,6 +520,12 @@ function DetailsModal({ order, onClose }) {
                 <Row
                   label="Payment Status"
                   value={<PaymentStatusPill status={order.paymentStatus} />}
+                />
+              )}
+              {order.payoutStatus && (
+                <Row
+                  label="Payout"
+                  value={`${order.payoutStatus === "paid" ? "Paid" : "Pending"} – Net ${peso(order.payoutNet || 0)}`}
                 />
               )}
             </div>

@@ -2,6 +2,7 @@ const tabs = [
   { key: "applications", label: "Applications", icon: "" },
   { key: "users", label: "Users", icon: "" },
   { key: "products", label: "Products", icon: "" },
+  { key: "payouts", label: "Payouts", icon: "" },
   { key: "support", label: "Customer Support", icon: "" },
 ];
 

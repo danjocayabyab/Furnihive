@@ -330,24 +330,26 @@ export default function Checkout() {
             {applicableVouchers.length > 0 && (
               <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-3 text-sm">
                 <div className="font-semibold text-[var(--brown-700)]">Voucher</div>
-                <div className="mt-0.5 mb-2 text-[11px] text-gray-600">
-                  Select an available voucher to apply a discount to this order.
-                </div>
                 <select
-                  className="w-full rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-sm"
+                  className="mt-2 w-full rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-sm"
                   value={selectedVoucherId || ""}
                   onChange={(e) => {
                     const val = e.target.value;
                     setSelectedVoucherId(val || null);
                   }}
                 >
-                  <option value="">No voucher</option>
+                  <option value="">No voucher — select an available voucher to apply a discount to this order.</option>
                   {applicableVouchers.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.name} ({v.code})
                     </option>
                   ))}
                 </select>
+                {selectedVoucherId && totals.promoDiscount > 0 && (
+                  <div className="mt-1 text-[11px] text-emerald-700">
+                    Voucher applied: you save {peso(totals.promoDiscount)} on this order.
+                  </div>
+                )}
               </div>
             )}
 
