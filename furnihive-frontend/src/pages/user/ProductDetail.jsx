@@ -8,6 +8,7 @@ import { supabase } from "../../lib/supabaseClient";
 
 import { useCart } from "../../components/contexts/CartContext.jsx";
 import { useUI } from "../../components/contexts/UiContext.jsx";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
 
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 
@@ -219,7 +220,8 @@ export default function ProductDetail() {
 
   const cart = useCart();
   const addToCartCtx = typeof cart.add === "function" ? cart.add : cart.addItem;
-  const { showAddToCart } = useUI();
+  const { showAddToCart, openAuth } = useUI();
+  const { user } = useAuth();
 
   const images = product?.images && product.images.length ? product.images : (product?.image ? [product.image] : []);
   const mainImage = images[mainIndex] || images[0] || product?.image || "";
@@ -240,6 +242,10 @@ export default function ProductDetail() {
 
   const handleAddToCart = () => {
     if (!product || product.outOfStock) return;
+    if (!user) {
+      openAuth("login");
+      return;
+    }
     addToCartCtx(baseItem, qty);
     showAddToCart({
       title: product.title,
