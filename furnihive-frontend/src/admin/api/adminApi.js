@@ -51,6 +51,98 @@ export async function listApplications(_status = "all") {
   }));
 }
 
+// Admin: list products with basic info and cover image
+export async function listProductsForAdmin({ limit = 100, search = "" } = {}) {
+  const sel =
+    "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, created_at, featured_rank, hero_rank";
+  let q = supabase.from("products").select(sel).order("created_at", { ascending: false }).limit(limit);
+  if (search) {
+    // simple ilike on name
+    q = q.ilike("name", `%${search}%`);
+  }
+  const { data, error } = await q;
+  if (error) throw error;
+  const rows = data || [];
+
+  // cover images
+  const ids = rows.map((r) => r.id);
+  let coverById = {};
+  if (ids.length) {
+    const { data: imgs } = await supabase
+      .from("product_images")
+      .select("product_id, url, path, is_primary, position, created_at")
+      .in("product_id", ids)
+      .order("is_primary", { ascending: false })
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true });
+    (imgs || []).forEach((row) => {
+      if (!coverById[row.product_id]) coverById[row.product_id] = { url: row.url, path: row.path };
+    });
+  }
+
+  const IMAGES_PUBLIC = String(import.meta.env.VITE_PRODUCT_IMAGES_PUBLIC || "false").toLowerCase() === "true";
+  const out = [];
+  for (const r of rows) {
+    const entry = coverById[r.id] || null;
+    let image = "";
+    if (entry?.url) image = entry.url;
+    else if (entry?.path) {
+      if (IMAGES_PUBLIC) {
+        const { data: pub } = supabase.storage.from("product-images").getPublicUrl(entry.path);
+        image = pub?.publicUrl || "";
+      } else {
+        try {
+          const { data: signed } = await supabase.storage
+            .from("product-images")
+            .createSignedUrl(entry.path, 3600);
+          image = signed?.signedUrl || "";
+        } catch {
+          image = "";
+        }
+      }
+    }
+    out.push({
+      id: r.id,
+      title: r.name || "Untitled",
+      price: Number(r.base_price ?? 0),
+      category: r.category || "",
+      status: r.status || "",
+      stock_qty: r.stock_qty ?? null,
+      featured_rank: r.featured_rank ?? 0,
+      hero_rank: r.hero_rank ?? 0,
+      image:
+        image ||
+        "https://images.unsplash.com/photo-1493666438817-866a91353ca9?q=80&w=800&auto=format&fit=crop",
+      created_at: r.created_at,
+    });
+  }
+  return out;
+}
+
+// Admin: update a product's featured_rank
+export async function updateFeaturedRank(productId, rank) {
+  const { data, error } = await supabase
+    .from("products")
+    .update({ featured_rank: Number(rank) || 0 })
+    .eq("id", productId)
+    .select("id, featured_rank")
+    .maybeSingle();
+  if (error) throw error;
+  return { id: data?.id || productId, featured_rank: data?.featured_rank ?? 0 };
+}
+
+// Admin: update a product's hero_rank (used for homepage hero slideshow)
+export async function updateHeroRank(productId, rank) {
+  const { data, error } = await supabase
+    .from("products")
+    .update({ hero_rank: Number(rank) || 0 })
+    .eq("id", productId)
+    .select("id, hero_rank")
+    .maybeSingle();
+  if (error) throw error;
+  return { id: data?.id || productId, hero_rank: data?.hero_rank ?? 0 };
+}
+
 // Load a single application with more detail for the modal.
 // We fetch the verification first, then (optionally) enrich from profiles.
 export async function getApplication(id) {

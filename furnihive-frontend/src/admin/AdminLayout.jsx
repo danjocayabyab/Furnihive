@@ -4,6 +4,7 @@ import AdminTabs from "./AdminTabs";
 import ApplicationsPage from "./ApplicationsPage";
 import UsersPage from "./UsersPage";
 import CustomerSupportPage from "./CustomerSupportPage";
+import ProductsPage from "./ProductsPage";
 
 export default function AdminLayout() {
   const [tab, setTab] = useState("applications");
@@ -27,6 +28,7 @@ export default function AdminLayout() {
         <div className="mx-auto max-w-6xl px-4 pb-6">
           {tab === "applications" && <ApplicationsPage />}
           {tab === "users" && <UsersPage />}
+          {tab === "products" && <ProductsPage />}
           {tab === "support" && <CustomerSupportPage />}
         </div>
       </main>
