@@ -146,15 +146,15 @@ export default function Checkout() {
       const { data: created, error: orderErr } = await supabase
         .from("orders")
         .insert({
-        user_id: user?.id || null,
-        total_amount: totals.total,
-        item_count: itemCount,
-        summary_title: first.title,
-        summary_image: first.image || null,
-        seller_display: first.seller || null,
-        color: first.color || null,
-        status: "Pending",
-      })
+          user_id: user?.id || null,
+          total_amount: totals.total,
+          item_count: itemCount,
+          summary_title: first.title,
+          summary_image: first.image || null,
+          seller_display: first.seller || null,
+          color: first.color || null,
+          status: "Pending",
+        })
         .select("id")
         .single();
 
@@ -180,11 +180,27 @@ export default function Checkout() {
         if (itemsPayload.length) {
           await supabase.from("order_items").insert(itemsPayload);
         }
+
+        // After order + items are saved, request a PayMongo Checkout session
+        const { data: session, error: sessionErr } = await supabase.functions.invoke(
+          "create-checkout-session",
+          {
+            body: { order_id: orderId },
+          }
+        );
+
+        if (!sessionErr && session?.checkout_url) {
+          // Clear cart locally and redirect buyer to PayMongo hosted checkout
+          clearCart();
+          window.location.href = session.checkout_url;
+          return;
+        }
       }
     } catch {
       // best-effort; even if this fails, still clear cart and show success UI
     }
 
+    // Fallback: if anything above fails, keep the old behavior
     clearCart();
     navigate("/checkout/success", { state: { total: totals.total } });
   };

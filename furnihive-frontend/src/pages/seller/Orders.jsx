@@ -72,6 +72,8 @@ export default function SellerOrders() {
             status: (row.status || "Pending").toLowerCase(),
             dateISO: row.created_at || null,
             payment: row.payment_method || "",
+            paymentStatus: "pending",
+            paymentProvider: null,
             customer: {
               name: row.buyer_name || "Customer",
               address: row.buyer_address || "",
@@ -93,6 +95,27 @@ export default function SellerOrders() {
         });
         o.shipping += Number(row.shipping_fee || 0);
       });
+
+      const orderIds = Array.from(byOrder.keys());
+      if (orderIds.length) {
+        const { data: orderRows, error: ordersErr } = await supabase
+          .from("orders")
+          .select("id, payment_status, payment_provider")
+          .in("id", orderIds);
+
+        if (!cancelled && !ordersErr && orderRows) {
+          orderRows.forEach((row) => {
+            const o = byOrder.get(row.id);
+            if (!o) return;
+            if (row.payment_status) {
+              o.paymentStatus = String(row.payment_status).toLowerCase();
+            }
+            if (row.payment_provider) {
+              o.paymentProvider = row.payment_provider;
+            }
+          });
+        }
+      }
 
       // Sort by newest order date
       const list = Array.from(byOrder.values()).sort((a, b) => {
@@ -267,6 +290,9 @@ export default function SellerOrders() {
                           {formatOrderId(o.id)}
                         </div>
                         <StatusPill status={o.status} />
+                        {o.paymentStatus && o.paymentStatus !== "pending" && (
+                          <PaymentStatusPill status={o.paymentStatus} />
+                        )}
                       </div>
                       <div className="text-xs text-gray-600">
                         {formatOrderDate(o.dateISO)}
@@ -370,6 +396,23 @@ function StatusPill({ status }) {
   );
 }
 
+function PaymentStatusPill({ status }) {
+  const normalized = (status || "").toLowerCase();
+  const colors = {
+    paid: "text-green-700 bg-green-100 border-green-300",
+    pending: "text-orange-700 bg-orange-100 border-orange-300",
+    failed: "text-red-700 bg-red-100 border-red-300",
+    cancelled: "text-gray-700 bg-gray-100 border-gray-300",
+  };
+  const label = normalized === "paid" ? "Paid" : normalized || "Unknown";
+  const color = colors[normalized] || "text-gray-700 bg-gray-100 border-gray-300";
+  return (
+    <span className={`border rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide ${color}`}>
+      {label}
+    </span>
+  );
+}
+
 function DetailsModal({ order, onClose }) {
   const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
   const subtotal = order.items.reduce((s, it) => s + it.qty * it.price, 0);
@@ -435,6 +478,12 @@ function DetailsModal({ order, onClose }) {
               <Row label="Shipping Fee" value={peso(order.shipping || 0)} />
               <Row label="Total" value={peso(total)} bold />
               <Row label="Payment Method" value={order.payment} />
+              {order.paymentStatus && order.paymentStatus !== "pending" && (
+                <Row
+                  label="Payment Status"
+                  value={<PaymentStatusPill status={order.paymentStatus} />}
+                />
+              )}
             </div>
           </div>
         </div>
