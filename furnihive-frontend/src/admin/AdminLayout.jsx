@@ -5,6 +5,7 @@ import ApplicationsPage from "./ApplicationsPage";
 import UsersPage from "./UsersPage";
 import CustomerSupportPage from "./CustomerSupportPage";
 import ProductsPage from "./ProductsPage";
+import PayoutsPage from "./PayoutsPage";
 
 export default function AdminLayout() {
   const [tab, setTab] = useState("applications");
@@ -29,6 +30,7 @@ export default function AdminLayout() {
           {tab === "applications" && <ApplicationsPage />}
           {tab === "users" && <UsersPage />}
           {tab === "products" && <ProductsPage />}
+          {tab === "payouts" && <PayoutsPage />}
           {tab === "support" && <CustomerSupportPage />}
         </div>
       </main>
