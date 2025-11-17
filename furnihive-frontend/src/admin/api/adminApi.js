@@ -26,9 +26,24 @@ export async function listApplications(_status = "all") {
   if (error) throw error;
   const rows = data || [];
 
+  // Fetch store names for all seller_ids to show as application title
+  const sellerIds = rows.map((row) => row.seller_id).filter(Boolean);
+  let storeNamesById = {};
+  if (sellerIds.length) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, store_name")
+      .in("id", sellerIds);
+    (profs || []).forEach((p) => {
+      if (p?.id) storeNamesById[p.id] = p.store_name || null;
+    });
+  }
+
   return rows.map((row) => ({
     _id: row.id?.toString?.() ?? String(row.id),
-    companyName: row.notes || "Seller Application",
+    // Prefer the seller's store name; fall back to location, then notes
+    companyName:
+      storeNamesById[row.seller_id] || row.location || row.notes || "Seller Application",
     email: row.contact_email || "", // shown in ApplicationsPage + modal
     businessType: "Seller",
     location: row.location || "",
@@ -77,7 +92,13 @@ export async function getApplication(id) {
     // Fields used by ApplicationModal (with safe fallbacks)
     phone: data.contact_phone || profile?.phone || "",
     address: "",
-    submittedAt: data.created_at || "",
+    submittedAt: data.created_at
+      ? new Date(data.created_at).toLocaleDateString("en-PH", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })
+      : "",
     description: data.notes || "",
     documents: data.files || [],
   };
@@ -126,14 +147,15 @@ export async function listUsers() {
   const { data: rpcData, error: rpcErr } = await supabase.rpc("admin_list_users");
 
   let rows = null;
-  if (!rpcErr && rpcData) {
+  // Prefer RPC, but only if it includes the suspended flag we rely on.
+  if (!rpcErr && rpcData && Array.isArray(rpcData) && rpcData.length && "suspended" in rpcData[0]) {
     rows = rpcData;
   } else {
-    // Fallback: read from profiles without email
+    // Fallback: read from profiles directly so we always have suspended.
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, role, seller_approved, first_name, last_name, phone, store_name, avatar_url"
+        "id, role, seller_approved, first_name, last_name, phone, store_name, avatar_url, created_at, last_active, suspended"
       )
       .order("created_at", { ascending: false });
     if (error) throw (rpcErr || error);
@@ -154,10 +176,36 @@ export async function listUsers() {
     name: toName(p),
     email: p.email || "",
     role: String(p.role || "buyer").toLowerCase() === "seller" ? "seller" : "customer",
-    status: "active", // No suspension column; default to active
-    joinDate: "",
-    lastActive: "",
-    days: 0,
+    status: p.suspended ? "suspended" : "active", // Suspended flag from profiles
+    joinDate: (() => {
+      const ts = p.created_at || p.join_date || new Date().toISOString();
+      const d = new Date(ts);
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toLocaleDateString("en-PH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    })(),
+    days: (() => {
+      const ts = p.created_at || p.join_date || new Date().toISOString();
+      const d = new Date(ts);
+      if (Number.isNaN(d.getTime())) return 0;
+      const diffMs = Date.now() - d.getTime();
+      return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+    })(),
+    lastActive: (() => {
+      const ts = p.last_active || p.created_at || p.join_date || new Date().toISOString();
+      const d = new Date(ts);
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toLocaleString("en-PH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    })(),
     orders: 0,
     spent: 0,
     sales: 0,
@@ -165,4 +213,23 @@ export async function listUsers() {
     phone: p.phone || "",
     avatarUrl: p.avatar_url || "",
   }));
+}
+
+// Toggle user suspension in profiles so admin Suspend button is persisted.
+export async function toggleUserSuspension(userId, suspend) {
+  if (!userId) throw new Error("Missing user id");
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ suspended: !!suspend })
+    .eq("id", userId)
+    .select("id, suspended")
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return {
+    id: data?.id || userId,
+    status: data?.suspended ? "suspended" : "active",
+  };
 }

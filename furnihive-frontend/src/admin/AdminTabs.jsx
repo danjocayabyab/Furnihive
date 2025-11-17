@@ -1,7 +1,7 @@
 const tabs = [
   { key: "applications", label: "Applications", icon: "" },
   { key: "users", label: "Users", icon: "" },
-  { key: "support", label: "Support", icon: "" },
+  { key: "support", label: "Customer Support", icon: "" },
 ];
 
 export default function AdminTabs({ active, onChange }) {

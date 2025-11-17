@@ -100,7 +100,17 @@ export default function ApplicationsPage() {
     setApps((data || []).map(normalize));               // normalize here
     setLoading(false);
   };
-  useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    // Initial load
+    reload();
+
+    // Auto-refresh every 30 seconds while admin is on this page
+    const id = setInterval(() => {
+      reload();
+    }, 30000);
+
+    return () => clearInterval(id);
+  }, []);
 
   // banners
   const counts = useMemo(() => {
@@ -130,7 +140,7 @@ export default function ApplicationsPage() {
       ...d,
       phone: d.phone || "+63 912 345 6789",
       address: d.address || "123 Furniture Street, Manila, Philippines",
-      submittedAt: d.submittedAt || "10/3/2024",
+      submittedAt: d.submittedAt || "",
       description:
         d.description ||
         "We are a furniture company specializing in modern and contemporary pieces. Our business has been operating for over 5 years with a strong customer base in the local market.",

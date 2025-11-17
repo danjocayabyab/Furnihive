@@ -1,100 +1,114 @@
 // src/pages/seller/Orders.jsx
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-/* ---------- demo data (replace with API later) ---------- */
-const demoOrders = [
-  {
-    id: "ORD-2025-1244",
-    status: "pending", // pending | processing | shipped | delivered
-    dateISO: "2025-10-04T10:30:00",
-    payment: "GCash",
-    customer: {
-      name: "Maria Santos",
-      address: "123 Quezon Ave, Quezon City, Metro Manila",
-    },
-    items: [
-      {
-        title: "Modern Sectional Sofa",
-        qty: 1,
-        price: 45999,
-        image:
-          "https://images.unsplash.com/photo-1501045661006-fcebe0257c3f?q=80&w=600&auto=format&fit=crop",
-      },
-    ],
-    shipping: 500,
-  },
-  {
-    id: "ORD-2025-1243",
-    status: "processing",
-    dateISO: "2025-10-03T14:15:00",
-    payment: "Bank Transfer",
-    customer: {
-      name: "Juan dela Cruz",
-      address: "456 Rizal St, Makati City, Metro Manila",
-    },
-    items: [
-      {
-        title: "Solid Wood Dining Set",
-        qty: 1,
-        price: 35500,
-        image:
-          "https://images.unsplash.com/photo-1519710164239-da123dc03ef4?q=80&w=600&auto=format&fit=crop",
-      },
-    ],
-    shipping: 500,
-  },
-  {
-    id: "ORD-2025-1242",
-    status: "shipped",
-    dateISO: "2025-10-02T09:45:00",
-    payment: "COD",
-    customer: {
-      name: "Anna Reyes",
-      address: "789 Manila Rd, Pasig City, Metro Manila",
-    },
-    items: [
-      {
-        title: "Queen Size Bed Frame",
-        qty: 1,
-        price: 28900,
-        image:
-          "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?q=80&w=600&auto=format&fit=crop",
-      },
-    ],
-    shipping: 0,
-  },
-  {
-    id: "ORD-2025-1241",
-    status: "delivered",
-    dateISO: "2025-10-01T11:20:00",
-    payment: "Credit Card",
-    customer: {
-      name: "Carlos Mendoza",
-      address: "321 Bonifacio Dr, Taguig City, Metro Manila",
-    },
-    items: [
-      {
-        title: "Office Desk & Chair",
-        qty: 1,
-        price: 18500,
-        image:
-          "https://images.unsplash.com/photo-1524758631624-e2822e304c36?q=80&w=600&auto=format&fit=crop",
-      },
-    ],
-    shipping: 0,
-  },
-];
+import { supabase } from "../../lib/supabaseClient";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
 
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 
+function formatOrderId(id) {
+  if (!id) return "Order";
+  return `ORD-${String(id).slice(0, 8).toUpperCase()}`;
+}
+
+function formatOrderDate(dateISO) {
+  if (!dateISO) return "";
+  const d = new Date(dateISO);
+  if (Number.isNaN(d.getTime())) return String(dateISO);
+  return d.toLocaleString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function SellerOrders() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const sellerId = user?.id;
 
-  const [orders, setOrders] = useState(demoOrders);
+  const [orders, setOrders] = useState([]);
   const [q, setQ] = useState("");
   const [tab, setTab] = useState("all"); // all | pending | processing | shipped | delivered
   const [view, setView] = useState(null); // order object for the modal
+
+  // Debug: see which seller id this page is using
+  console.log("SELLER ORDERS sellerId", sellerId);
+
+  // Load real orders for this seller from order_items joined to orders
+  useEffect(() => {
+    if (!sellerId) return;
+    let cancelled = false;
+
+    async function loadOrders() {
+      // Step 1: load all order_items for this seller
+      const { data: items, error: itemsErr } = await supabase
+        .from("order_items")
+        .select(
+          "id, order_id, title, image, qty, unit_price, shipping_fee, created_at, buyer_name, buyer_address, payment_method, status"
+        )
+        .eq("seller_id", sellerId);
+
+      console.log("SELLER ORDERS result", {
+        error: itemsErr,
+        rows: items?.length,
+        sample: items?.[0],
+      });
+
+      if (cancelled || itemsErr || !items || !items.length) {
+        if (!cancelled) setOrders([]);
+        return;
+      }
+
+      const byOrder = new Map();
+      items.forEach((row) => {
+        const oid = row.order_id;
+        if (!oid) return;
+        if (!byOrder.has(oid)) {
+          byOrder.set(oid, {
+            id: oid,
+            status: (row.status || "Pending").toLowerCase(),
+            dateISO: row.created_at || null,
+            payment: row.payment_method || "",
+            customer: {
+              name: row.buyer_name || "Customer",
+              address: row.buyer_address || "",
+            },
+            items: [],
+            shipping: 0,
+          });
+        }
+        const o = byOrder.get(oid);
+        if (row.status) o.status = row.status.toLowerCase();
+        if (!o.payment && row.payment_method) o.payment = row.payment_method;
+        if (!o.customer.name && row.buyer_name) o.customer.name = row.buyer_name;
+        if (!o.customer.address && row.buyer_address) o.customer.address = row.buyer_address;
+        o.items.push({
+          title: row.title,
+          qty: row.qty || 1,
+          price: Number(row.unit_price || 0),
+          image: row.image || "",
+        });
+        o.shipping += Number(row.shipping_fee || 0);
+      });
+
+      // Sort by newest order date
+      const list = Array.from(byOrder.values()).sort((a, b) => {
+        const tb = b.dateISO ? new Date(b.dateISO).getTime() : 0;
+        const ta = a.dateISO ? new Date(a.dateISO).getTime() : 0;
+        return tb - ta;
+      });
+
+      setOrders(list);
+    }
+
+    loadOrders();
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerId]);
 
   /* ---------- derived values ---------- */
   const counts = useMemo(() => {
@@ -116,18 +130,48 @@ export default function SellerOrders() {
   }, [orders, tab, q]);
 
   /* ---------- actions ---------- */
-  const acceptOrder = (id) => {
+  const acceptOrder = async (id) => {
     // pending -> processing
     setOrders((prev) =>
       prev.map((o) => (o.id === id ? { ...o, status: "processing" } : o))
     );
+    try {
+      const { error: ordersErr } = await supabase
+        .from("orders")
+        .update({ status: "Processing" })
+        .eq("id", id);
+      console.log("ACCEPT_ORDER orders update error", ordersErr);
+
+      const { error: itemsErr } = await supabase
+        .from("order_items")
+        .update({ status: "Processing" })
+        .eq("order_id", id);
+      console.log("ACCEPT_ORDER order_items update error", itemsErr);
+    } catch (e) {
+      console.log("ACCEPT_ORDER exception", e);
+    }
   };
 
-  const markShipped = (id) => {
+  const markShipped = async (id) => {
     // processing -> shipped
     setOrders((prev) =>
       prev.map((o) => (o.id === id ? { ...o, status: "shipped" } : o))
     );
+    try {
+      const { error: ordersErr } = await supabase
+        .from("orders")
+        .update({ status: "Shipped" })
+        .eq("id", id);
+      console.log("MARK_SHIPPED orders update error", ordersErr);
+
+      const { error: itemsErr } = await supabase
+        .from("order_items")
+        .update({ status: "Shipped" })
+        .eq("order_id", id);
+      console.log("MARK_SHIPPED order_items update error", itemsErr);
+    } catch (e) {
+      console.log("MARK_SHIPPED exception", e);
+    }
   };
 
   const totalOf = (o) =>
@@ -220,12 +264,12 @@ export default function SellerOrders() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <div className="text-sm font-semibold text-[var(--brown-700)]">
-                          {o.id}
+                          {formatOrderId(o.id)}
                         </div>
                         <StatusPill status={o.status} />
                       </div>
                       <div className="text-xs text-gray-600">
-                        {new Date(o.dateISO).toLocaleString()}
+                        {formatOrderDate(o.dateISO)}
                       </div>
                       <div className="mt-1 text-sm text-[var(--brown-700)] truncate">
                         {first.title}
@@ -339,7 +383,7 @@ function DetailsModal({ order, onClose }) {
         <div className="flex items-center justify-between p-4 border-b border-[var(--line-amber)]">
           <div>
             <div className="text-sm text-gray-600">Order Details</div>
-            <div className="font-semibold text-[var(--brown-700)]">{order.id}</div>
+            <div className="font-semibold text-[var(--brown-700)]">{formatOrderId(order.id)}</div>
           </div>
           <button
             onClick={onClose}
@@ -365,7 +409,7 @@ function DetailsModal({ order, onClose }) {
             </div>
             <div className="rounded-lg bg-[var(--cream-50)] border border-[var(--line-amber)] p-3">
               <div className="text-gray-600">Order Date</div>
-              <div className="mt-1">{new Date(order.dateISO).toLocaleString()}</div>
+              <div className="mt-1">{formatOrderDate(order.dateISO)}</div>
             </div>
 
             <div className="col-span-2 rounded-lg bg-[var(--cream-50)] border border-[var(--line-amber)] p-3">

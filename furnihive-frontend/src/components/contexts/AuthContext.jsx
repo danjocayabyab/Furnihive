@@ -21,13 +21,25 @@ export function AuthProvider({ children }) {
     const prof = await supabase
       .from("profiles")
       .select(
-        "id, role, seller_approved, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path"
+        "id, role, seller_approved, suspended, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path, last_active"
       )
       .eq("id", u.id)
       .single();
     if (!prof.error && prof.data) {
-      setProfile(prof.data);
-      return prof.data;
+      const current = prof.data;
+      setProfile(current);
+
+      // Update last_active timestamp for this user
+      try {
+        await supabase
+          .from("profiles")
+          .update({ last_active: new Date().toISOString() })
+          .eq("id", u.id);
+      } catch (e) {
+        console.warn("Failed to update last_active", e);
+      }
+
+      return current;
     }
 
     // create minimal profile if missing
@@ -38,18 +50,31 @@ export function AuthProvider({ children }) {
       last_name: md.last_name || null,
       store_name: md.store_name || null,
       phone: md.phone || null,
+      suspended: false,
       seller_approved: md.role === "seller" ? true : null,
     };
     const up = await supabase
       .from("profiles")
       .upsert(candidate, { onConflict: "id" })
       .select(
-        "id, role, seller_approved, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path"
+        "id, role, seller_approved, suspended, first_name, last_name, phone, store_name, birth_date, gender, avatar_url, avatar_path, last_active"
       )
       .single();
     if (!up.error && up.data) {
-      setProfile(up.data);
-      return up.data;
+      const created = up.data;
+      setProfile(created);
+
+      // Set last_active for newly created profile
+      try {
+        await supabase
+          .from("profiles")
+          .update({ last_active: new Date().toISOString() })
+          .eq("id", u.id);
+      } catch (e) {
+        console.warn("Failed to set last_active on new profile", e);
+      }
+
+      return created;
     }
     return null;
   }

@@ -33,7 +33,9 @@ export default function UserProfileModal({ open, onClose, user, peso }) {
                 <div className="font-semibold text-[var(--brown-700)]">{user.name}</div>
                 <div className="text-sm text-[var(--brown-700)]/70">{user.email}</div>
                 <div className="mt-1 flex gap-2">
-                  <Tag color={isSeller ? "purple" : "blue"}>{user.role}</Tag>
+                  <Tag color={isSeller ? "purple" : "blue"}>
+                    {isSeller ? "seller" : "buyer"}
+                  </Tag>
                   <Tag color={String(user.status).toLowerCase() === "active" ? "green" : "red"}>
                     {user.status}
                   </Tag>
@@ -63,10 +65,10 @@ export default function UserProfileModal({ open, onClose, user, peso }) {
               </div>
 
               <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                <Field label="Full Name" value={user.name} icon="👤" />
-                <Field label="Email" value={user.email} icon="✉️" />
-                <Field label="Phone" value={user.phone || "+63 912 345 6789"} icon="📞" />
-                <Field label="Location" value={user.location || "Manila, Philippines"} icon="📍" />
+                <Field label="Full Name" value={user.name} />
+                <Field label="Email" value={user.email} />
+                <Field label="Phone" value={user.phone || "+63 912 345 6789"} />
+                <Field label="Location" value={user.location || "Manila, Philippines"} />
               </div>
 
               <hr className="my-3 border-[var(--line-amber)]/60" />
@@ -75,7 +77,11 @@ export default function UserProfileModal({ open, onClose, user, peso }) {
                 <Row label="User ID" value={id} />
                 <Row
                   label="Account Type"
-                  value={<Tag color={isSeller ? "purple" : "blue"}>{user.role}</Tag>}
+                  value={
+                    <Tag color={isSeller ? "purple" : "blue"}>
+                      {isSeller ? "seller" : "buyer"}
+                    </Tag>
+                  }
                 />
                 <Row
                   label="Account Status"
@@ -139,13 +145,10 @@ function Info({ label, value }) {
   );
 }
 
-function Field({ icon, label, value }) {
+function Field({ label, value }) {
   return (
     <div>
-      <div className="flex items-center gap-1 font-medium text-[var(--brown-700)]">
-        <span className="text-[var(--brown-700)]/70">{icon}</span>
-        {label}
-      </div>
+      <div className="flex items-center gap-1 font-medium text-[var(--brown-700)]">{label}</div>
       <div className="text-[var(--brown-700)]/80 break-words">{value}</div>
     </div>
   );

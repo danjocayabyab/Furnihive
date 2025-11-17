@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import UserProfileModal from "./UserProfileModal";
-import { listUsers } from "./api/adminApi";
+import { listUsers, toggleUserSuspension } from "./api/adminApi";
 
 /* helpers */
 const peso = (n) =>
@@ -42,7 +42,7 @@ export default function UsersPage() {
 
   useEffect(() => {
     let alive = true;
-    (async () => {
+    const load = async () => {
       setLoading(true);
       setError("");
       try {
@@ -53,9 +53,19 @@ export default function UsersPage() {
       } finally {
         if (alive) setLoading(false);
       }
-    })();
+    };
+
+    // Initial load
+    load();
+
+    // Auto-refresh every 30 seconds while admin is on this page
+    const id = setInterval(() => {
+      load();
+    }, 30000);
+
     return () => {
       alive = false;
+      clearInterval(id);
     };
   }, []);
 
@@ -83,14 +93,33 @@ export default function UsersPage() {
 
   const onView = (u) => { setCurrent(u); setOpen(true); };
 
-  const toggleSuspend = (id) => {
+  const toggleSuspend = async (id) => {
+    // Optimistic UI update
     setUsers((prev) =>
       prev.map((u) =>
         u.id === id ? { ...u, status: u.status === "active" ? "suspended" : "active" } : u
       )
     );
-    const after = users.find((u) => u.id === id)?.status === "active" ? "suspended" : "active";
-    setToast({ show: true, message: `User ${id} is now ${after}` });
+
+    const target = users.find((u) => u.id === id);
+    const nextSuspend = target?.status !== "suspended"; // true when going to suspended
+
+    try {
+      const res = await toggleUserSuspension(id, nextSuspend);
+      // Ensure local state matches server result
+      setUsers((prev) =>
+        prev.map((u) => (u.id === id ? { ...u, status: res.status } : u))
+      );
+      setToast({ show: true, message: `User ${id} is now ${res.status}` });
+    } catch (e) {
+      // Revert on error
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === id ? { ...u, status: u.status === "active" ? "suspended" : "active" } : u
+        )
+      );
+      setToast({ show: true, message: `Failed to update status for ${id}` });
+    }
   };
 
   return (
@@ -110,7 +139,7 @@ export default function UsersPage() {
           {/* TOP: title + filters aligned */}
           <div className="px-5 py-3 border-b border-[var(--line-amber)]/60 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 font-semibold text-[var(--brown-700)]">
-              User/Seller Management
+              User Management
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
@@ -209,7 +238,9 @@ function UserCard({ user, onView, onSuspend }) {
           <div className="font-semibold text-[var(--brown-700)]">{user.name}</div>
           <div className="text-sm text-[var(--brown-700)]/70">{user.email}</div>
           <div className="mt-1 flex flex-wrap gap-1">
-            <Tag color={user.role === "seller" ? "purple" : "blue"}>{user.role}</Tag>
+            <Tag color={user.role === "seller" ? "purple" : "blue"}>
+              {user.role === "seller" ? "seller" : "buyer"}
+            </Tag>
             <Tag color={user.status === "active" ? "green" : "red"}>{user.status}</Tag>
           </div>
           <div className="text-[11px] text-[var(--brown-700)]/60 mt-2">

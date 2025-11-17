@@ -26,10 +26,22 @@ export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
 
-export function logout() {
+export async function logout() {
   try {
+    // Before clearing session, mark the user as offline by pushing last_active into the past
+    const { data } = await supabase.auth.getUser();
+    const userId = data?.user?.id;
+    if (userId) {
+      try {
+        await supabase
+          .from("profiles")
+          .update({ last_active: new Date(Date.now() - 10 * 60 * 1000).toISOString() })
+          .eq("id", userId);
+      } catch {}
+    }
+
     // Clear Supabase session
-    supabase.auth.signOut();
+    await supabase.auth.signOut();
   } catch {}
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(TOKEN_KEY);

@@ -44,20 +44,23 @@ export default function Cart() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link
-            to="/shop"
-            className="text-sm text-[var(--orange-600)] hover:underline"
-          >
-            ← Continue Shopping
-          </Link>
+      <div className="mb-6 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => navigate("/shop")}
+          className="rounded-lg border border-[var(--line-amber)] bg-white w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
+          aria-label="Back to Shop"
+        >
+          ←
+        </button>
+        <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold text-[var(--brown-700)]">
             Shopping Cart
             <span className="text-[var(--orange-600)] font-normal text-base">
               ({items.length})
             </span>
           </h1>
+          <p className="text-xs text-gray-600">Review your items before checkout.</p>
         </div>
       </div>
 

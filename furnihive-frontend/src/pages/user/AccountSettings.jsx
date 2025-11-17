@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import Button from "../../components/ui/Button.jsx";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
 import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabaseClient";
-import { useAuth } from "../../components/contexts/AuthContext.jsx";
 
 /* ------------------ Tabs (security removed) ------------------ */
 const TABS = [
@@ -25,16 +25,65 @@ const mockUser = {
 export default function AccountSettings() {
   const [sp, setSp] = useSearchParams();
   const tab = sp.get("tab") || "personal";
-  const { user: authUser, profile } = useAuth();
+  const navigate = useNavigate();
+  const { user: authUser, profile, refreshProfile } = useAuth();
+  const isSuspended = !!profile?.suspended;
+
+  useEffect(() => {
+    // Ensure we have the freshest profile (including updated suspended flag)
+    refreshProfile?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (isSuspended) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-10">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800">
+          <div className="font-semibold text-red-900 mb-1">Account suspended</div>
+          <p className="mb-2">
+            Your account has been suspended by an administrator. You can still browse products, but
+            updating account settings is currently disabled.
+          </p>
+          <p className="text-xs text-red-900/80 mb-3">
+            If you believe this is a mistake or would like to appeal, please contact support.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate("/logout")}
+              className="rounded-xl border border-[var(--line-amber)] px-4 py-2.5 text-sm font-medium text-[var(--brown-700)] hover:bg-[var(--cream-50)]"
+            >
+              Log out
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/support")}
+              className="rounded-xl bg-[var(--orange-600)] px-4 py-2.5 text-white text-sm font-medium hover:brightness-95"
+            >
+              Contact support
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link to="/profile" className="text-sm text-[var(--orange-600)] hover:underline">
-          ← Back to Profile
-        </Link>
-        <h1 className="text-xl font-semibold text-[var(--brown-700)]">Account Settings</h1>
+        <button
+          type="button"
+          onClick={() => navigate("/profile")}
+          className="rounded-lg border border-[var(--line-amber)] bg-white w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
+          aria-label="Back to Profile"
+        >
+          ←
+        </button>
+        <div>
+          <h1 className="text-xl font-semibold text-[var(--brown-700)]">Account Settings</h1>
+          <p className="text-xs text-gray-600">Manage your personal info and addresses.</p>
+        </div>
       </div>
 
       {/* Tab bar */}

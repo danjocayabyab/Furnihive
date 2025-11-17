@@ -1,6 +1,7 @@
 // src/admin/CustomerSupportPage.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addNotification } from "./lib/notifications";
+import { supabase } from "../lib/supabaseClient";
 
 /* ---------- Helpers ---------- */
 const peso = (n) =>
@@ -25,67 +26,9 @@ const STATUS_OPTIONS = ["open", "in_progress", "resolved", "closed"];
 const PRIORITY_OPTIONS = ["low", "normal", "high", "urgent"];
 
 /* ---------- Seed ---------- */
-const SEED = [
-  {
-    id: "TCK-1001",
-    subject: "Order not received yet",
-    category: "orders",
-    status: "open",
-    priority: "high",
-    createdAt: "10/04/2024",
-    customer: "John Dela Cruz",
-    email: "john.delacruz@email.com",
-    orderId: "ORD-2024-004",
-    seller: "Manila Furniture Co.",
-    amount: 18500,
-    thread: [{ by: "customer", at: "10/04/2024 09:22", text: "Hi, my order still hasn’t arrived. It was supposed to be delivered 10/3." }],
-  },
-  {
-    id: "TCK-1002",
-    subject: "Duplicate payment detected",
-    category: "payments",
-    status: "in_progress",
-    priority: "urgent",
-    createdAt: "10/03/2024",
-    customer: "Maria Santos",
-    email: "maria.santos@email.com",
-    orderId: "ORD-2024-002",
-    seller: "Cebu Wood Works",
-    amount: 8900,
-    thread: [
-      { by: "customer", at: "10/03/2024 14:10", text: "I got charged twice on my credit card." },
-      { by: "admin", at: "10/03/2024 15:01", text: "Thanks for reporting. We’re checking with the payment processor." },
-    ],
-  },
-  {
-    id: "TCK-1003",
-    subject: "Need help updating business profile",
-    category: "seller",
-    status: "resolved",
-    priority: "normal",
-    createdAt: "10/01/2024",
-    customer: "Manila Furniture Co.",
-    email: "contact@manilafurniture.com",
-    thread: [
-      { by: "seller", at: "10/01/2024 11:00", text: "Where can I upload a new DTI document?" },
-      { by: "admin", at: "10/01/2024 11:20", text: "Go to Seller Settings → Compliance tab. File accepted ✔" },
-    ],
-  },
-  {
-    id: "TCK-1004",
-    subject: "Can’t sign in to my account",
-    category: "account",
-    status: "closed",
-    priority: "low",
-    createdAt: "09/28/2024",
-    customer: "Carlos Rivera",
-    email: "carlos.rivera@email.com",
-    thread: [
-      { by: "customer", at: "09/28/2024 08:20", text: "Reset link not working." },
-      { by: "admin", at: "09/28/2024 08:50", text: "We’ve reset your password manually. Ticket closed." },
-    ],
-  },
-];
+// We now load tickets from the support_tickets table but keep the same shape used by the UI.
+// SEED is left as an empty array fallback.
+const SEED = [];
 
 /* ---------- Small UI ---------- */
 function Pill({ cls, children }) {
@@ -124,7 +67,6 @@ function TicketRow({ t, onView }) {
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Pill cls="bg-amber-50 text-amber-900 border-[var(--line-amber)]/70">{t.category}</Pill>
             <StatusPill status={t.status} />
-            <PriorityPill priority={t.priority} />
           </div>
         </div>
         <div className="col-span-3">
@@ -176,7 +118,7 @@ function TicketDetailsModal({ open, onClose, ticket, onReply, onUpdateStatus, on
             <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-4 grid grid-cols-2 gap-4">
               <div>
                 <div className="text-[11px] text-[var(--brown-700)]/60">Ticket ID</div>
-                <div className="font-medium text-[var(--brown-700)]">{ticket.id}</div>
+                <div className="font-medium text-[var(--brown-700)]">{ticket.ticketCode || ticket.id}</div>
               </div>
               <div className="flex gap-2 items-end justify-end">
                 <div className="flex items-center gap-2">
@@ -185,16 +127,12 @@ function TicketDetailsModal({ open, onClose, ticket, onReply, onUpdateStatus, on
                     {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
                   </select>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-[var(--brown-700)]/60">Priority</span>
-                  <select value={ticket.priority} onChange={(e) => onUpdatePriority(e.target.value)} className="h-8 rounded-lg border border-[var(--line-amber)] bg-white px-2 text-sm">
-                    {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
               </div>
 
               <div>
-                <div className="text-[11px] text-[var(--brown-700)]/60">From</div>
+                <div className="text-[11px] text-[var(--brown-700)]/60">
+                  {ticket.type === "seller" ? "Seller" : "Buyer"}
+                </div>
                 <div className="font-medium text-[var(--brown-700)]">{ticket.customer}</div>
                 <div className="text-[12px] text-[var(--brown-700)]/70">{ticket.email}</div>
               </div>
@@ -231,7 +169,7 @@ function TicketDetailsModal({ open, onClose, ticket, onReply, onUpdateStatus, on
                       mine ? "bg-[var(--amber-100)] text-[var(--brown-700)] border-[var(--line-amber)]"
                            : "bg-[var(--cream-50)] text-[var(--brown-700)] border-[var(--line-amber)]"}`}>
                       <div className="text-[11px] opacity-70 mb-0.5">
-                        {m.by === "admin" ? "Admin" : m.by === "seller" ? "Seller" : "Customer"} • {m.at}
+                        {m.by === "admin" ? "Admin" : m.by === "seller" ? "Seller" : "Buyer"} • {m.at}
                       </div>
                       <div className="whitespace-pre-wrap">{m.text}</div>
                     </div>
@@ -297,6 +235,57 @@ export default function CustomerSupportPage() {
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "" });
 
+  // Load tickets from support_tickets on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("support_tickets")
+        .select("id, type, subject, category, status, priority, created_at, customer_name, customer_email, message")
+        .order("created_at", { ascending: false });
+      if (error || !data || cancelled) return;
+
+      const mapped = data.map((row) => {
+        const rawId = String(row.id || "");
+        const ticketCode = rawId
+          ? `TCK-${rawId.replace(/-/g, "").slice(0, 8).toUpperCase()}`
+          : "TCK-UNKNOWN";
+        const createdAt = row.created_at
+          ? new Date(row.created_at).toLocaleDateString("en-PH")
+          : "";
+        const initialMsg = {
+          by: row.type === "seller" ? "seller" : "customer",
+          at: row.created_at
+            ? new Date(row.created_at).toLocaleString("en-PH", { hour: "2-digit", minute: "2-digit" })
+            : "",
+          text: row.message || "",
+        };
+        return {
+          id: row.id,
+          type: row.type,
+          ticketCode,
+          subject: row.subject,
+          category: row.category,
+          status: row.status || "open",
+          priority: row.priority || "normal",
+          createdAt,
+          customer: row.customer_name || "",
+          email: row.customer_email || "",
+          orderId: null,
+          seller: row.type === "seller" ? row.customer_name || "Seller" : null,
+          amount: null,
+          thread: [initialMsg],
+        };
+      });
+
+      setTickets(mapped);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const counts = useMemo(() => {
     const c = { open: 0, in_progress: 0, resolved: 0, closed: 0 };
     for (const t of tickets) c[t.status] = (c[t.status] || 0) + 1;
@@ -314,7 +303,34 @@ export default function CustomerSupportPage() {
     });
   }, [tickets, q, cat, status, priority]);
 
-  const handleView = (t) => { setCurrent(t); setOpen(true); };
+  const handleView = async (t) => {
+    setCurrent(t);
+    setOpen(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("support_messages")
+        .select("author_type, body, created_at")
+        .eq("ticket_id", t.id)
+        .order("created_at", { ascending: true });
+
+      if (error || !data) return;
+
+      const thread = data.map((m) => ({
+        by: m.author_type === "admin" ? "admin" : m.author_type === "seller" ? "seller" : "customer",
+        at: m.created_at
+          ? new Date(m.created_at).toLocaleString("en-PH", { hour: "2-digit", minute: "2-digit" })
+          : "",
+        text: m.body || "",
+      }));
+
+      setCurrent((prev) => (prev && prev.id === t.id ? { ...prev, thread } : prev));
+      setTickets((prev) => prev.map((row) => (row.id === t.id ? { ...row, thread } : row)));
+    } catch (e) {
+      // On failure we keep the initial thread from ticket creation.
+      console.warn("Failed to load support messages", e);
+    }
+  };
   const updateTicket = (id, patch) => setTickets((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
 
   return (
@@ -364,51 +380,84 @@ export default function CustomerSupportPage() {
         open={open}
         onClose={() => setOpen(false)}
         ticket={current}
-        onReply={(text) => {
+        onReply={async (text) => {
           if (!current) return;
           const now = new Date();
           const stamp =
             now.toLocaleDateString("en-PH") +
             " " +
             now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
-          updateTicket(current.id, { thread: [...current.thread, { by: "admin", at: stamp, text }] });
-          setToast({ show: true, message: `Reply sent to ${current.customer}` });
+          try {
+            await supabase.from("support_messages").insert({
+              ticket_id: current.id,
+              author_type: "admin",
+              body: text,
+            });
 
-          // 🔔 notify
-          addNotification({
-            title: "Reply sent",
-            body: `${current.id} • ${current.customer}`,
-            type: "success",
-            link: "/admin?tab=support",
-          });
+            updateTicket(current.id, { thread: [...current.thread, { by: "admin", at: stamp, text }] });
+            setCurrent((c) =>
+              c && c.id === current.id
+                ? { ...c, thread: [...(c.thread || []), { by: "admin", at: stamp, text }] }
+                : c
+            );
+            setToast({ show: true, message: `Reply sent to ${current.customer}` });
+
+            // 🔔 notify
+            addNotification({
+              title: "Reply sent",
+              body: `${current.id} • ${current.customer}`,
+              type: "success",
+              link: "/admin?tab=support",
+            });
+          } catch (e) {
+            setToast({ show: true, message: e?.message || "Failed to send reply" });
+          }
         }}
-        onUpdateStatus={(newStatus) => {
+        onUpdateStatus={async (newStatus) => {
           if (!current) return;
-          updateTicket(current.id, { status: newStatus });
-          setCurrent((c) => ({ ...c, status: newStatus }));
-          setToast({ show: true, message: `Ticket ${current.id} marked as ${newStatus.replace("_", " ")}` });
+          try {
+            await supabase
+              .from("support_tickets")
+              .update({ status: newStatus })
+              .eq("id", current.id);
 
-          // 🔔 notify
-          addNotification({
-            title: "Ticket status updated",
-            body: `${current.id} → ${newStatus.replace("_", " ")}`,
-            type: newStatus === "resolved" ? "success" : newStatus === "closed" ? "info" : "warning",
-            link: "/admin?tab=support",
-          });
+            updateTicket(current.id, { status: newStatus });
+            setCurrent((c) => ({ ...c, status: newStatus }));
+            setToast({ show: true, message: `Ticket ${current.id} marked as ${newStatus.replace("_", " ")}` });
+
+            // 🔔 notify
+            addNotification({
+              title: "Ticket status updated",
+              body: `${current.id} → ${newStatus.replace("_", " ")}`,
+              type: newStatus === "resolved" ? "success" : newStatus === "closed" ? "info" : "warning",
+              link: "/admin?tab=support",
+            });
+          } catch (e) {
+            setToast({ show: true, message: e?.message || "Failed to update status" });
+          }
         }}
-        onUpdatePriority={(newPriority) => {
+        onUpdatePriority={async (newPriority) => {
           if (!current) return;
-          updateTicket(current.id, { priority: newPriority });
-          setCurrent((c) => ({ ...c, priority: newPriority }));
-          setToast({ show: true, message: `Ticket ${current.id} priority set to ${newPriority}` });
+          try {
+            await supabase
+              .from("support_tickets")
+              .update({ priority: newPriority })
+              .eq("id", current.id);
 
-          // 🔔 notify
-          addNotification({
-            title: "Ticket priority changed",
-            body: `${current.id} → ${newPriority}`,
-            type: newPriority === "urgent" ? "warning" : "info",
-            link: "/admin?tab=support",
-          });
+            updateTicket(current.id, { priority: newPriority });
+            setCurrent((c) => ({ ...c, priority: newPriority }));
+            setToast({ show: true, message: `Ticket ${current.id} priority set to ${newPriority}` });
+
+            // 🔔 notify
+            addNotification({
+              title: "Ticket priority changed",
+              body: `${current.id} → ${newPriority}`,
+              type: newPriority === "urgent" ? "warning" : "info",
+              link: "/admin?tab=support",
+            });
+          } catch (e) {
+            setToast({ show: true, message: e?.message || "Failed to update priority" });
+          }
         }}
       />
 

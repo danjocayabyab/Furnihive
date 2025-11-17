@@ -12,6 +12,9 @@ export default function Checkout() {
   const navigate = useNavigate();
   const { items, clearCart } = useCart();
   const location = useLocation();
+  const { profile, user } = useAuth();
+
+  const isSuspended = !!profile?.suspended;
 
   const selectedIds = Array.isArray(location.state?.selectedItems)
     ? location.state.selectedItems
@@ -123,21 +126,122 @@ export default function Checkout() {
       ? card.name && card.number && card.exp && card.cvv
       : true) && agree;
 
-  const placeOrder = () => {
-    // Normally: await api.post('/orders', { items, ship, payMethod, cardLast4... })
+  const placeOrder = async () => {
+    if (!checkoutItems.length) return;
+
+    const first = checkoutItems[0];
+    const itemCount = checkoutItems.reduce((n, it) => n + (it.qty || 1), 0);
+
+    // Build buyer display name and shipping address snapshot for sellers
+    const buyerName = `${ship.firstName || ""} ${ship.lastName || ""}`.trim() || null;
+    const addrParts = [];
+    if (ship.street) addrParts.push(ship.street);
+    const cityProv = [ship.city, ship.province].filter(Boolean).join(", ");
+    const withPostal = [cityProv, ship.zip].filter(Boolean).join(" ");
+    if (withPostal) addrParts.push(withPostal);
+    const buyerAddress = addrParts.join(" · ") || null;
+
+    // Persist basic order summary to Supabase
+    try {
+      const { data: created, error: orderErr } = await supabase
+        .from("orders")
+        .insert({
+        user_id: user?.id || null,
+        total_amount: totals.total,
+        item_count: itemCount,
+        summary_title: first.title,
+        summary_image: first.image || null,
+        seller_display: first.seller || null,
+        color: first.color || null,
+        status: "Pending",
+      })
+        .select("id")
+        .single();
+
+      if (!orderErr && created?.id) {
+        const orderId = created.id;
+        const itemsPayload = checkoutItems
+          .filter((it) => it.seller_id) // only items with a known seller
+          .map((it) => ({
+            order_id: orderId,
+            seller_id: it.seller_id,
+            product_id: it.id,
+            title: it.title,
+            image: it.image || null,
+            qty: it.qty || 1,
+            unit_price: Number(it.price || 0),
+            shipping_fee: 0,
+            buyer_name: buyerName,
+            buyer_address: buyerAddress,
+            payment_method: payMethod || null,
+            status: "Pending",
+          }));
+
+        if (itemsPayload.length) {
+          await supabase.from("order_items").insert(itemsPayload);
+        }
+      }
+    } catch {
+      // best-effort; even if this fails, still clear cart and show success UI
+    }
+
     clearCart();
     navigate("/checkout/success", { state: { total: totals.total } });
   };
 
+  if (isSuspended) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-10">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800">
+          <div className="font-semibold text-red-900 mb-1">Account suspended</div>
+          <p className="mb-2">
+            Your account has been suspended by an administrator. You can still browse products, but
+            placing new orders is currently disabled.
+          </p>
+          <p className="text-xs text-red-900/80 mb-3">
+            If you believe this is a mistake or would like to appeal, please contact support.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate("/logout")}
+              className="rounded-xl border border-[var(--line-amber)] px-4 py-2.5 text-sm font-medium text-[var(--brown-700)] hover:bg-[var(--cream-50)]"
+            >
+              Log out
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/support")}
+              className="rounded-xl bg-[var(--orange-600)] px-4 py-2.5 text-white text-sm font-medium hover:brightness-95"
+            >
+              Contact support
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      {/* Header: back link + steps aligned */}
-      <div className="mb-4 flex items-center gap-2">
-        <Link to="/cart" className="text-sm text-[var(--orange-600)] hover:underline whitespace-nowrap">
-          ← Back to Cart
-        </Link>
-        <div className="flex-1 flex justify-center">
-          <Progress step={step} />
+      {/* Header: back button + steps aligned */}
+      <div className="mb-4 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => navigate("/cart")}
+          className="rounded-lg border border-[var(--line-amber)] bg-white w-9 h-9 grid place-items-center hover:bg-[var(--cream-50)]"
+          aria-label="Back to Cart"
+        >
+          ←
+        </button>
+        <div className="flex-1 flex items-center justify-between gap-2">
+          <div className="hidden sm:block">
+            <h1 className="text-base font-semibold text-[var(--brown-700)]">Checkout</h1>
+            <p className="text-xs text-gray-600">Complete your shipping, payment, and review.</p>
+          </div>
+          <div className="flex-1 flex justify-center">
+            <Progress step={step} />
+          </div>
         </div>
       </div>
 
@@ -196,7 +300,6 @@ export default function Checkout() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium text-[var(--brown-700)] text-sm">{it.title}</div>
-                  <div className="text-xs text-gray-600">Color: {it.color || "Default"}</div>
                   <div className="text-[11px] text-gray-600">Sold by: {it.seller || "Manila Furniture Co."}</div>
                   <div className="text-sm font-semibold">{peso((it.price || 0) * (it.qty || 1))}</div>
                 </div>
