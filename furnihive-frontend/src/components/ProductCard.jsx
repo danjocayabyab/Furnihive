@@ -2,16 +2,22 @@ import { Link, useNavigate } from "react-router-dom";
 import Button from "./ui/Button.jsx";
 import { useCart } from "../components/contexts/CartContext.jsx";
 import { useUI } from "../components/contexts/UiContext.jsx";
+import { useAuth } from "../components/contexts/AuthContext.jsx";
 
 export default function ProductCard({ product }) {
   const navigate = useNavigate();
   const cart = useCart();
   const addToCartCtx = typeof cart.add === "function" ? cart.add : cart.addItem;
-  const { showAddToCart } = useUI();
+  const { showAddToCart, openAuth } = useUI();
+  const { user } = useAuth();
 
   const to = `/product/${product.id ?? ""}`;
 
   const onAdd = () => {
+    if (!user) {
+      openAuth("login");
+      return;
+    }
     const baseItem = {
       id: product.id,
       seller_id: product.seller_id,

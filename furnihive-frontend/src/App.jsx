@@ -86,13 +86,13 @@ export default function App() {
   return (
     <Routes>
       {/* ---------- Auth Routes ---------- */}
-      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/logout" element={<LogoutRoute />} />
 
       {/* ---------- Buyer (User) Routes ---------- */}
       <Route element={<UserLayout />}>
+        <Route path="/" element={<Home />} />
         <Route path="/home" element={<Home />} />
         <Route path="/shop" element={<Shop />} />
         <Route path="/product/:id" element={<ProductDetail />} />

@@ -51,7 +51,8 @@ export function AuthProvider({ children }) {
       store_name: md.store_name || null,
       phone: md.phone || null,
       suspended: false,
-      seller_approved: md.role === "seller" ? true : null,
+      // New profiles are never auto-approved as sellers; they must be verified explicitly
+      seller_approved: false,
     };
     const up = await supabase
       .from("profiles")
