@@ -65,6 +65,17 @@ export default function UserNavbar() {
             <span>Shop</span>
           </NavLink>
 
+          {/* Cart */}
+          <NavLink to="/cart" className={navItemCls} title="Cart">
+            <span></span>
+            <span>Cart</span>
+            {cartCount > 0 && (
+              <span className="ml-1 grid h-5 min-w-[20px] place-items-center rounded-full bg-[var(--orange-600)] px-1.5 text-[11px] font-semibold text-white">
+                {cartCount > 99 ? "99+" : cartCount}
+              </span>
+            )}
+          </NavLink>
+
           {/* Messages */}
           <NavLink to="/messages" className={navItemCls} title="Messages">
             <span className="relative">
@@ -75,17 +86,6 @@ export default function UserNavbar() {
               )}
             </span>
             <span>Messages</span>
-          </NavLink>
-
-          {/* Cart — now same animation/active style as others */}
-          <NavLink to="/cart" className={navItemCls} title="Cart">
-            <span></span>
-            <span>Cart</span>
-            {cartCount > 0 && (
-              <span className="ml-1 grid h-5 min-w-[20px] place-items-center rounded-full bg-[var(--orange-600)] px-1.5 text-[11px] font-semibold text-white">
-                {cartCount > 99 ? "99+" : cartCount}
-              </span>
-            )}
           </NavLink>
 
           {user ? (

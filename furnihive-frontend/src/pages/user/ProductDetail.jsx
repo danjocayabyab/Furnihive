@@ -28,6 +28,7 @@ export default function ProductDetail() {
   const [productReviews, setProductReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
+  const [storeStats, setStoreStats] = useState({ rating: 0, sales: 0 });
 
   useEffect(() => {
     let cancelled = false;
@@ -206,7 +207,15 @@ export default function ProductDetail() {
             sellerReplyDate: r.seller_reply_created_at || null,
           };
         });
-        if (!cancelled) setProductReviews(mapped);
+
+        if (!cancelled) {
+          setProductReviews(mapped);
+          const count = mapped.length;
+          const avg = count
+            ? mapped.reduce((sum, r) => sum + Number(r.rating || 0), 0) / count
+            : 0;
+          setStoreStats({ rating: avg, sales: orderIds.length });
+        }
       } catch {
         if (!cancelled) setProductReviews([]);
       } finally {
@@ -366,7 +375,7 @@ export default function ProductDetail() {
 
             {/* Rating */}
             <div className="text-sm text-yellow-600">
-              ⭐ {Number(product?.rating || 0).toFixed(1)} ({product?.reviews || 0} reviews)
+              ⭐ {Number(averageRating || 0).toFixed(1)} ({reviewCount} reviews)
             </div>
 
             {/* Price */}
@@ -431,7 +440,9 @@ export default function ProductDetail() {
             <div className="border border-[var(--line-amber)] rounded-2xl p-3 flex items-center justify-between mt-4">
               <div>
                 <div className="font-semibold">{product?.seller || ""}</div>
-                <div className="text-xs text-gray-600">⭐ 4.9 • 2847 sales</div>
+                <div className="text-xs text-gray-600">
+                  ⭐ {storeStats.rating.toFixed(1)} • {storeStats.sales} sales
+                </div>
               </div>
               <Button
                 variant="secondary"
