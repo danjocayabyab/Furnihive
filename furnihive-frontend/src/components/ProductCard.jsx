@@ -28,6 +28,7 @@ export default function ProductCard({ product }) {
       seller: product.seller,
       color: product.color || "Default",
       rating: product.rating,
+      weight_kg: product.weight_kg || 0,
     };
     addToCartCtx(baseItem, 1);
     showAddToCart({
