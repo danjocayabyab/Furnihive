@@ -4,7 +4,9 @@ import { useMemo, useRef, useState } from "react";
 export default function UserProfileModal({ open, onClose, user, peso }) {
   if (!open || !user) return null;
 
-  const id = (user.id || "").toUpperCase();
+  const fullId = String(user.id || "");
+  const compactId = fullId.replace(/-/g, "").toUpperCase().slice(0, 8);
+  const displayId = compactId ? `USR-${compactId}` : "USR-UNKNOWN";
   const isSeller = String(user.role || "").toLowerCase() === "seller";
   const title = isSeller ? "Seller Profile" : "User Profile";
 
@@ -40,17 +42,9 @@ export default function UserProfileModal({ open, onClose, user, peso }) {
                     {user.status}
                   </Tag>
                 </div>
-                <div className="mt-2 grid grid-cols-4 gap-2 text-[11px]">
+                <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
                   <Info label="Joined" value={user.joinDate} />
                   <Info label="Last Active" value={user.lastActive} />
-                  <Info
-                    label={isSeller ? "Sales" : "Orders"}
-                    value={isSeller ? user.sales : user.orders}
-                  />
-                  <Info
-                    label={isSeller ? "Revenue" : "Spent"}
-                    value={peso(isSeller ? (user.revenue || 0) : (user.spent || 0))}
-                  />
                 </div>
               </div>
             </div>
@@ -67,14 +61,19 @@ export default function UserProfileModal({ open, onClose, user, peso }) {
               <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                 <Field label="Full Name" value={user.name} />
                 <Field label="Email" value={user.email} />
-                <Field label="Phone" value={user.phone || "+63 912 345 6789"} />
-                <Field label="Location" value={user.location || "Manila, Philippines"} />
+                <Field label="Phone" value={user.phone || "Not specified"} />
+                <Field label="Location" value={user.location || "Not specified"} />
               </div>
 
               <hr className="my-3 border-[var(--line-amber)]/60" />
 
-              <div className="space-y-1 text-sm">
-                <Row label="User ID" value={id} />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <Row
+                  label="User ID"
+                  value={
+                    <span title={fullId || undefined}>{displayId}</span>
+                  }
+                />
                 <Row
                   label="Account Type"
                   value={

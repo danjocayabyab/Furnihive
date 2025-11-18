@@ -226,14 +226,24 @@ function Tag({ color, children }) {
 
 function UserCard({ user, onView, onSuspend }) {
   const first = (user.name || "?")[0]?.toUpperCase() || "U";
-  const id = (user.id || "").toUpperCase();
+  const fullId = String(user.id || "");
+  const compactId = fullId.replace(/-/g, "").toUpperCase().slice(0, 8);
+  const displayId = compactId ? `USR-${compactId}` : "USR-UNKNOWN";
   return (
     <div className="relative rounded-xl border border-[var(--line-amber)] bg-gradient-to-br from-[#fffdf5] to-[#fffaf0] p-5 flex flex-col sm:flex-row sm:items-center justify-between">
       {/* Left: basic info */}
       <div className="flex items-start gap-4">
-        <div className="h-10 w-10 rounded-full bg-[var(--amber-400)]/25 grid place-items-center text-[var(--orange-600)] font-medium">
-          {first}
-        </div>
+        {user.avatarUrl ? (
+          <img
+            src={user.avatarUrl}
+            alt={user.name || "User"}
+            className="h-10 w-10 rounded-full object-cover border border-[var(--line-amber)] bg-white"
+          />
+        ) : (
+          <div className="h-10 w-10 rounded-full bg-[var(--amber-400)]/25 grid place-items-center text-[var(--orange-600)] font-medium">
+            {first}
+          </div>
+        )}
         <div>
           <div className="font-semibold text-[var(--brown-700)]">{user.name}</div>
           <div className="text-sm text-[var(--brown-700)]/70">{user.email}</div>
@@ -249,35 +259,12 @@ function UserCard({ user, onView, onSuspend }) {
         </div>
       </div>
 
-      {/* Middle stats */}
+      {/* Middle stats: only last active */}
       <div className="hidden sm:flex flex-col sm:flex-row sm:items-center sm:gap-8 mt-3 sm:mt-0">
         <div className="text-center sm:text-left">
           <div className="text-[11px] text-[var(--brown-700)]/60">Last Active</div>
           <div className="text-[var(--brown-700)]">{user.lastActive}</div>
         </div>
-        {user.role === "customer" ? (
-          <>
-            <div className="text-center sm:text-left">
-              <div className="text-[11px] text-[var(--brown-700)]/60">Orders</div>
-              <div className="text-[var(--brown-700)]">{user.orders}</div>
-            </div>
-            <div className="text-center sm:text-left">
-              <div className="text-[11px] text-[var(--brown-700)]/60">Total Spent</div>
-              <div className="text-[var(--orange-600)] font-medium">{peso(user.spent || 0)}</div>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="text-center sm:text-left">
-              <div className="text-[11px] text-[var(--brown-700)]/60">Sales</div>
-              <div className="text-[var(--brown-700)]">{user.sales || 0}</div>
-            </div>
-            <div className="text-center sm:text-left">
-              <div className="text-[11px] text-[var(--brown-700)]/60">Revenue</div>
-              <div className="text-[var(--orange-600)] font-medium">{peso(user.revenue || 0)}</div>
-            </div>
-          </>
-        )}
       </div>
 
       {/* Right actions */}
@@ -297,9 +284,12 @@ function UserCard({ user, onView, onSuspend }) {
         </button>
       </div>
 
-      {/* User ID at right (uppercase USR) */}
-      <div className="absolute right-6 top-4 text-[11px] text-[var(--brown-700)]/60">
-        User ID {id}
+      {/* User ID at right: short code with full UUID in tooltip */}
+      <div
+        className="absolute right-6 top-4 text-[11px] text-[var(--brown-700)]/60"
+        title={fullId || undefined}
+      >
+        User ID {displayId}
       </div>
     </div>
   );
