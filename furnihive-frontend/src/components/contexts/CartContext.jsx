@@ -92,7 +92,9 @@ export function CartProvider({ children }) {
         if (cartId) {
           const { data: rows, error: itemsErr } = await supabase
             .from("cart_items")
-            .select("id, product_id, qty, unit_price, title, image, seller_display, color")
+            .select(
+              "id, product_id, qty, unit_price, title, image, seller_display, color, weight_kg"
+            )
             .eq("cart_id", cartId);
           if (itemsErr) throw itemsErr;
           const mapped = (rows || []).map((r) => ({
@@ -104,6 +106,7 @@ export function CartProvider({ children }) {
             seller: r.seller_display || undefined,
             color: r.color || undefined,
             qty: r.qty || 1,
+            weight_kg: r.weight_kg || 0,
           }));
           if (!cancelled) {
             dispatch({ type: "CLEAR" });
@@ -167,6 +170,7 @@ export function CartProvider({ children }) {
             image: item.image || null,
             seller_display: item.seller || null,
             color: item.color || null,
+            weight_kg: item.weight_kg || null,
           });
         }
       } catch {}

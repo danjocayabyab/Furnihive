@@ -241,7 +241,7 @@ export default function Home() {
           const { data, error } = await supabase
             .from("products")
             .select(
-              "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, created_at, featured_rank"
+              "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, weight_kg, created_at, featured_rank"
             )
             .gt("featured_rank", 0)
             .order("featured_rank", { ascending: false })
@@ -256,7 +256,7 @@ export default function Home() {
           const { data: recent, error: err2 } = await supabase
             .from("products")
             .select(
-              "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, created_at"
+              "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, weight_kg, created_at"
             )
             .order("created_at", { ascending: false })
             .limit(8);
@@ -279,6 +279,7 @@ export default function Home() {
           category: r.category || "",
           category_id: r.category_id || null,
           color: r.color || "",
+          weight_kg: r.weight_kg ?? null,
           seller: undefined,
         }));
 

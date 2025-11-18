@@ -48,6 +48,12 @@ export default function Checkout() {
   const [card, setCard] = useState({ name: "", number: "", exp: "", cvv: "" });
   const [agree, setAgree] = useState(false);
 
+  // ---- SHIPPING VIA LALAMOVE (geocoding + quotation)
+  const [geo, setGeo] = useState(null); // { lat, lng, formatted }
+  const [lalamoveQuote, setLalamoveQuote] = useState(null);
+  const [lalamoveLoading, setLalamoveLoading] = useState(false);
+  const [lalamoveError, setLalamoveError] = useState("");
+
   // ---- PROMOTIONS (seller vouchers)
   const [vouchers, setVouchers] = useState([]); // active voucher-type promotions (all sellers)
   const [selectedVoucherId, setSelectedVoucherId] = useState(null);
@@ -88,10 +94,33 @@ export default function Checkout() {
   // expose all active vouchers loaded from Supabase; discount is still scoped per seller
   const applicableVouchers = useMemo(() => vouchers, [vouchers]);
 
-  // ---- ORDER SUM (with optional voucher discount)
+  // Total cart weight in kilograms (from product.weight_kg)
+  const totalWeightKg = useMemo(
+    () => checkoutItems.reduce((s, it) => s + (Number(it.weight_kg) || 0) * (it.qty || 1), 0),
+    [checkoutItems]
+  );
+
+  const lalamoveConfig = useMemo(() => {
+    let serviceType = "MOTORCYCLE";
+    let itemWeight = "LESS_THAN_3KG";
+
+    if (totalWeightKg > 3 && totalWeightKg <= 20) {
+      serviceType = "VAN";
+      itemWeight = "BETWEEN_3_AND_20KG";
+    } else if (totalWeightKg > 20) {
+      serviceType = "3000KG_TRUCK";
+      itemWeight = "MORE_THAN_20KG";
+    }
+
+    return { serviceType, itemWeight };
+  }, [totalWeightKg]);
+
+  // ---- ORDER SUM (with optional voucher discount + dynamic Lalamove shipping)
   const totals = useMemo(() => {
     const subtotal = checkoutItems.reduce((s, it) => s + (it.price || 0) * (it.qty || 1), 0);
-    const shipping = subtotal >= 25000 || checkoutItems.length === 0 ? 0 : 500;
+    const dynamicShipping = lalamoveQuote?.amount ?? null;
+    const baseShipping = subtotal >= 25000 || checkoutItems.length === 0 ? 0 : 500;
+    const shipping = dynamicShipping != null ? Number(dynamicShipping) : baseShipping;
     const vat = Math.round(subtotal * 0.12);
 
     let promoDiscount = 0;
@@ -116,12 +145,109 @@ export default function Checkout() {
 
     const total = Math.max(0, subtotal + shipping + vat - promoDiscount);
     return { subtotal, shipping, vat, promoDiscount, total };
-  }, [checkoutItems, applicableVouchers, selectedVoucherId]);
+  }, [checkoutItems, applicableVouchers, selectedVoucherId, lalamoveQuote]);
 
   const canContinueShipping =
     ship.firstName && ship.lastName && ship.email && ship.phone && ship.street && ship.city && ship.zip;
 
   const canContinuePayment = agree;
+
+  // Compose a full address string for geocoding from the shipping form
+  const buildFullAddress = () => {
+    const parts = [];
+    if (ship.street) parts.push(ship.street);
+    const cityProv = [ship.city, ship.province].filter(Boolean).join(", ");
+    if (cityProv) parts.push(cityProv);
+    if (ship.zip) parts.push(ship.zip);
+    return parts.join(", ");
+  };
+
+  // Call Supabase Edge Function that wraps OpenCage geocoding
+  const geocodeAddress = async () => {
+    try {
+      setLalamoveError("");
+      const address = buildFullAddress();
+      if (!address) {
+        setLalamoveError("Please enter a complete address before continuing.");
+        return null;
+      }
+      const { data, error } = await supabase.functions.invoke("geocode-address", {
+        body: { address },
+      });
+      if (error) {
+        setGeo(null);
+        setLalamoveError(error.message || "Failed to locate address.");
+        return null;
+      }
+      if (!data?.lat || !data?.lng) {
+        setGeo(null);
+        setLalamoveError("We couldn't find that address. Please double-check and try again.");
+        return null;
+      }
+      setGeo(data);
+      return data;
+    } catch (e) {
+      setGeo(null);
+      setLalamoveError(e?.message || "Unable to locate address.");
+      return null;
+    }
+  };
+
+  // Fixed pickup location for the business (Lalamove origin)
+  const LALAMOVE_PICKUP = useMemo(
+    () => ({
+      lat: 13.932713984764295,
+      lng: 121.6134010614894,
+      address: "Store pickup location",
+    }),
+    []
+  );
+
+  const fetchLalamoveQuote = async (dropoff) => {
+    try {
+      setLalamoveLoading(true);
+      setLalamoveError("");
+      const { data, error } = await supabase.functions.invoke("lalamove-quote", {
+        body: {
+          pickup: LALAMOVE_PICKUP,
+          dropoff,
+          serviceType: lalamoveConfig.serviceType,
+          itemWeight: lalamoveConfig.itemWeight,
+        },
+      });
+      if (error) {
+        setLalamoveQuote(null);
+        setLalamoveError(error.message || "Failed to get Lalamove fee.");
+        return null;
+      }
+      setLalamoveQuote(data || null);
+      return data;
+    } catch (e) {
+      setLalamoveQuote(null);
+      setLalamoveError(e?.message || "Unable to get Lalamove fee.");
+      return null;
+    } finally {
+      setLalamoveLoading(false);
+    }
+  };
+
+  const handleShippingNext = async () => {
+    if (!canContinueShipping || lalamoveLoading) return;
+
+    const geoResult = await geocodeAddress();
+    if (!geoResult) return;
+
+    const dropoff = {
+      lat: geoResult.lat,
+      lng: geoResult.lng,
+      address: geoResult.formatted || buildFullAddress(),
+    };
+
+    const quote = await fetchLalamoveQuote(dropoff);
+    if (!quote) return;
+
+    setStep(2);
+  };
 
   const placeOrder = async () => {
     if (!checkoutItems.length) return;
@@ -272,8 +398,8 @@ export default function Checkout() {
             <ShippingForm
               ship={ship}
               setShip={setShip}
-              onNext={() => setStep(2)}
-              disabledNext={!canContinueShipping}
+              onNext={handleShippingNext}
+              disabledNext={!canContinueShipping || lalamoveLoading}
             />
           )}
           {step === 2 && (
@@ -356,7 +482,21 @@ export default function Checkout() {
             <hr className="border-[var(--line-amber)]/70" />
 
             <Row label={`Subtotal`} value={peso(totals.subtotal)} />
-            <Row label={`Shipping`} value={totals.shipping ? peso(totals.shipping) : "FREE"} />
+            <Row label={`Shipping (Lalamove)`} value={totals.shipping ? peso(totals.shipping) : "TBD"} />
+            {lalamoveLoading && (
+              <div className="text-xs text-gray-600">Calculating Lalamove delivery fee...</div>
+            )}
+            {lalamoveError && !lalamoveLoading && (
+              <div className="text-xs text-red-600">{lalamoveError}</div>
+            )}
+            {lalamoveQuote && !lalamoveLoading && !lalamoveError && (
+              <div className="text-xs text-gray-600">
+                Distance approx.:
+                {lalamoveQuote.distance?.value
+                  ? ` ${(Number(lalamoveQuote.distance.value) / 1000).toFixed(1)} km`
+                  : ""}
+              </div>
+            )}
             <Row label={`Tax (VAT 12%)`} value={peso(totals.vat)} />
             {totals.promoDiscount > 0 && (
               <Row label={`Voucher Discount`} value={`- ${peso(totals.promoDiscount)}`} />

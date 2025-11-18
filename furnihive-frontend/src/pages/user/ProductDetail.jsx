@@ -237,6 +237,7 @@ export default function ProductDetail() {
         seller: product.seller,
         color: selectedColor,
         rating: product.rating,
+        weight_kg: product.weight_kg || 0,
       }
     : null;
 

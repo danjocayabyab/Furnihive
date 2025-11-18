@@ -32,7 +32,7 @@ export default function Shop() {
       const { data, error } = await supabase
         .from("products")
         .select(
-          "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, created_at, categories(name)"
+          "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, weight_kg, created_at, categories(name)"
         )
         .order("created_at", { ascending: false });
       let rows = data;
@@ -43,7 +43,7 @@ export default function Shop() {
         const retry = await supabase
           .from("products")
           .select(
-            "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, created_at"
+            "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, weight_kg, created_at"
           )
           .order("created_at", { ascending: false });
         rows = retry.data;
@@ -67,6 +67,7 @@ export default function Shop() {
             category: r.categories?.name || r.category || CATS[i % CATS.length],
             category_id: r.category_id || null,
             color: r.color || "",
+            weight_kg: r.weight_kg ?? null,
             seller: undefined,
           }));
 
