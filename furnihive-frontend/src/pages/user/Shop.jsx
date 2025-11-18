@@ -59,7 +59,7 @@ export default function Shop() {
             price: Number(r.base_price ?? 0),
             oldPrice: null,
             image: "",
-            rating: 4.8,
+            rating: 0,
             reviews: 0,
             outOfStock:
               (typeof r.stock_qty === "number" ? r.stock_qty <= 0 : false) ||
@@ -71,7 +71,58 @@ export default function Shop() {
             seller: undefined,
           }));
 
-          // Step 2: load store names by owner (seller) in one query
+          // Step 2: aggregate real reviews per product (average rating + count)
+          const productIds = base.map((p) => p.id);
+          let ratingByProduct = {};
+          if (productIds.length) {
+            try {
+              // Load order_items for these products
+              const { data: items } = await supabase
+                .from("order_items")
+                .select("product_id, order_id")
+                .in("product_id", productIds);
+
+              const productToOrderIds = new Map();
+              const orderIds = new Set();
+              (items || []).forEach((row) => {
+                if (!row?.product_id || !row?.order_id) return;
+                const pid = row.product_id;
+                const oid = row.order_id;
+                if (!productToOrderIds.has(pid)) productToOrderIds.set(pid, []);
+                productToOrderIds.get(pid).push(oid);
+                orderIds.add(oid);
+              });
+
+              if (orderIds.size) {
+                const { data: revs } = await supabase
+                  .from("reviews")
+                  .select("order_id, rating")
+                  .in("order_id", Array.from(orderIds));
+
+                const ratingsByOrder = new Map();
+                (revs || []).forEach((r) => {
+                  if (!r?.order_id) return;
+                  const rating = Number(r.rating || 0);
+                  if (!Number.isFinite(rating)) return;
+                  ratingsByOrder.set(r.order_id, rating);
+                });
+
+                productToOrderIds.forEach((orderList, pid) => {
+                  const ratings = orderList
+                    .map((oid) => ratingsByOrder.get(oid))
+                    .filter((v) => typeof v === "number" && Number.isFinite(v));
+                  if (!ratings.length) return;
+                  const sum = ratings.reduce((s, v) => s + v, 0);
+                  const avg = sum / ratings.length;
+                  ratingByProduct[pid] = { rating: avg, count: ratings.length };
+                });
+              }
+            } catch {
+              // If review aggregation fails, we simply keep defaults
+            }
+          }
+
+          // Step 3: load store names by owner (seller) in one query
           const sellerIds = Array.from(new Set(base.map((p) => p.seller_id).filter(Boolean)));
           let storeNameByOwner = {};
           if (sellerIds.length) {
@@ -85,7 +136,6 @@ export default function Shop() {
           }
 
           // Step 3: resolve image URLs from product_images table (primary/cover image)
-          const productIds = base.map((p) => p.id);
           let coverById = {};
           if (productIds.length) {
             const { data: imgs } = await supabase
@@ -111,7 +161,14 @@ export default function Shop() {
                 imageUrl = pub?.publicUrl || "";
               }
             }
-            return { ...p, image: imageUrl, seller: storeNameByOwner[p.seller_id] || undefined };
+            const reviewInfo = ratingByProduct[p.id] || null;
+            return {
+              ...p,
+              image: imageUrl,
+              seller: storeNameByOwner[p.seller_id] || undefined,
+              rating: reviewInfo ? reviewInfo.rating : 0,
+              reviews: reviewInfo ? reviewInfo.count : 0,
+            };
           });
 
           // Step 4: If bucket is private or any missing, sign URLs per missing
