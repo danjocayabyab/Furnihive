@@ -14,7 +14,7 @@ export default function SellerTopbar() {
   const sellerId = user?.id;
 
   // Seller-specific notification bus (separate from Admin)
-  const { items, unread, markRead, markAllRead } = useSellerNotifications();
+  const { items, unread, markRead, markAllRead, addNotification } = useSellerNotifications();
 
   // Unread messages across all conversations for this seller
   const [msgUnread, setMsgUnread] = useState(0);
@@ -68,6 +68,47 @@ export default function SellerTopbar() {
       cancelled = true;
     };
   }, [sellerId]);
+
+  // Realtime: new order notifications for this seller (order_items inserts)
+  useEffect(() => {
+    if (!sellerId) return;
+
+    console.log("SELLER NOTIF: subscribing for new orders", { sellerId });
+
+    const channel = supabase
+      .channel(`seller-orders-${sellerId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "order_items",
+        },
+        (payload) => {
+          console.log("SELLER NOTIF: order_items INSERT payload", payload);
+          const row = payload?.new || {};
+          if (!row || row.seller_id !== sellerId || payload.eventType !== "INSERT") return;
+
+          const orderId = row.order_id;
+          const buyerName = row.buyer_name || "Customer";
+          if (!orderId) return;
+
+          const shortId = String(orderId).slice(0, 8).toUpperCase();
+          addNotification({
+            title: "New order received",
+            body: `Order ORD-${shortId} from ${buyerName}`,
+            link: "/seller/orders",
+            type: "success",
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log("SELLER NOTIF: removing order subscription", { sellerId });
+      supabase.removeChannel(channel);
+    };
+  }, [sellerId, addNotification]);
 
   // Poll seller conversations for unread message count
   useEffect(() => {

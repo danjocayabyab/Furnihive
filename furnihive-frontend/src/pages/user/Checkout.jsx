@@ -4,6 +4,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useCart } from "../../components/contexts/CartContext.jsx";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
 import { supabase } from "../../lib/supabaseClient";
+import StoreLocationMap from "../../components/seller/StoreLocationMap.jsx";
 
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 
@@ -37,6 +38,7 @@ export default function Checkout() {
     email: "",
     phone: "",
     street: "",
+    barangay: "",
     city: "",
     province: "",
     zip: "",
@@ -94,8 +96,11 @@ export default function Checkout() {
     };
   }, []);
 
-  // expose all active vouchers loaded from Supabase; discount is still scoped per seller
-  const applicableVouchers = useMemo(() => vouchers, [vouchers]);
+  // expose only vouchers belonging to the seller for this checkout
+  const applicableVouchers = useMemo(() => {
+    const sellerId = checkoutItems.length ? checkoutItems[0].seller_id || null : null;
+    return vouchers.filter((v) => !sellerId || v.seller_id === sellerId);
+  }, [vouchers, checkoutItems]);
 
   // Total cart weight in kilograms (from product.weight_kg)
   const totalWeightKg = useMemo(
@@ -165,6 +170,7 @@ export default function Checkout() {
   const buildFullAddress = () => {
     const parts = [];
     if (ship.street) parts.push(ship.street);
+    if (ship.barangay) parts.push(ship.barangay);
     const cityProv = [ship.city, ship.province].filter(Boolean).join(", ");
     if (cityProv) parts.push(cityProv);
     if (ship.zip) parts.push(ship.zip);
@@ -200,6 +206,21 @@ export default function Checkout() {
       setLalamoveError(e?.message || "Unable to locate address.");
       return null;
     }
+  };
+
+  // When buyer drags the marker on the map, update geo and refresh quote
+  const handleAdjustLocation = async (latlng) => {
+    const updated = {
+      lat: latlng.lat,
+      lng: latlng.lng,
+      formatted: geo?.formatted || buildFullAddress(),
+    };
+    setGeo(updated);
+    await fetchLalamoveQuote({
+      lat: updated.lat,
+      lng: updated.lng,
+      address: updated.formatted,
+    });
   };
 
   // Load seller store pickup coordinates (per-seller origin)
@@ -284,13 +305,18 @@ export default function Checkout() {
   const handleShippingNext = async () => {
     if (!canContinueShipping || lalamoveLoading) return;
 
-    const geoResult = await geocodeAddress();
-    if (!geoResult) return;
+    // If the buyer has already located/adjusted on the map, reuse that
+    let dropoffSource = geo;
+    if (!dropoffSource) {
+      const geoResult = await geocodeAddress();
+      if (!geoResult) return;
+      dropoffSource = geoResult;
+    }
 
     const dropoff = {
-      lat: geoResult.lat,
-      lng: geoResult.lng,
-      address: geoResult.formatted || buildFullAddress(),
+      lat: dropoffSource.lat,
+      lng: dropoffSource.lng,
+      address: dropoffSource.formatted || buildFullAddress(),
     };
 
     const quote = await fetchLalamoveQuote(dropoff);
@@ -316,6 +342,11 @@ export default function Checkout() {
 
     // Persist basic order summary to Supabase
     try {
+      // Derive drop-off info for this order from the last geocoded result, if available
+      const dropoffLat = geo?.lat ?? null;
+      const dropoffLng = geo?.lng ?? null;
+      const dropoffAddress = geo?.formatted || buildFullAddress() || null;
+
       const { data: created, error: orderErr } = await supabase
         .from("orders")
         .insert({
@@ -326,6 +357,9 @@ export default function Checkout() {
           summary_image: first.image || null,
           seller_display: first.seller || null,
           color: first.color || null,
+          dropoff_lat: dropoffLat,
+          dropoff_lng: dropoffLng,
+          dropoff_address: dropoffAddress,
           status: "Pending",
         })
         .select("id")
@@ -450,6 +484,9 @@ export default function Checkout() {
               setShip={setShip}
               onNext={handleShippingNext}
               disabledNext={!canContinueShipping || lalamoveLoading}
+              geo={geo}
+              onLocate={geocodeAddress}
+              onAdjustLocation={handleAdjustLocation}
             />
           )}
           {step === 2 && (
@@ -575,7 +612,7 @@ export default function Checkout() {
 
 /* ---------------------------- Step Components --------------------------- */
 
-function ShippingForm({ ship, setShip, onNext, disabledNext }) {
+function ShippingForm({ ship, setShip, onNext, disabledNext, geo, onLocate, onAdjustLocation }) {
   const { user } = useAuth();
   const [savedAddresses, setSavedAddresses] = useState([]);
   const [savingAddress, setSavingAddress] = useState(false);
@@ -672,9 +709,36 @@ function ShippingForm({ ship, setShip, onNext, disabledNext }) {
         </TwoCols>
 
         <TwoCols>
+          <Field label="Barangay / District">
+            <Input value={ship.barangay} onChange={set("barangay")} placeholder="e.g. Brgy. Sampaloc" />
+          </Field>
           <Field label="ZIP Code"><Input value={ship.zip} onChange={set("zip")} /></Field>
-          <div />
         </TwoCols>
+
+        {/* Buyer location map */}
+        <div className="mt-2 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs text-gray-700">
+              Adjust your delivery location on the map for more accurate shipping.
+            </div>
+            <button
+              type="button"
+              className="rounded-xl border border-[var(--line-amber)] px-3 py-1 text-xs text-[var(--brown-700)] hover:bg-[var(--cream-50)]"
+              onClick={onLocate}
+            >
+              Locate on Map
+            </button>
+          </div>
+          {geo?.lat && geo?.lng && (
+            <div className="rounded-xl border border-[var(--line-amber)] overflow-hidden h-64 bg-[var(--cream-50)]">
+              <StoreLocationMap
+                lat={geo.lat}
+                lng={geo.lng}
+                onChange={onAdjustLocation}
+              />
+            </div>
+          )}
+        </div>
 
         <Field label="Delivery Instructions (Optional)">
           <Input value={ship.note} onChange={set("note")} placeholder="Gate code, landmarks, etc." />
@@ -866,15 +930,23 @@ function PaymentForm({
 
       {/* Methods */}
       <div className="mt-3 space-y-2">
-        <MethodItem active={payMethod === "card"} onClick={() => setPayMethod("card")}>Credit/Debit Card</MethodItem>
-        <MethodItem active={payMethod === "gcash"} onClick={() => setPayMethod("gcash")}>GCash</MethodItem>
-        <MethodItem active={payMethod === "paymaya"} onClick={() => setPayMethod("paymaya")}>PayMaya</MethodItem>
-        <MethodItem active={payMethod === "cod"} onClick={() => setPayMethod("cod")}>Cash on Delivery</MethodItem>
+        <MethodItem
+          active={payMethod !== "cod"}
+          onClick={() => setPayMethod("card")}
+        >
+          E-payment (Card / GCash / PayMongo)
+        </MethodItem>
+        <MethodItem
+          active={payMethod === "cod"}
+          onClick={() => setPayMethod("cod")}
+        >
+          Cash on Delivery
+        </MethodItem>
       </div>
 
       <div className="mt-3 text-xs text-gray-700 bg-[var(--cream-50)] border border-[var(--line-amber)] rounded-xl p-3">
-        For Card, GCash, and PayMaya, you will be redirected to PayMongo's secure checkout page to
-        complete your payment. We do not store your payment details.
+        For E-payment, you will be redirected to PayMongo's secure checkout page to complete your
+        payment (card, GCash, etc.). We do not store your payment details.
       </div>
 
       <div className="mt-4 flex items-center gap-2 text-sm">
