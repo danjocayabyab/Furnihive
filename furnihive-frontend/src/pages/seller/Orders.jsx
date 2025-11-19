@@ -105,6 +105,8 @@ export default function SellerOrders() {
           .select("id, payment_status, payment_provider, lalamove_order_id")
           .in("id", orderIds);
 
+        console.log("SELLER ORDERS orderRows", { ordersErr, orderRows });
+
         if (!cancelled && !ordersErr && orderRows) {
           orderRows.forEach((row) => {
             const o = byOrder.get(row.id);
@@ -115,8 +117,9 @@ export default function SellerOrders() {
             if (row.payment_provider) {
               o.paymentProvider = row.payment_provider;
             }
-            if (row.lalamove_order_id) {
-              o.lalamoveOrderId = row.lalamove_order_id;
+            // Always map tracking id from DB onto the in-memory order object
+            if (typeof row.lalamove_order_id !== "undefined") {
+              o.lalamoveOrderId = row.lalamove_order_id || null;
             }
           });
         }
@@ -158,6 +161,8 @@ export default function SellerOrders() {
         const ta = a.dateISO ? new Date(a.dateISO).getTime() : 0;
         return tb - ta;
       });
+
+      console.log("SELLER ORDERS list", list);
 
       setOrders(list);
     }
@@ -216,9 +221,13 @@ export default function SellerOrders() {
       prev.map((o) => (o.id === id ? { ...o, status: "shipped" } : o))
     );
     try {
+      // 1) Generate a sandbox tracking id on the client
+      const trackingId = `SANDBOX-${id}-${Date.now()}`;
+
+      // 2) Update order + items status (and tracking id) in DB
       const { error: ordersErr } = await supabase
         .from("orders")
-        .update({ status: "Shipped" })
+        .update({ status: "Shipped", lalamove_order_id: trackingId })
         .eq("id", id);
       console.log("MARK_SHIPPED orders update error", ordersErr);
 
@@ -227,8 +236,37 @@ export default function SellerOrders() {
         .update({ status: "Shipped" })
         .eq("order_id", id);
       console.log("MARK_SHIPPED order_items update error", itemsErr);
+
+      // 3) Update local state so UI immediately shows tracking
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === id ? { ...o, lalamoveOrderId: trackingId } : o
+        )
+      );
     } catch (e) {
       console.log("MARK_SHIPPED exception", e);
+    }
+  };
+
+  const markDelivered = async (id) => {
+    // shipped -> delivered
+    setOrders((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, status: "delivered" } : o))
+    );
+    try {
+      const { error: ordersErr } = await supabase
+        .from("orders")
+        .update({ status: "Delivered" })
+        .eq("id", id);
+      console.log("MARK_DELIVERED orders update error", ordersErr);
+
+      const { error: itemsErr } = await supabase
+        .from("order_items")
+        .update({ status: "Delivered" })
+        .eq("order_id", id);
+      console.log("MARK_DELIVERED order_items update error", itemsErr);
+    } catch (e) {
+      console.log("MARK_DELIVERED exception", e);
     }
   };
 
@@ -398,6 +436,14 @@ export default function SellerOrders() {
                           onClick={() => markShipped(o.id)}
                         >
                           Mark as Shipped
+                        </button>
+                      )}
+                      {o.status === "shipped" && (
+                        <button
+                          className="rounded-lg bg-[var(--orange-600)] text-white px-3 py-1.5 text-xs hover:brightness-95"
+                          onClick={() => markDelivered(o.id)}
+                        >
+                          Mark as Delivered
                         </button>
                       )}
                     </div>
