@@ -98,7 +98,7 @@ export default function Profile() {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, created_at, total_amount, item_count, summary_title, summary_image, status, seller_display, color"
+          "id, created_at, total_amount, item_count, summary_title, summary_image, status, seller_display, color, lalamove_order_id"
         )
         .eq("user_id", authUser.id)
         .order("created_at", { ascending: false });
@@ -154,6 +154,12 @@ export default function Profile() {
 
       const mapped = data.map((o) => {
         const primary = primaryProductByOrder.get(o.id) || null;
+        const derivedStatus = statusByOrder.get(o.id) || "Processing";
+        const trackingId =
+          derivedStatus === "Shipped" || derivedStatus === "Delivered"
+            ? o.lalamove_order_id || null
+            : null;
+
         return {
           id: o.id,
           date: o.created_at ? o.created_at.slice(0, 10) : "",
@@ -161,7 +167,7 @@ export default function Profile() {
           title: primary?.title || o.summary_title || "Order",
           price: Number(o.total_amount || 0),
           // Status is now driven primarily by order_items.status so it matches seller view
-          status: statusByOrder.get(o.id) || "Processing",
+          status: derivedStatus,
           image: o.summary_image || "",
           seller: o.seller_display || "",
           color: o.color || "",
@@ -169,6 +175,7 @@ export default function Profile() {
           productId: primary?.productId || null,
           address: [],
           shippingFee: 0,
+          trackingId,
         };
       });
 
@@ -642,6 +649,18 @@ function OrdersPanel({ money, orders, reviews, onViewDetails, onWriteReview }) {
                 <div className="text-xs text-gray-600">
                   {o.items} item{o.items > 1 ? "s" : ""} • {money(o.price)}
                 </div>
+                {o.trackingId && (
+                  <div className="mt-1 text-[11px] text-gray-600 flex items-center gap-2">
+                    <span>Tracking: {o.trackingId}</span>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(o.trackingId)}
+                      className="px-2 py-0.5 rounded border border-[var(--line-amber)] hover:bg-[var(--cream-50)]"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2">
@@ -807,6 +826,18 @@ function OrderDetailsModal({ order, onClose, money, onMarkReceived }) {
             <div className="text-xs text-gray-600">Date: {formatOrderDate(order.date)}</div>
             <div className="text-xs text-gray-600">Seller: {order.seller}</div>
             <div className="text-xs text-gray-600">Qty: {order.quantity}</div>
+            {order.trackingId && (
+              <div className="mt-1 text-[11px] text-gray-600 flex items-center gap-2">
+                <span>Tracking: {order.trackingId}</span>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(order.trackingId)}
+                  className="px-2 py-0.5 rounded border border-[var(--line-amber)] hover:bg-[var(--cream-50)]"
+                >
+                  Copy
+                </button>
+              </div>
+            )}
           </div>
           <div className="text-right">
             <div className="text-sm font-bold text-[var(--brown-700)]">{money(order.price)}</div>
