@@ -4,7 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import App from "./App.jsx";
 import "./index.css";
-
+import "leaflet/dist/leaflet.css";
 import { CartProvider } from "./components/contexts/CartContext.jsx";
 import { UiProvider } from "./components/contexts/UiContext.jsx"; 
 import { AuthProvider } from "./components/contexts/AuthContext.jsx";
