@@ -875,10 +875,16 @@ function WelcomeModal({ storeName, onClose }) {
           <div className="px-5 py-3 border-t border-[var(--line-amber)] flex justify-end gap-2 bg-[var(--cream-50)]/60">
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => {
+                try {
+                  window.location.href = "/seller/settings";
+                } finally {
+                  onClose();
+                }
+              }}
               className="h-9 px-4 rounded-lg border border-[var(--line-amber)] bg-[var(--orange-600)] text-white text-xs font-medium hover:opacity-95"
             >
-              Start managing my store
+              Start editing your store info
             </button>
           </div>
         </div>

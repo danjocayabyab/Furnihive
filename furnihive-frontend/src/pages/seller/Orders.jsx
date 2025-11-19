@@ -102,7 +102,7 @@ export default function SellerOrders() {
       if (orderIds.length) {
         const { data: orderRows, error: ordersErr } = await supabase
           .from("orders")
-          .select("id, payment_status, payment_provider")
+          .select("id, payment_status, payment_provider, lalamove_order_id")
           .in("id", orderIds);
 
         if (!cancelled && !ordersErr && orderRows) {
@@ -114,6 +114,9 @@ export default function SellerOrders() {
             }
             if (row.payment_provider) {
               o.paymentProvider = row.payment_provider;
+            }
+            if (row.lalamove_order_id) {
+              o.lalamoveOrderId = row.lalamove_order_id;
             }
           });
         }
@@ -347,6 +350,18 @@ export default function SellerOrders() {
                       {peso(totalOf(o))}
                     </div>
                     <div className="text-xs text-gray-600">{o.payment}</div>
+                    {o.lalamoveOrderId && (
+                      <div className="mt-1 text-[11px] text-gray-600 flex items-center gap-2">
+                        <span>Tracking: {o.lalamoveOrderId}</span>
+                        <button
+                          type="button"
+                          onClick={() => navigator.clipboard.writeText(o.lalamoveOrderId)}
+                          className="px-2 py-0.5 rounded border border-[var(--line-amber)] hover:bg-[var(--cream-50)]"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    )}
                     {o.payoutStatus && (
                       <div className="mt-1 text-[11px] text-gray-600">
                         Payout: {o.payoutStatus === "paid" ? "Paid" : "Pending"} 
@@ -520,6 +535,23 @@ function DetailsModal({ order, onClose }) {
                 <Row
                   label="Payment Status"
                   value={<PaymentStatusPill status={order.paymentStatus} />}
+                />
+              )}
+              {order.lalamoveOrderId && (
+                <Row
+                  label="Lalamove Tracking"
+                  value={
+                    <span className="text-xs break-all">
+                      {order.lalamoveOrderId}
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(order.lalamoveOrderId)}
+                        className="ml-2 px-2 py-0.5 rounded border border-[var(--line-amber)] text-[11px] hover:bg-[var(--cream-50)]"
+                      >
+                        Copy
+                      </button>
+                    </span>
+                  }
                 />
               )}
               {order.payoutStatus && (

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
 import { supabase } from "../../lib/supabaseClient";
 import toast from "react-hot-toast";
+import StoreLocationMap from "../../components/seller/StoreLocationMap.jsx";
 
 /**
  * Seller Settings
@@ -21,10 +22,19 @@ export default function SellerSettings() {
     description: "",
     phone: "",
     email: "",
+    // Legacy single-line address (kept for backwards compatibility / preview)
     address: "",
+    // New structured address fields for more accurate geocoding
+    street: "",
+    barangay: "",
+    city: "",
+    province: "",
+    zip: "",
     hoursWeekday: ["", ""],
     hoursWeekend: ["", ""],
     logo: "",
+    lat: null,
+    lng: null,
   });
   const [storeRecordId, setStoreRecordId] = useState(null);
   const [savingStore, setSavingStore] = useState(false);
@@ -36,7 +46,7 @@ export default function SellerSettings() {
       const { data, error } = await supabase
         .from("stores")
         .select(
-          "id, name, description, phone, email, address, weekday_start, weekday_end, weekend_start, weekend_end, logo_url"
+          "id, name, description, phone, email, address, weekday_start, weekday_end, weekend_start, weekend_end, logo_url, lat, lng"
         )
         .eq("owner_id", authUser.id)
         .maybeSingle();
@@ -52,6 +62,8 @@ export default function SellerSettings() {
         hoursWeekday: [data.weekday_start || prev.hoursWeekday[0], data.weekday_end || prev.hoursWeekday[1]],
         hoursWeekend: [data.weekend_start || prev.hoursWeekend[0], data.weekend_end || prev.hoursWeekend[1]],
         logo: data.logo_url || prev.logo,
+        lat: (data.lat ?? prev.lat) != null ? Number(data.lat ?? prev.lat) : null,
+        lng: (data.lng ?? prev.lng) != null ? Number(data.lng ?? prev.lng) : null,
       }));
     })();
     return () => {
@@ -67,23 +79,63 @@ export default function SellerSettings() {
     try {
       setSavingStore(true);
 
+      // Build a full PH address string from structured fields for better accuracy
+      const fullAddressParts = [
+        store.street,
+        store.barangay,
+        store.city,
+        store.province,
+        store.zip,
+        "Philippines",
+      ]
+        .map((part) => (part || "").trim())
+        .filter(Boolean);
+
+      const fullAddress = fullAddressParts.join(", ");
+      const effectiveAddress = (fullAddress || store.address || "").trim();
+
       // Try to geocode the store address to lat/lng for logistics pickup
       let lat = null;
       let lng = null;
-      if (store.address && store.address.trim()) {
+      if (effectiveAddress) {
         try {
           const { data, error } = await supabase.functions.invoke("geocode-address", {
-            body: { address: store.address },
+            body: { address: effectiveAddress },
           });
-          if (!error && data?.lat && data?.lng) {
+
+          if (error) {
+            // If backend reports low-precision match (e.g. city center only),
+            // ask the seller to provide a more detailed address.
+            if (error.status === 422) {
+              const msg =
+                data?.error ||
+                "We could not precisely locate this address. Please include your house/building number, barangay, and ZIP.";
+              toast.error(msg);
+            } else {
+              // eslint-disable-next-line no-console
+              console.warn("Geocode error", error);
+            }
+          } else if (data?.lat && data?.lng) {
             lat = Number(data.lat);
             lng = Number(data.lng);
+            // Keep store state in sync so the map can immediately reflect the geocoded point
+            setStore((prev) => ({
+              ...prev,
+              lat,
+              lng,
+            }));
           }
         } catch (e) {
-          // Soft-fail: do not block saving store if geocoding fails
+          // Soft-fail: do not block saving store if geocoding fails unexpectedly
           // eslint-disable-next-line no-console
           console.warn("Failed to geocode store address", e);
         }
+      }
+
+      // If seller has manually adjusted the marker on the map, prefer that
+      if (store.lat != null && store.lng != null) {
+        lat = store.lat;
+        lng = store.lng;
       }
 
       const payload = {
@@ -92,7 +144,8 @@ export default function SellerSettings() {
         description: store.description,
         phone: store.phone,
         email: store.email,
-        address: store.address,
+        // Persist the composed address string; fall back to legacy address if needed
+        address: effectiveAddress || store.address || null,
         weekday_start: store.hoursWeekday?.[0] || null,
         weekday_end: store.hoursWeekday?.[1] || null,
         weekend_start: store.hoursWeekend?.[0] || null,
@@ -327,10 +380,68 @@ function StoreInfoTab({ store, setStore, onSaveStore, savingStore }) {
           />
         </div>
 
+        {/* Structured address for better geocoding accuracy */}
+        <div className="grid sm:grid-cols-2 gap-4">
+          <LabeledInput
+            label="Street / House & Building"
+            value={store.street}
+            onChange={(e) => handleChange("street", e.target.value)}
+          />
+          <LabeledInput
+            label="Barangay"
+            value={store.barangay}
+            onChange={(e) => handleChange("barangay", e.target.value)}
+          />
+        </div>
+        <div className="grid sm:grid-cols-3 gap-4">
+          <LabeledInput
+            label="City / Municipality"
+            value={store.city}
+            onChange={(e) => handleChange("city", e.target.value)}
+          />
+          <LabeledInput
+            label="Province"
+            value={store.province}
+            onChange={(e) => handleChange("province", e.target.value)}
+          />
+          <LabeledInput
+            label="ZIP Code"
+            value={store.zip}
+            onChange={(e) => handleChange("zip", e.target.value)}
+          />
+        </div>
+
+        {/* Read-only preview of the full address string saved & used for geocoding */}
         <LabeledInput
-          label="Store Address"
-          value={store.address}
-          onChange={(e) => handleChange("address", e.target.value)}
+          label="Full Store Address (used for delivery)"
+          value={
+            [
+              store.street,
+              store.barangay,
+              store.city,
+              store.province,
+              store.zip,
+              "Philippines",
+            ]
+              .map((part) => (part || "").trim())
+              .filter(Boolean)
+              .join(", ") || store.address
+          }
+          readOnly
+        />
+
+        {/* Map preview with draggable marker so seller can fine-tune pickup location */}
+        <StoreLocationMap
+          lat={store.lat}
+          lng={store.lng}
+          onChange={(latlng) => {
+            if (!latlng) return;
+            setStore((prev) => ({
+              ...prev,
+              lat: latlng.lat,
+              lng: latlng.lng,
+            }));
+          }}
         />
 
         <div className="grid sm:grid-cols-2 gap-4">
