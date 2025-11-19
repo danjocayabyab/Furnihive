@@ -271,7 +271,12 @@ export default function ProductDetail() {
       return;
     }
     addToCartCtx(baseItem, qty);
-    navigate("/checkout");
+    navigate("/checkout", {
+      state: {
+        // Limit checkout to just this product when coming from Buy Now
+        selectedItems: [baseItem.id],
+      },
+    });
   };
 
   const openChat = () => {

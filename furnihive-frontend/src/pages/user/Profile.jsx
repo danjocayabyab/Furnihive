@@ -4,6 +4,7 @@ import Button from "../../components/ui/Button.jsx";
 import { logout } from "../../lib/auth.js";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
 import { supabase } from "../../lib/supabaseClient";
+import StoreLocationMap from "../../components/seller/StoreLocationMap.jsx";
 
 const STATUS_STYLES = {
   Delivered: "bg-green-100 text-green-700 border border-green-200",
@@ -98,7 +99,7 @@ export default function Profile() {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, created_at, total_amount, item_count, summary_title, summary_image, status, seller_display, color, lalamove_order_id"
+          "id, created_at, total_amount, item_count, summary_title, summary_image, status, seller_display, color, lalamove_order_id, dropoff_lat, dropoff_lng, dropoff_address"
         )
         .eq("user_id", authUser.id)
         .order("created_at", { ascending: false });
@@ -110,10 +111,11 @@ export default function Profile() {
       // Derive per-order status and primary product from order_items so buyer matches seller view
       const statusByOrder = new Map();
       const primaryProductByOrder = new Map();
+      const sellerIdByOrder = new Map();
       if (orderIds.length) {
         const { data: items } = await supabase
           .from("order_items")
-          .select("order_id, product_id, title, status")
+          .select("order_id, product_id, title, status, seller_id")
           .in("order_id", orderIds);
 
         const priority = { Delivered: 3, Shipped: 2, Processing: 1, Pending: 0 };
@@ -137,6 +139,11 @@ export default function Profile() {
             statusByOrder.set(oid, normalized);
           }
 
+          // capture first seller_id per order for mapping to store coordinates
+          if (row.seller_id && !sellerIdByOrder.has(oid)) {
+            sellerIdByOrder.set(oid, row.seller_id);
+          }
+
           // Capture the first product encountered per order as the primary product
           if (!primaryProductByOrder.has(oid) && row.product_id) {
             primaryProductByOrder.set(oid, {
@@ -144,6 +151,23 @@ export default function Profile() {
               title: row.title || null,
             });
           }
+        });
+      }
+
+      // Load store coordinates for sellers involved in these orders so we can show pickup location on the map
+      const storeCoordsBySeller = new Map();
+      const sellerIds = Array.from(new Set(Array.from(sellerIdByOrder.values()).filter(Boolean)));
+      if (sellerIds.length) {
+        const { data: storesRows } = await supabase
+          .from("stores")
+          .select("owner_id, lat, lng")
+          .in("owner_id", sellerIds);
+        (storesRows || []).forEach((s) => {
+          if (!s?.owner_id) return;
+          storeCoordsBySeller.set(s.owner_id, {
+            lat: s.lat != null ? Number(s.lat) : null,
+            lng: s.lng != null ? Number(s.lng) : null,
+          });
         });
       }
 
@@ -160,6 +184,13 @@ export default function Profile() {
             ? o.lalamove_order_id || null
             : null;
 
+        const addressLines = o.dropoff_address
+          ? [o.dropoff_address]
+          : [];
+
+        const sellerIdForOrder = sellerIdByOrder.get(o.id) || null;
+        const storeCoords = sellerIdForOrder ? storeCoordsBySeller.get(sellerIdForOrder) || null : null;
+
         return {
           id: o.id,
           date: o.created_at ? o.created_at.slice(0, 10) : "",
@@ -173,9 +204,13 @@ export default function Profile() {
           color: o.color || "",
           quantity: o.item_count || 0,
           productId: primary?.productId || null,
-          address: [],
+          address: addressLines,
           shippingFee: 0,
           trackingId,
+          dropoffLat: o.dropoff_lat ?? null,
+          dropoffLng: o.dropoff_lng ?? null,
+          storeLat: storeCoords?.lat ?? null,
+          storeLng: storeCoords?.lng ?? null,
         };
       });
 
@@ -606,9 +641,11 @@ function OverviewPanel({ money, orders, reviews, onViewDetails, onWriteReview })
                   >
                     View Details
                   </Button>
-                  <Button className="px-3 py-1.5 text-sm" onClick={() => onWriteReview(o)}>
-                    {hasReview ? "Edit Review" : "Write Review"}
-                  </Button>
+                  {o.status === "Delivered" && (
+                    <Button className="px-3 py-1.5 text-sm" onClick={() => onWriteReview(o)}>
+                      {hasReview ? "Edit Review" : "Write Review"}
+                    </Button>
+                  )}
                 </div>
               </li>
             );
@@ -671,9 +708,11 @@ function OrdersPanel({ money, orders, reviews, onViewDetails, onWriteReview }) {
                 >
                   View Details
                 </Button>
-                <Button className="px-3 py-1.5 text-sm" onClick={() => onWriteReview(o)}>
-                  {hasReview ? "Edit Review" : "Write Review"}
-                </Button>
+                {o.status === "Delivered" && (
+                  <Button className="px-3 py-1.5 text-sm" onClick={() => onWriteReview(o)}>
+                    {hasReview ? "Edit Review" : "Write Review"}
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -806,6 +845,24 @@ function OrderRow({ o, money }) {
 function OrderDetailsModal({ order, onClose, money, onMarkReceived }) {
   const statuses = ["Processing", "Shipped", "Delivered"];
 
+  // Haversine distance in kilometers between two lat/lng points
+  const distanceKm = (() => {
+    if (!order?.storeLat || !order?.storeLng || !order?.dropoffLat || !order?.dropoffLng) return null;
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const R = 6371; // km
+    const dLat = toRad(order.dropoffLat - order.storeLat);
+    const dLng = toRad(order.dropoffLng - order.storeLng);
+    const lat1 = toRad(order.storeLat);
+    const lat2 = toRad(order.dropoffLat);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const d = R * c;
+    if (!Number.isFinite(d)) return null;
+    return d;
+  })();
+
   return (
     <div className="fixed inset-0 bg-black/40 z-50 grid place-items-center p-4">
       <div className="w-full max-w-2xl rounded-2xl bg-white border border-[var(--line-amber)] p-5 space-y-4">
@@ -870,6 +927,21 @@ function OrderDetailsModal({ order, onClose, money, onMarkReceived }) {
               <div key={i}>{l}</div>
             ))}
           </div>
+          {order.dropoffLat && order.dropoffLng && (
+            <div className="mt-3">
+              <StoreLocationMap
+                lat={order.storeLat || order.dropoffLat}
+                lng={order.storeLng || order.dropoffLng}
+                secondaryLat={order.storeLat ? order.dropoffLat : null}
+                secondaryLng={order.storeLat ? order.dropoffLng : null}
+              />
+            </div>
+          )}
+          {distanceKm != null && (
+            <div className="mt-2 text-[11px] text-gray-600">
+              Distance between store and dropoff: {distanceKm.toFixed(1)} km
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2">
