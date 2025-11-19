@@ -125,15 +125,6 @@ export default function AdminTopbar() {
             {openAcct && (
               <div className="absolute right-0 mt-1 w-56 rounded-xl border border-[var(--line-amber)] bg-white shadow-card overflow-hidden">
                 <button
-                  onClick={() => {
-                    setOpenAcct(false);
-                    navigate("/admin");
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--cream-50)]"
-                >
-                  Dashboard
-                </button>
-                <button
                   onClick={handleLogout}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50"
                 >

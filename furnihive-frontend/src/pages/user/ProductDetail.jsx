@@ -265,6 +265,11 @@ export default function ProductDetail() {
   };
 
   const handleBuyNow = () => {
+    if (!product || product.outOfStock) return;
+    if (!user) {
+      openAuth("login");
+      return;
+    }
     addToCartCtx(baseItem, qty);
     navigate("/checkout");
   };

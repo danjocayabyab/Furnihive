@@ -10,7 +10,7 @@ export default function SellerTopbar() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const sellerId = user?.id;
 
   // Seller-specific notification bus (separate from Admin)
@@ -21,6 +21,16 @@ export default function SellerTopbar() {
 
   const accountRef = useRef(null);
   const notifRef = useRef(null);
+  const [storeLogoUrl, setStoreLogoUrl] = useState(null);
+
+  const avatarUrl =
+    storeLogoUrl || profile?.avatar_url || user?.user_metadata?.avatar_url || null;
+  const displayName =
+    profile?.store_name ||
+    (profile?.first_name || profile?.last_name
+      ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim()
+      : user?.email || "Account");
+  const avatarInitial = (displayName || "U").slice(0, 1).toUpperCase();
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -35,6 +45,29 @@ export default function SellerTopbar() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  // Load store logo for this seller (owner_id = sellerId)
+  useEffect(() => {
+    if (!sellerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("stores")
+          .select("logo_url")
+          .eq("owner_id", sellerId)
+          .maybeSingle();
+        if (!cancelled && !error) {
+          setStoreLogoUrl(data?.logo_url || null);
+        }
+      } catch {
+        if (!cancelled) setStoreLogoUrl(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerId]);
 
   // Poll seller conversations for unread message count
   useEffect(() => {
@@ -117,10 +150,10 @@ export default function SellerTopbar() {
           <div className="relative" ref={notifRef}>
             <button
               onClick={() => setNotifOpen((s) => !s)}
-              className="relative grid h-9 w-9 place-items-center rounded-full hover:bg-[var(--cream-50)] text-[var(--orange-700)]"
+              className="relative grid h-9 w-9 place-items-center rounded-full hover:bg-[var(--cream-50)]"
               title="Notifications"
             >
-              ⩍
+              <span className="text-[16px] leading-none text-[var(--orange-700)]">⩍</span>
               {unread > 0 && (
                 <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--orange-600)] ring-2 ring-white" />
               )}
@@ -182,19 +215,29 @@ export default function SellerTopbar() {
           {/* Messages */}
           <button
             onClick={() => navigate("/seller/messages")}
-            className="text-sm font-medium text-[var(--orange-700)] hover:underline"
+            className="text-sm font-medium px-2 py-1 rounded-full hover:bg-[var(--cream-50)]"
             title="Messages"
           >
-            ✉︎
+            <span className="text-[16px] leading-none text-[var(--orange-700)]">✉︎</span>
           </button>
 
           {/* Account dropdown */}
           <div className="relative" ref={accountRef}>
             <button
               onClick={() => setAccountOpen((s) => !s)}
-              className="flex items-center gap-1 px-3 h-9 rounded-full hover:bg-[var(--cream-50)] text-sm font-medium text-[var(--orange-700)]"
+              className="flex items-center gap-2 px-3 h-9 rounded-full hover:bg-[var(--cream-50)] text-sm font-medium text-[var(--orange-700)]"
             >
-              Account <span className="text-[10px]">▾</span>
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={displayName}
+                  className="h-7 w-7 rounded-full object-cover border border-[var(--line-amber)] bg-white"
+                />
+              ) : (
+                <div className="h-7 w-7 rounded-full bg-[var(--cream-50)] border border-[var(--line-amber)] grid place-items-center text-[11px] font-medium text-[var(--orange-700)]">
+                  {avatarInitial}
+                </div>
+              )}
             </button>
 
             {accountOpen && (

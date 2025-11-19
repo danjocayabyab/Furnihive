@@ -118,17 +118,10 @@ export default function AuthModal({ open, mode: initialMode = "login", onClose, 
 
   return (
     <Modal open={open} onClose={handleClose}>
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex items-center mb-4">
         <h2 className="text-lg font-semibold text-[var(--brown-700)]">
           {mode === "login" ? "Login to FurniHive" : "Create your FurniHive account"}
         </h2>
-        <button
-          type="button"
-          className="text-sm text-gray-500"
-          onClick={handleClose}
-        >
-          ✕
-        </button>
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-2 text-sm">
