@@ -230,6 +230,7 @@ export default function CustomerSupportPage() {
   const [cat, setCat] = useState("all");
   const [status, setStatus] = useState("all");
   const [priority, setPriority] = useState("all");
+  const [ticketType, setTicketType] = useState("all"); // "all" | "buyer" | "seller"
 
   const [current, setCurrent] = useState(null);
   const [open, setOpen] = useState(false);
@@ -299,9 +300,11 @@ export default function CustomerSupportPage() {
       const matchesCat = cat === "all" ? true : t.category === cat;
       const matchesStatus = status === "all" ? true : t.status === status;
       const matchesPri = priority === "all" ? true : t.priority === priority;
-      return matchesQ && matchesCat && matchesStatus && matchesPri;
+      const matchesType =
+        ticketType === "all" ? true : (t.type || "buyer") === ticketType;
+      return matchesQ && matchesCat && matchesStatus && matchesPri && matchesType;
     });
-  }, [tickets, q, cat, status, priority]);
+  }, [tickets, q, cat, status, priority, ticketType]);
 
   const handleView = async (t) => {
     setCurrent(t);
@@ -355,6 +358,15 @@ export default function CustomerSupportPage() {
               placeholder="Search tickets, users, orders..."
               className="h-9 w-[240px] md:w-[280px] rounded-lg border border-[var(--line-amber)] bg-white px-3 text-sm placeholder:text-[var(--brown-700)]/45 focus:outline-none focus:ring-2 focus:ring-[var(--amber-400)]/40"
             />
+            <select
+              value={ticketType}
+              onChange={(e) => setTicketType(e.target.value)}
+              className="h-9 rounded-lg border border-[var(--line-amber)] bg-white px-3 text-sm"
+            >
+              <option value="all">All Types</option>
+              <option value="buyer">Customers</option>
+              <option value="seller">Sellers</option>
+            </select>
             <select value={cat} onChange={(e) => setCat(e.target.value)} className="h-9 rounded-lg border border-[var(--line-amber)] bg-white px-3 text-sm">
               <option value="all">All Categories</option>
               {CATEGORIES.map((c) => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}

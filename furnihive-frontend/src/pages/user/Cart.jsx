@@ -2,12 +2,16 @@
 import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../../components/contexts/CartContext.jsx";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
+import { useUI } from "../../components/contexts/UiContext.jsx";
 
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 
 export default function Cart() {
   const navigate = useNavigate();
   const { items, updateQty, removeItem, clearCart } = useCart();
+  const { user } = useAuth();
+  const { openAuth } = useUI();
 
   const [promo, setPromo] = useState("");
   const [confirm, setConfirm] = useState(null); // { type:"delete"|"clear", id? }
@@ -206,10 +210,12 @@ export default function Cart() {
               <span>Product Discounts</span>
               <span>−{peso(totals.discounts)}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Shipping Fee</span>
-              <span>{totals.shipping === 0 ? "FREE" : peso(totals.shipping)}</span>
-            </div>
+            {selected.length > 0 && totals.shipping === 0 && (
+              <div className="flex justify-between">
+                <span>Shipping Fee</span>
+                <span>FREE</span>
+              </div>
+            )}
             <div className="my-2 h-px bg-[var(--line-amber)]/60" />
             <div className="flex justify-between font-semibold text-[var(--brown-700)]">
               <span>Total</span>
@@ -218,9 +224,14 @@ export default function Cart() {
           </div>
 
           <button
-            onClick={() =>
-              navigate("/checkout", { state: { selectedItems: selected } })
-            }
+            onClick={() => {
+              if (!selected.length) return;
+              if (!user) {
+                openAuth("login");
+                return;
+              }
+              navigate("/checkout", { state: { selectedItems: selected } });
+            }}
             className="w-full rounded-lg bg-[var(--orange-600)] px-4 py-3 text-white font-medium hover:brightness-95 disabled:opacity-50"
             disabled={selected.length === 0}
           >

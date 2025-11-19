@@ -8,7 +8,7 @@ export default function UserNavbar() {
   const navigate = useNavigate();
   const cart = useCart();
   const [accountOpen, setAccountOpen] = useState(false);
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   // derive cart badge from context (sum of quantities)
   const cartCount = useMemo(
@@ -29,6 +29,13 @@ export default function UserNavbar() {
       navigate(q ? `/shop?query=${encodeURIComponent(q)}` : "/shop");
     }
   };
+
+  const avatarUrl = profile?.avatar_url || user?.user_metadata?.avatar_url || null;
+  const displayName =
+    profile?.first_name || profile?.last_name
+      ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim()
+      : user?.email || "Account";
+  const avatarInitial = (displayName || "U").slice(0, 1).toUpperCase();
 
   return (
     <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur border-b border-[var(--line-amber)]">
@@ -76,64 +83,87 @@ export default function UserNavbar() {
             )}
           </NavLink>
 
-          {/* Messages */}
-          <NavLink to="/messages" className={navItemCls} title="Messages">
-            <span className="relative">
-              {unread > 0 && (
-                <span className="absolute -right-1 -top-1 rounded-full bg-[var(--orange-600)] px-1.5 text-[10px] font-semibold text-white">
-                  {unread > 9 ? "9+" : unread}
-                </span>
-              )}
-            </span>
-            <span>Messages</span>
-          </NavLink>
-
-          {user ? (
-            <div className="relative">
+          {user && (
+            <>
+              {/* Notifications – match SellerTopbar size */}
               <button
                 type="button"
-                onClick={() => setAccountOpen((o) => !o)}
-                className="flex items-center gap-2 px-3 py-2 rounded-full text-sm text-[var(--orange-700)] hover:bg-[var(--cream-50)] border border-transparent"
+                title="Notifications"
+                className="relative grid h-9 w-9 place-items-center rounded-full hover:bg-[var(--cream-50)]"
               >
-                <span>Account</span>
-                <span className="text-xs">▾</span>
+                <span className="text-[16px] leading-none text-[var(--orange-700)]">⩍</span>
+                {0 > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--orange-600)] ring-2 ring-white" />
+                )}
               </button>
-              {accountOpen && (
-                <div className="absolute right-0 mt-2 w-40 rounded-xl border border-[var(--line-amber)] bg-white shadow-card text-sm z-30">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAccountOpen(false);
-                      navigate("/profile");
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-[var(--cream-50)] border-b border-[var(--line-amber)]/60"
-                  >
-                    Profile
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAccountOpen(false);
-                      navigate("/support");
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-[var(--cream-50)] border-b border-[var(--line-amber)]/60"
-                  >
-                    Customer Support
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAccountOpen(false);
-                      navigate("/logout");
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-[var(--cream-50)]"
-                  >
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
+
+              {/* Messages – match SellerTopbar icon style */}
+              <NavLink
+                to="/messages"
+                className="text-sm font-medium px-2 py-1 rounded-full hover:bg-[var(--cream-50)]"
+                title="Messages"
+              >
+                <span className="text-[16px] leading-none text-[var(--orange-700)]">✉︎</span>
+              </NavLink>
+
+              {/* Account dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setAccountOpen((o) => !o)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm text-[var(--orange-700)] hover:bg-[var(--cream-50)] border border-transparent"
+                >
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={displayName}
+                      className="h-7 w-7 rounded-full object-cover border border-[var(--line-amber)] bg-white"
+                    />
+                  ) : (
+                    <div className="h-7 w-7 rounded-full bg-[var(--cream-50)] border border-[var(--line-amber)] grid place-items-center text-[11px] font-medium text-[var(--orange-700)]">
+                      {avatarInitial}
+                    </div>
+                  )}
+                </button>
+                {accountOpen && (
+                  <div className="absolute right-0 mt-2 w-40 rounded-xl border border-[var(--line-amber)] bg-white shadow-card text-sm z-30">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccountOpen(false);
+                        navigate("/profile");
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-[var(--cream-50)] border-b border-[var(--line-amber)]/60"
+                    >
+                      Profile
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccountOpen(false);
+                        navigate("/support");
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-[var(--cream-50)] border-b border-[var(--line-amber)]/60"
+                    >
+                      Customer Support
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccountOpen(false);
+                        navigate("/logout");
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-[var(--cream-50)]"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {!user && (
             <div className="flex items-center gap-2 ml-2">
               <button
                 type="button"

@@ -482,7 +482,14 @@ export default function Checkout() {
             <hr className="border-[var(--line-amber)]/70" />
 
             <Row label={`Subtotal`} value={peso(totals.subtotal)} />
-            <Row label={`Shipping (Lalamove)`} value={totals.shipping ? peso(totals.shipping) : "TBD"} />
+            <Row
+              label={`Shipping (Lalamove)`}
+              value={
+                checkoutItems.length === 0 || !lalamoveQuote
+                  ? ""
+                  : peso(totals.shipping)
+              }
+            />
             {lalamoveLoading && (
               <div className="text-xs text-gray-600">Calculating Lalamove delivery fee...</div>
             )}
