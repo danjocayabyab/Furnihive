@@ -247,7 +247,7 @@ export async function listUsers() {
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, role, seller_approved, first_name, last_name, phone, store_name, avatar_url, created_at, last_active, suspended"
+        "id, role, seller_approved, first_name, last_name, phone, store_name, avatar_url, created_at, last_active, suspended, email, location"
       )
       .order("created_at", { ascending: false });
     if (error) throw (rpcErr || error);
@@ -267,6 +267,7 @@ export async function listUsers() {
     id: p.id,
     name: toName(p),
     email: p.email || "",
+    location: p.location || "",
     role: String(p.role || "buyer").toLowerCase() === "seller" ? "seller" : "customer",
     status: p.suspended ? "suspended" : "active", // Suspended flag from profiles
     joinDate: (() => {
