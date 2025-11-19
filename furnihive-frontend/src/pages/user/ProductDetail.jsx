@@ -244,7 +244,7 @@ export default function ProductDetail() {
         oldPrice: Number(product.oldPrice || product.price),
         image: product.image,
         seller: product.seller,
-        color: selectedColor,
+        color: product.color,
         rating: product.rating,
         weight_kg: product.weight_kg || 0,
       }

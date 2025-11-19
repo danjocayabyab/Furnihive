@@ -247,11 +247,57 @@ export async function listUsers() {
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, role, seller_approved, first_name, last_name, phone, store_name, avatar_url, created_at, last_active, suspended, email, location"
+        "id, role, seller_approved, first_name, last_name, phone, store_name, avatar_url, created_at, last_active, suspended, email"
       )
       .order("created_at", { ascending: false });
     if (error) throw (rpcErr || error);
     rows = data || [];
+  }
+
+  // Enrich with location from addresses table (city + province)
+  // We treat the first matching address per user as their primary location.
+  const ids = rows.map((p) => p.id).filter(Boolean);
+  const locationByUserId = {};
+  if (ids.length) {
+    try {
+      const { data: addrRows } = await supabase
+        .from("addresses")
+        .select("user_id, city, province")
+        .in("user_id", ids);
+      (addrRows || []).forEach((a) => {
+        const uid = a.user_id;
+        if (!uid || locationByUserId[uid]) return;
+        const city = a.city || "";
+        const province = a.province || "";
+        const loc = [city, province].filter(Boolean).join(", ");
+        locationByUserId[uid] = loc;
+      });
+    } catch {
+      // silently ignore address lookup failures; location will just be blank
+    }
+  }
+
+  // Enrich seller locations from store_verifications.location (store address)
+  const sellerIds = rows
+    .filter((p) => String(p.role || "").toLowerCase() === "seller")
+    .map((p) => p.id)
+    .filter(Boolean);
+  const sellerLocationById = {};
+  if (sellerIds.length) {
+    try {
+      const { data: verRows } = await supabase
+        .from("store_verifications")
+        .select("seller_id, location")
+        .in("seller_id", sellerIds)
+        .order("created_at", { ascending: false });
+      (verRows || []).forEach((v) => {
+        const sid = v.seller_id;
+        if (!sid || sellerLocationById[sid]) return;
+        if (v.location) sellerLocationById[sid] = v.location;
+      });
+    } catch {
+      // ignore errors; fallback to other location sources
+    }
   }
 
   const toName = (p) => {
@@ -267,7 +313,7 @@ export async function listUsers() {
     id: p.id,
     name: toName(p),
     email: p.email || "",
-    location: p.location || "",
+    location: sellerLocationById[p.id] || locationByUserId[p.id] || "",
     role: String(p.role || "buyer").toLowerCase() === "seller" ? "seller" : "customer",
     status: p.suspended ? "suspended" : "active", // Suspended flag from profiles
     joinDate: (() => {
