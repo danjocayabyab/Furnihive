@@ -66,6 +66,26 @@ export default function SellerSettings() {
     }
     try {
       setSavingStore(true);
+
+      // Try to geocode the store address to lat/lng for logistics pickup
+      let lat = null;
+      let lng = null;
+      if (store.address && store.address.trim()) {
+        try {
+          const { data, error } = await supabase.functions.invoke("geocode-address", {
+            body: { address: store.address },
+          });
+          if (!error && data?.lat && data?.lng) {
+            lat = Number(data.lat);
+            lng = Number(data.lng);
+          }
+        } catch (e) {
+          // Soft-fail: do not block saving store if geocoding fails
+          // eslint-disable-next-line no-console
+          console.warn("Failed to geocode store address", e);
+        }
+      }
+
       const payload = {
         owner_id: authUser.id,
         name: store.name,
@@ -78,6 +98,8 @@ export default function SellerSettings() {
         weekend_start: store.hoursWeekend?.[0] || null,
         weekend_end: store.hoursWeekend?.[1] || null,
         logo_url: store.logo || null,
+        lat,
+        lng,
       };
 
       if (storeRecordId) {

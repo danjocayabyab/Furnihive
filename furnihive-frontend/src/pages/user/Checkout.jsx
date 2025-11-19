@@ -54,6 +54,9 @@ export default function Checkout() {
   const [lalamoveLoading, setLalamoveLoading] = useState(false);
   const [lalamoveError, setLalamoveError] = useState("");
 
+  // Per-seller pickup location (store coordinates)
+  const [storePickup, setStorePickup] = useState(null); // { lat, lng, address }
+
   // ---- PROMOTIONS (seller vouchers)
   const [vouchers, setVouchers] = useState([]); // active voucher-type promotions (all sellers)
   const [selectedVoucherId, setSelectedVoucherId] = useState(null);
@@ -97,6 +100,12 @@ export default function Checkout() {
   // Total cart weight in kilograms (from product.weight_kg)
   const totalWeightKg = useMemo(
     () => checkoutItems.reduce((s, it) => s + (Number(it.weight_kg) || 0) * (it.qty || 1), 0),
+    [checkoutItems]
+  );
+
+  // Assume single-seller checkout: derive seller_id from first item
+  const checkoutSellerId = useMemo(
+    () => (checkoutItems.length ? checkoutItems[0].seller_id || null : null),
     [checkoutItems]
   );
 
@@ -193,14 +202,55 @@ export default function Checkout() {
     }
   };
 
-  // Fixed pickup location for the business (Lalamove origin)
+  // Load seller store pickup coordinates (per-seller origin)
+  useEffect(() => {
+    if (!checkoutSellerId) {
+      setStorePickup(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("stores")
+          .select("lat, lng, address")
+          .eq("owner_id", checkoutSellerId)
+          .maybeSingle();
+        if (cancelled || error || !data) {
+          if (!cancelled) setStorePickup(null);
+          return;
+        }
+        if (data.lat && data.lng) {
+          setStorePickup({
+            lat: Number(data.lat),
+            lng: Number(data.lng),
+            address: data.address || "Store pickup location",
+          });
+        } else {
+          setStorePickup(null);
+        }
+      } catch {
+        if (!cancelled) setStorePickup(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [checkoutSellerId]);
+
+  // Pickup location for Lalamove: prefer store coordinates, fallback to fixed origin
   const LALAMOVE_PICKUP = useMemo(
-    () => ({
-      lat: 13.932713984764295,
-      lng: 121.6134010614894,
-      address: "Store pickup location",
-    }),
-    []
+    () =>
+      storePickup && storePickup.lat && storePickup.lng
+        ? storePickup
+        : {
+            lat: 13.932713984764295,
+            lng: 121.6134010614894,
+            address: "Store pickup location",
+          },
+    [storePickup]
   );
 
   const fetchLalamoveQuote = async (dropoff) => {
