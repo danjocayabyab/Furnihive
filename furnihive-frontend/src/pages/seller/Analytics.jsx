@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../../lib/supabaseClient";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
 
 /**
  * NOTE: Everything reads from local state for now (mock data).
@@ -13,53 +15,219 @@ const peso = (n) =>
 export default function SellerAnalytics() {
   const navigate = useNavigate();
 
-  // ---- Mock snapshot (swap with API later)
-  const [snapshot] = useState({
-    revenue: 248500,
-    revenueChangePct: +12.5,
-    orders: 89,
-    ordersChangePct: +8.2,
-    visitors: 1400, // 1.4k in UI
-    visitorsChangePct: +15.3,
-    conversionRatePct: 2.8,
-    conversionChangePct: -0.3,
+  const { user } = useAuth();
+  const sellerId = user?.id;
+
+  // Snapshot metrics derived from real order_items data
+  const [snapshot, setSnapshot] = useState({
+    revenue: 0,
+    revenueChangePct: 0,
+    orders: 0,
+    ordersChangePct: 0,
   });
 
-  const [topProducts] = useState([
-    { rank: 1, title: "Modern Sectional Sofa", units: 18, revenue: 828000 },
-    { rank: 2, title: "Solid Wood Dining Set", units: 12, revenue: 426000 },
-    { rank: 3, title: "Queen Size Bed Frame", units: 9, revenue: 260100 },
-  ]);
-
-  const [salesOverview] = useState({
-    aov: 34500,
-    aovChangePct: +15,
-    retentionPct: 68,
-    retentionChangePct: +5,
-    returnRatePct: 2.1,
-    returnRateChangePct: +0.3,
+  // Sales overview (for now we only compute Average Order Value)
+  const [salesOverview, setSalesOverview] = useState({
+    aov: 0,
   });
 
-  const prettyVisitors = useMemo(() => {
-    const n = snapshot.visitors;
-    return n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n);
-  }, [snapshot.visitors]);
+  // Top products by units sold and revenue for this seller
+  const [topProducts, setTopProducts] = useState([]);
+
+  // Payout summary: gross sales with payouts, net earnings and pending payouts
+  const [payoutsSummary, setPayoutsSummary] = useState({
+    grossTotal: 0,
+    netTotal: 0,
+    pendingNet: 0,
+  });
+
+  // Date range filter: 7d | 30d | all
+  const [range, setRange] = useState("30d");
+
+  // Load analytics data from order_items for this seller
+  useEffect(() => {
+    if (!sellerId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // Compute from-date based on selected range
+        let fromISO = null;
+        if (range === "7d" || range === "30d") {
+          const days = range === "7d" ? 7 : 30;
+          const d = new Date();
+          d.setDate(d.getDate() - days);
+          fromISO = d.toISOString();
+        }
+
+        let query = supabase
+          .from("order_items")
+          .select("order_id, qty, unit_price, product_id, title, created_at")
+          .eq("seller_id", sellerId);
+
+        if (fromISO) {
+          query = query.gte("created_at", fromISO);
+        }
+
+        const { data: items, error } = await query;
+
+        if (cancelled || error || !items) {
+          if (!cancelled) {
+            setSnapshot({
+              revenue: 0,
+              revenueChangePct: 0,
+              orders: 0,
+              ordersChangePct: 0,
+            });
+            setSalesOverview({ aov: 0 });
+            setTopProducts([]);
+          }
+          return;
+        }
+
+        const orderIds = new Set();
+        let totalSales = 0;
+        const byProduct = new Map();
+
+        items.forEach((row) => {
+          if (row?.order_id) orderIds.add(row.order_id);
+
+          const qty = Number(row?.qty || 0) || 0;
+          const price = Number(row?.unit_price || 0) || 0;
+          totalSales += qty * price;
+
+          if (!row?.product_id) return;
+          const key = row.product_id;
+          if (!byProduct.has(key)) {
+            byProduct.set(key, {
+              productId: key,
+              title: row.title || "Product",
+              units: 0,
+              revenue: 0,
+            });
+          }
+          const entry = byProduct.get(key);
+          entry.units += qty;
+          entry.revenue += qty * price;
+        });
+
+        const totalOrders = orderIds.size;
+        const aov = totalOrders ? totalSales / totalOrders : 0;
+
+        const topList = Array.from(byProduct.values())
+          .filter((p) => p.units > 0)
+          .sort((a, b) => b.units - a.units)
+          .slice(0, 10)
+          .map((p, idx) => ({
+            rank: idx + 1,
+            title: p.title,
+            units: p.units,
+            revenue: p.revenue,
+          }));
+
+        if (!cancelled) {
+          setSnapshot({
+            revenue: totalSales,
+            revenueChangePct: 0,
+            orders: totalOrders,
+            ordersChangePct: 0,
+          });
+          setSalesOverview({ aov });
+          setTopProducts(topList);
+        }
+      } catch {
+        if (!cancelled) {
+          setSnapshot({
+            revenue: 0,
+            revenueChangePct: 0,
+            orders: 0,
+            ordersChangePct: 0,
+          });
+          setSalesOverview({ aov: 0 });
+          setTopProducts([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerId, range]);
+
+  // Load payout summary (net earnings + pending payouts) from seller_payouts for this seller
+  useEffect(() => {
+    if (!sellerId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // Compute from-date based on selected range
+        let fromISO = null;
+        if (range === "7d" || range === "30d") {
+          const days = range === "7d" ? 7 : 30;
+          const d = new Date();
+          d.setDate(d.getDate() - days);
+          fromISO = d.toISOString();
+        }
+
+        let query = supabase
+          .from("seller_payouts")
+          .select("gross_amount, net_amount, status, created_at")
+          .eq("seller_id", sellerId);
+
+        if (fromISO) {
+          query = query.gte("created_at", fromISO);
+        }
+
+        const { data: payoutRows, error } = await query;
+
+        if (cancelled || error || !payoutRows) {
+          if (!cancelled) {
+            setPayoutsSummary({ grossTotal: 0, netTotal: 0, pendingNet: 0 });
+          }
+          return;
+        }
+
+        let grossTotal = 0;
+        let netTotal = 0;
+        let pendingNet = 0;
+
+        payoutRows.forEach((row) => {
+          const gross = Number(row?.gross_amount || 0) || 0;
+          const net = Number(row?.net_amount || 0) || 0;
+          grossTotal += gross;
+          netTotal += net;
+          const st = String(row?.status || "").toLowerCase();
+          if (st === "pending") pendingNet += net;
+        });
+
+        if (!cancelled) {
+          setPayoutsSummary({ grossTotal, netTotal, pendingNet });
+        }
+      } catch {
+        if (!cancelled) {
+          setPayoutsSummary({ grossTotal: 0, netTotal: 0, pendingNet: 0 });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerId, range]);
 
   // Simple CSV export (you can swap this with a server report later)
   const exportCSV = () => {
     const rows = [
       ["Metric", "Value"],
-      ["Total Revenue", snapshot.revenue],
+      ["Total Sales (with payouts)", payoutsSummary.grossTotal],
       ["Total Orders", snapshot.orders],
-      ["Store Visitors", snapshot.visitors],
-      ["Conversion Rate (%)", snapshot.conversionRatePct],
+      ["Net Earnings (paid + pending)", payoutsSummary.netTotal],
+      ["Pending Payouts", payoutsSummary.pendingNet],
+      ["Average Order Value", salesOverview.aov],
       [],
       ["Top Products", "Units", "Revenue"],
       ...topProducts.map((p) => [p.title, p.units, p.revenue]),
-      [],
-      ["Average Order Value", salesOverview.aov],
-      ["Customer Retention (%)", salesOverview.retentionPct],
-      ["Return Rate (%)", salesOverview.returnRatePct],
     ];
 
     const csv = rows.map((r) => r.join(",")).join("\n");
@@ -91,6 +259,27 @@ export default function SellerAnalytics() {
             <p className="text-xs text-gray-600">
               Track your business performance
             </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {["7d", "30d", "all"].map((key) => {
+                const label =
+                  key === "7d" ? "Last 7 days" : key === "30d" ? "Last 30 days" : "All time";
+                const active = range === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setRange(key)}
+                    className={`text-xs px-3 py-1 rounded-full border transition ${
+                      active
+                        ? "bg-[var(--orange-600)] text-white border-[var(--orange-600)]"
+                        : "bg-white text-[var(--brown-700)] border-[var(--line-amber)] hover:bg-[var(--cream-50)]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -105,9 +294,16 @@ export default function SellerAnalytics() {
       {/* KPI cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPI
-          label="Total Revenue"
-          value={peso(snapshot.revenue)}
+          label="Total Sales"
+          value={peso(payoutsSummary.grossTotal)}
           delta={snapshot.revenueChangePct}
+          
+          accent="text-emerald-600"
+        />
+        <KPI
+          label="Net Earnings"
+          value={peso(payoutsSummary.netTotal)}
+          delta={0}
           
           accent="text-emerald-600"
         />
@@ -119,20 +315,11 @@ export default function SellerAnalytics() {
           accent="text-emerald-600"
         />
         <KPI
-          label="Store Visitors"
-          value={prettyVisitors}
-          delta={snapshot.visitorsChangePct}
+          label="Pending Payouts"
+          value={peso(payoutsSummary.pendingNet)}
+          delta={0}
           
           accent="text-emerald-600"
-          iconColor="text-blue-600"
-        />
-        <KPI
-          label="Conversion Rate"
-          value={`${snapshot.conversionRatePct}%`}
-          delta={snapshot.conversionChangePct}
-          
-          accent={snapshot.conversionChangePct >= 0 ? "text-emerald-600" : "text-red-600"}
-          iconColor="text-fuchsia-600"
         />
       </div>
 
@@ -167,34 +354,35 @@ export default function SellerAnalytics() {
         </ul>
       </section>
 
-      {/* Sales overview */}
+      {/* Payout summary */}
       <section className="rounded-2xl border border-[var(--line-amber)] bg-white">
         <div className="px-5 py-4 border-b border-[var(--line-amber)]">
-          <h3 className="font-semibold text-[var(--brown-700)]">Sales Overview</h3>
+          <h3 className="font-semibold text-[var(--brown-700)]">Payout Summary</h3>
           <p className="text-xs text-gray-600">
-            Performance summary for the last 30 days
+            Overview of what you have earned and what is still awaiting payout for the selected period.
           </p>
         </div>
 
-        <div className="p-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <OverviewCard
-            label="Average Order Value"
-            value={peso(salesOverview.aov)}
-            change={`${salesOverview.aovChangePct}% from last month`}
-            changePositive
-          />
-          <OverviewCard
-            label="Customer Retention"
-            value={`${salesOverview.retentionPct}%`}
-            change={`${salesOverview.retentionChangePct}% from last month`}
-            changePositive
-          />
-          <OverviewCard
-            label="Return Rate"
-            value={`${salesOverview.returnRatePct}%`}
-            change={`${salesOverview.returnRateChangePct}% from last month`}
-            changePositive={false}
-          />
+        <div className="p-4 grid sm:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--amber-50)]/40 p-4 text-sm text-[var(--brown-700)]/90 space-y-1">
+            <div className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+              Net Earnings
+            </div>
+            <div className="text-2xl font-bold">{peso(payoutsSummary.netTotal)}</div>
+            <p className="text-xs text-gray-600">
+              This is your earnings after the 5% Furnihive commission has been deducted from your sales.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-4 text-sm text-[var(--brown-700)]/90 space-y-1">
+            <div className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+              Pending Payouts
+            </div>
+            <div className="text-2xl font-bold">{peso(payoutsSummary.pendingNet)}</div>
+            <p className="text-xs text-gray-600">
+              Amount from completed orders that is still marked as pending in payouts and has not been paid out yet.
+            </p>
+          </div>
         </div>
       </section>
     </div>
@@ -204,10 +392,6 @@ export default function SellerAnalytics() {
 /* --- Small UI helpers --- */
 
 function KPI({ label, value, delta, icon, accent = "", iconColor = "" }) {
-  const up = delta >= 0;
-  const deltaText = `${up ? "+" : ""}${delta}%`;
-  const deltaColor = up ? "text-emerald-600" : "text-red-600";
-
   return (
     <div className="rounded-2xl border border-[var(--line-amber)] bg-white p-4">
       <div className="flex items-center justify-between">
@@ -216,10 +400,6 @@ function KPI({ label, value, delta, icon, accent = "", iconColor = "" }) {
       </div>
       <div className="mt-1 text-2xl font-extrabold text-[var(--brown-700)]">
         {value}
-      </div>
-      <div className={`mt-1 text-xs flex items-center gap-1 ${deltaColor}`}>
-        <span>{up ? "↗︎" : "↘︎"}</span>
-        <span className={`${accent}`}>{deltaText}</span>
       </div>
     </div>
   );
