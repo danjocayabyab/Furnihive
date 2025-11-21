@@ -1,13 +1,25 @@
 import React from "react";
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useCart } from "@/src/context/CartContext";
 
 export function CartScreen() {
   const { items, total, updateQty, remove, clear } = useCart();
+  const router = useRouter();
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Cart</Text>
+      <View style={styles.headerRow}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
+          <Feather name="arrow-left" size={18} color="#422006" />
+        </TouchableOpacity>
+        <Text style={styles.heading}>Cart</Text>
+      </View>
       {items.length === 0 ? (
         <View style={styles.emptyBox}>
           <Text style={styles.emptyText}>Your cart is empty.</Text>
@@ -60,8 +72,12 @@ export function CartScreen() {
             <TouchableOpacity style={styles.clearButton} onPress={clear}>
               <Text style={styles.clearButtonText}>Clear Cart</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.checkoutButton} disabled>
-              <Text style={styles.checkoutText}>Checkout (coming soon)</Text>
+            <TouchableOpacity
+              style={[styles.checkoutButton, items.length > 0 ? styles.checkoutButtonEnabled : styles.checkoutButtonDisabled]}
+              disabled={items.length === 0}
+              onPress={() => router.push({ pathname: "/checkout" })}
+            >
+              <Text style={styles.checkoutText}>Go to Checkout</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -74,14 +90,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fefce8",
-    paddingTop: 32,
+    paddingTop: 8,
     paddingHorizontal: 16,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  backButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
   },
   heading: {
     fontSize: 20,
     fontWeight: "700",
     color: "#422006",
-    marginBottom: 16,
+    marginBottom: 0,
   },
   emptyBox: {
     borderRadius: 16,
@@ -204,11 +236,16 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: "center",
-    backgroundColor: "#e5e7eb",
   },
   checkoutText: {
     fontSize: 14,
     color: "#6b7280",
     fontWeight: "600",
+  },
+  checkoutButtonEnabled: {
+    backgroundColor: "#ea580c",
+  },
+  checkoutButtonDisabled: {
+    backgroundColor: "#e5e7eb",
   },
 });

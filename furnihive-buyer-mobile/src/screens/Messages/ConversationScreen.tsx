@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Image } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabaseClient";
 import { useAuth } from "@/src/context/AuthContext";
 
@@ -13,6 +14,7 @@ type ChatMessage = {
 
 export function ConversationScreen() {
   const params = useLocalSearchParams();
+  const router = useRouter();
   const conversationId =
     typeof params.id === "string" ? params.id : Array.isArray(params.id) ? params.id[0] : "";
   const prefill =
@@ -27,6 +29,9 @@ export function ConversationScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [input, setInput] = useState(prefill || "");
+  const [peerName, setPeerName] = useState<string | null>(null);
+  const [peerAvatar, setPeerAvatar] = useState<string | null>(null);
+  const [peerOnline, setPeerOnline] = useState<boolean>(false);
   const listRef = useRef<FlatList<ChatMessage> | null>(null);
 
   useEffect(() => {
@@ -75,6 +80,63 @@ export function ConversationScreen() {
     }
 
     loadMessages();
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    let cancelled = false;
+
+    async function loadPeerName() {
+      try {
+        const { data: convo } = await supabase
+          .from("conversations")
+          .select("seller_id")
+          .eq("id", conversationId)
+          .maybeSingle();
+
+        const sellerId = convo?.seller_id;
+        if (!sellerId || cancelled) return;
+
+        const [{ data: sellers }, { data: stores }] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, store_name, first_name, last_name, avatar_url, last_active")
+            .eq("id", sellerId)
+            .limit(1),
+          supabase
+            .from("stores")
+            .select("owner_id, name")
+            .eq("owner_id", sellerId)
+            .limit(1),
+        ]);
+
+        if (cancelled) return;
+
+        const seller = sellers?.[0] as any | undefined;
+        const store = stores?.[0] as any | undefined;
+        const name =
+          store?.name ||
+          seller?.store_name ||
+          [seller?.first_name, seller?.last_name].filter(Boolean).join(" ") ||
+          null;
+
+        setPeerName(name);
+        setPeerAvatar((seller as any)?.avatar_url || null);
+        const lastActiveMs = seller?.last_active ? Date.parse(seller.last_active) : null;
+        const online =
+          lastActiveMs && Number.isFinite(lastActiveMs)
+            ? Date.now() - lastActiveMs < 5 * 60 * 1000
+            : false;
+        setPeerOnline(Boolean(online));
+      } catch {
+        if (!cancelled) setPeerName(null);
+      }
+    }
+
+    loadPeerName();
     return () => {
       cancelled = true;
     };
@@ -156,58 +218,199 @@ export function ConversationScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={80}
-    >
-      <View style={styles.header}>
-        <Text style={styles.heading}>Conversation</Text>
-        <Text style={styles.subtle}>ID: {conversationId}</Text>
-      </View>
+    <View style={styles.root}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={80}
+      >
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Feather name="arrow-left" size={18} color="#422006" />
+          </TouchableOpacity>
+          <View style={styles.headerTextCol}>
+            <View style={styles.headerNameRow}>
+              {peerAvatar ? (
+                <Image source={{ uri: peerAvatar }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarFallback}>
+                  <Text style={styles.avatarFallbackText}>
+                    {(peerName || "S").slice(0, 1).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.heading} numberOfLines={1}>
+                {peerName || "Chat"}
+              </Text>
+              <View style={styles.headerStatusRow}>
+                <View
+                  style={[
+                    styles.onlineDot,
+                    peerOnline ? styles.onlineDotOn : styles.onlineDotOff,
+                  ]}
+                />
+                <Text style={styles.onlineText}>
+                  {peerOnline ? "Online" : "Offline"}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <FlatList
-        ref={listRef}
-        data={messages}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-      />
-
-      <View style={styles.composerRow}>
-        <TextInput
-          style={styles.input}
-          placeholder="Type a message..."
-          value={input}
-          onChangeText={setInput}
-          onSubmitEditing={send}
-          returnKeyType="send"
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          onContentSizeChange={() =>
+            listRef.current?.scrollToEnd({ animated: true })
+          }
         />
-        <TouchableOpacity style={styles.sendButton} onPress={send}>
-          <Text style={styles.sendText}>➤</Text>
+
+        <View style={styles.composerRow}>
+          <TouchableOpacity style={styles.attachButton} onPress={() => {}}>
+            <Feather name="paperclip" size={18} color="#ea580c" />
+          </TouchableOpacity>
+          <TextInput
+            style={styles.input}
+            placeholder="Type a message..."
+            value={input}
+            onChangeText={setInput}
+            onSubmitEditing={send}
+            returnKeyType="send"
+          />
+          <TouchableOpacity style={styles.sendButton} onPress={send}>
+            <Text style={styles.sendText}>➤</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+
+      <View style={styles.bottomNav}>
+        <TouchableOpacity
+          style={styles.bottomNavItem}
+          onPress={() => router.push({ pathname: "/" })}
+        >
+          <Feather name="home" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bottomNavItem}
+          onPress={() => router.push({ pathname: "/explore" })}
+        >
+          <Feather name="shopping-bag" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bottomNavItem}
+          onPress={() => router.push({ pathname: "/cart" })}
+        >
+          <Feather name="shopping-cart" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bottomNavItem}
+          onPress={() => router.push({ pathname: "/profile" })}
+        >
+          <Feather name="user" size={20} color="#9ca3af" />
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: "#fefce8",
+  },
   container: {
     flex: 1,
     backgroundColor: "#fefce8",
-    paddingTop: 32,
+    paddingTop: 8,
     paddingHorizontal: 16,
+    paddingBottom: 56,
   },
-  header: {
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 8,
   },
+  backButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
+  },
+  headerTextCol: {
+    flex: 1,
+  },
+  headerNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
+  },
+  headerStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 8,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    backgroundColor: "#fefce8",
+  },
+  avatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    backgroundColor: "#fefce8",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarFallbackText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#ea580c",
+  },
   heading: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "700",
     color: "#422006",
+    flexShrink: 1,
+    marginRight: 4,
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 4,
+    backgroundColor: "#d1d5db",
+  },
+  onlineDotOn: {
+    backgroundColor: "#22c55e",
+  },
+  onlineDotOff: {
+    backgroundColor: "#d1d5db",
+  },
+  onlineText: {
+    fontSize: 11,
+    color: "#6b7280",
   },
   subtle: {
     fontSize: 12,
@@ -266,7 +469,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#facc6b",
-    backgroundColor: "#fffbeb",
+    backgroundColor: "#ffffff",
     paddingHorizontal: 14,
     paddingVertical: 8,
     fontSize: 14,
@@ -279,8 +482,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  attachButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   sendText: {
     fontSize: 18,
     color: "#ffffff",
+  },
+  bottomNav: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderTopWidth: 1,
+    borderTopColor: "#facc6b",
+    paddingVertical: 4,
+    height: 56,
+  },
+  bottomNavItem: {
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

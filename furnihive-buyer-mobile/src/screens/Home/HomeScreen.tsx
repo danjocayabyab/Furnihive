@@ -58,7 +58,7 @@ export function HomeScreen() {
           price: Number(r.base_price ?? 0),
           oldPrice: null,
           image: "",
-          rating: 4.8,
+          rating: 0,
           reviews: 0,
           outOfStock:
             (typeof r.stock_qty === "number" ? r.stock_qty <= 0 : false) ||
@@ -120,6 +120,62 @@ export function HomeScreen() {
             "https://images.unsplash.com/photo-1493666438817-866a91353ca9?q=80&w=800&auto=format&fit=crop",
         }));
 
+        // Load real review aggregates per product via order_items -> reviews
+        try {
+          if (productIds.length) {
+            const { data: orderItems, error: oiErr } = await supabase
+              .from("order_items")
+              .select("order_id, product_id")
+              .in("product_id", productIds);
+
+            if (!oiErr && orderItems && orderItems.length) {
+              const orderToProducts = new Map<string | number, Set<string | number>>();
+              (orderItems || []).forEach((row: any) => {
+                if (!row.order_id || !row.product_id) return;
+                const key = row.order_id;
+                if (!orderToProducts.has(key)) {
+                  orderToProducts.set(key, new Set());
+                }
+                orderToProducts.get(key)!.add(row.product_id);
+              });
+
+              const orderIds = Array.from(orderToProducts.keys());
+              if (orderIds.length) {
+                const { data: revs, error: revErr } = await supabase
+                  .from("reviews")
+                  .select("order_id, rating")
+                  .in("order_id", orderIds);
+
+                if (!revErr && revs && revs.length) {
+                  const agg: Record<string | number, { total: number; count: number }> = {};
+                  (revs || []).forEach((r: any) => {
+                    const set = orderToProducts.get(r.order_id);
+                    if (!set) return;
+                    const rating = Number(r.rating || 0) || 0;
+                    set.forEach((pid) => {
+                      if (!agg[pid]) agg[pid] = { total: 0, count: 0 };
+                      agg[pid].total += rating;
+                      agg[pid].count += 1;
+                    });
+                  });
+
+                  withImages = withImages.map((p) => {
+                    const a = agg[p.id];
+                    if (!a || !a.count) return p;
+                    return {
+                      ...p,
+                      rating: a.total / a.count,
+                      reviews: a.count,
+                    };
+                  });
+                }
+              }
+            }
+          }
+        } catch {
+          // best-effort; fall back to default rating if this fails
+        }
+
         if (!cancelled) setFeatProducts(withImages as any);
       } catch (e: any) {
         if (!cancelled) {
@@ -157,11 +213,15 @@ export function HomeScreen() {
         <FlatList
           data={categories}
           keyExtractor={(item) => item.label}
-          numColumns={2}
+          numColumns={4}
           scrollEnabled={false}
           columnWrapperStyle={styles.categoryRow}
           contentContainerStyle={styles.categoryList}
-          renderItem={({ item }) => <CategoryCard item={item} />}
+          renderItem={({ item }) => (
+            <View style={styles.categoryCol}>
+              <CategoryCard item={item} />
+            </View>
+          )}
         />
       </View>
 
@@ -249,7 +309,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fefce8", // cream-50
   },
   scrollContent: {
-    paddingTop: 32,
+    paddingTop: 8,
     paddingHorizontal: 16,
     paddingBottom: 32,
   },
@@ -265,7 +325,8 @@ const styles = StyleSheet.create({
   heroSubtitle: {
     marginTop: 8,
     fontSize: 13,
-    color: "#4b5563",
+    lineHeight: 18,
+    color: "#6b7280",
   },
   section: {
     marginBottom: 24,
@@ -277,15 +338,19 @@ const styles = StyleSheet.create({
   },
   sectionSubtitle: {
     marginTop: 4,
-    fontSize: 12,
-    color: "#4b5563",
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#6b7280",
   },
   categoryList: {
-    marginTop: 12,
+    marginTop: 8,
   },
   categoryRow: {
-    gap: 12,
-    marginBottom: 12,
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  categoryCol: {
+    width: "22%",
   },
   sectionHeaderRow: {
     flexDirection: "row",

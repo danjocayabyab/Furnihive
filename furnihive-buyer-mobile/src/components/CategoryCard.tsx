@@ -40,7 +40,8 @@ const styles = StyleSheet.create({
   },
   image: {
     width: "100%",
-    height: 112,
+    // medium horizontal rectangle that still fits 4 across nicely
+    aspectRatio: 1.4,
   },
   gradient: {
     position: "absolute",
@@ -59,9 +60,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   meta: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 11,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    fontSize: 10,
     color: "#4b5563",
+    textAlign: "center",
   },
 });
