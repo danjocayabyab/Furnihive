@@ -559,7 +559,7 @@ export default function Profile() {
         <div className="bg-[var(--cream-50)] px-4 py-2 border-t border-[var(--line-amber)]">
           <div className="flex gap-2">
             <TabButton active={tab === "overview"} onClick={() => setTab("overview")}>
-              Overview
+              My Orders
             </TabButton>
             <TabButton active={tab === "orders"} onClick={() => setTab("orders")}>
               Order History
@@ -628,7 +628,9 @@ function OverviewPanel({ money, orders, reviews, onViewDetails, onWriteReview })
           <span className="text-sm text-gray-600">{orders.length} total</span>
         </div>
         <ul className="divide-y divide-[var(--line-amber)]/70">
-          {orders.map((o) => {
+          {orders
+            .filter((o) => o.status !== "Delivered")
+            .map((o) => {
             const hasReview = reviews.some((r) => r.orderId === o.id);
             return (
               <li key={o.id} className="px-5 py-4">
@@ -657,9 +659,36 @@ function OverviewPanel({ money, orders, reviews, onViewDetails, onWriteReview })
 }
 
 function OrdersPanel({ money, orders, reviews, onViewDetails, onWriteReview }) {
+  const [statusFilter, setStatusFilter] = useState("Delivered");
+
+  const visibleOrders = orders.filter((o) => {
+    if (!statusFilter) return true;
+    return o.status === statusFilter;
+  });
+
+  const statuses = ["Pending", "Processing", "Shipped", "Delivered"];
+
   return (
     <div className="space-y-4">
-      {orders.map((o) => {
+      <div className="flex flex-wrap gap-2 items-center mb-2">
+        <span className="text-xs text-gray-600">Filter by status:</span>
+        {statuses.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setStatusFilter(s)}
+            className={`px-3 py-1 rounded-full text-xs border transition ${
+              statusFilter === s
+                ? "bg-[var(--orange-600)] text-white border-[var(--orange-600)]"
+                : "bg-white text-[var(--brown-700)] border-[var(--line-amber)] hover:bg-[var(--cream-50)]"
+            }`}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
+      {visibleOrders.map((o) => {
         const hasReview = reviews.some((r) => r.orderId === o.id);
         return (
           <div key={o.id} className="rounded-2xl border border-[var(--line-amber)] bg-white p-4">
@@ -684,7 +713,7 @@ function OrdersPanel({ money, orders, reviews, onViewDetails, onWriteReview }) {
               <div className="flex-1 min-w-0">
                 <div className="text-[var(--brown-700)] font-medium truncate">{o.title}</div>
                 <div className="text-xs text-gray-600">
-                  {o.items} item{o.items > 1 ? "s" : ""} • {money(o.price)}
+                  {o.items} item{o.items > 1 ? "s" : ""}  {money(o.price)}
                 </div>
                 {o.trackingId && (
                   <div className="mt-1 text-[11px] text-gray-600 flex items-center gap-2">
@@ -832,6 +861,11 @@ function OrderRow({ o, money }) {
         <div className="text-xs text-gray-600">
           {displayDate} • {money(o.price)}
         </div>
+        {o.trackingId && (
+          <div className="text-[11px] text-gray-600 mt-0.5">
+            Tracking: {o.trackingId}
+          </div>
+        )}
       </div>
       <span className={`text-xs px-2 py-1 rounded-full ${STATUS_STYLES[o.status]}`}>
         {o.status}

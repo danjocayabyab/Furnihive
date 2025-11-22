@@ -17,6 +17,10 @@ export default function Checkout() {
 
   const isSuspended = !!profile?.suspended;
 
+  // If PayMongo redirects back to /checkout?paystatus=success|cancel, show a banner
+  const searchParams = new URLSearchParams(location.search || "");
+  const payStatus = searchParams.get("paystatus");
+
   const selectedIds = Array.isArray(location.state?.selectedItems)
     ? location.state.selectedItems
     : null;
@@ -388,10 +392,10 @@ export default function Checkout() {
           await supabase.from("order_items").insert(itemsPayload);
         }
 
-        // For cash on delivery, do not redirect to PayMongo; keep local flow
+        // For cash on delivery, do not redirect to PayMongo; show the same success modal flow
         if (payMethod === "cod") {
           clearCart();
-          navigate("/checkout/success", { state: { total: totals.total } });
+          navigate("/checkout?paystatus=success", { replace: true });
           return;
         }
 
@@ -454,6 +458,41 @@ export default function Checkout() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
+      {(payStatus === "success" || payStatus === "cancel") && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl border border-[var(--line-amber)]">
+            <div
+              className={`mb-1 text-sm font-semibold ${
+                payStatus === "success" ? "text-emerald-700" : "text-red-700"
+              }`}
+            >
+              {payStatus === "success" ? "Payment successful" : "Payment failed or cancelled"}
+            </div>
+            <p className="mb-4 text-xs text-gray-700">
+              {payStatus === "success"
+                ? "Your order has been placed. You can review it in your orders page."
+                : "Your payment attempt was not completed. You may try again or choose another payment method."}
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                className="rounded-xl border border-[var(--line-amber)] px-3 py-1.5 text-xs font-medium text-[var(--brown-700)] hover:bg-[var(--cream-50)]"
+                onClick={() => navigate("/", { replace: true })}
+              >
+                Continue shopping
+              </button>
+              <button
+                type="button"
+                className="rounded-xl bg-[var(--orange-600)] px-3 py-1.5 text-xs font-medium text-white hover:brightness-95"
+                onClick={() => navigate("/profile", { replace: true })}
+              >
+                View my orders
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header: back button + steps aligned */}
       <div className="mb-4 flex items-center gap-3">
         <button

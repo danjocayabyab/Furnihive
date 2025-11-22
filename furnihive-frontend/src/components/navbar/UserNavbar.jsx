@@ -1,14 +1,21 @@
 // src/components/navbar/UserNavbar.jsx
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useCart } from "../contexts/CartContext.jsx";
 import { useAuth } from "../contexts/AuthContext.jsx";
+import useBuyerNotifications from "../../buyer/lib/useNotifications.js";
+import { supabase } from "../../lib/supabaseClient";
 
 export default function UserNavbar() {
   const navigate = useNavigate();
   const cart = useCart();
   const [accountOpen, setAccountOpen] = useState(false);
   const { user, profile } = useAuth();
+
+  const notifRef = useRef(null);
+  const [notifOpen, setNotifOpen] = useState(false);
+
+  const { items, unread, markRead, markAllRead, addNotification } = useBuyerNotifications();
 
   // derive cart badge from context (sum of quantities)
   const cartCount = useMemo(
@@ -17,7 +24,76 @@ export default function UserNavbar() {
   );
 
   // (optional) unread messages – wire to backend later
-  const [unread] = useState(0);
+  const [msgUnread] = useState(0);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setNotifOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // Realtime: buyer order updates (new orders + status changes)
+  useEffect(() => {
+    const buyerId = user?.id;
+    if (!buyerId) return;
+
+    console.log("BUYER NOTIF: subscribing for orders", { buyerId });
+
+    const channel = supabase
+      .channel(`buyer-orders-${buyerId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "orders",
+          filter: `user_id=eq.${buyerId}`,
+        },
+        (payload) => {
+          console.log("BUYER NOTIF: orders payload", payload);
+          const eventType = payload?.eventType;
+          const oldRow = payload?.old || {};
+          const newRow = payload?.new || {};
+          if (!newRow) return;
+
+          const orderId = newRow.id;
+          const shortId = String(orderId).slice(0, 8).toUpperCase();
+
+          if (eventType === "INSERT") {
+            addNotification({
+              title: `Order ORD-${shortId} placed`,
+              body: "Your order has been created.",
+              link: "/profile",
+              type: "success",
+            });
+            return;
+          }
+
+          if (eventType === "UPDATE") {
+            if (oldRow && oldRow.status === newRow.status) return;
+            const status = newRow.status || "Updated";
+
+            addNotification({
+              title: `Order ORD-${shortId} status updated`,
+              body: `Your order is now: ${status}`,
+              link: "/profile",
+              type: "info",
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log("BUYER NOTIF: removing orders subscription", { buyerId });
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, addNotification]);
 
   const navItemCls = ({ isActive }) =>
     `flex items-center gap-2 px-3 py-2 rounded-full text-sm text-[var(--orange-700)]
@@ -85,17 +161,78 @@ export default function UserNavbar() {
 
           {user && (
             <>
-              {/* Notifications – match SellerTopbar size */}
-              <button
-                type="button"
-                title="Notifications"
-                className="relative grid h-9 w-9 place-items-center rounded-full hover:bg-[var(--cream-50)]"
-              >
-                <span className="text-[16px] leading-none text-[var(--orange-700)]">⩍</span>
-                {0 > 0 && (
-                  <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--orange-600)] ring-2 ring-white" />
+              {/* Notifications – match SellerTopbar/AdminTopbar dropdown */}
+              <div className="relative" ref={notifRef}>
+                <button
+                  type="button"
+                  title="Notifications"
+                  onClick={() => setNotifOpen((o) => !o)}
+                  className="relative grid h-9 w-9 place-items-center rounded-full hover:bg-[var(--cream-50)]"
+                >
+                  <span className="text-[16px] leading-none text-[var(--orange-700)]">⩍</span>
+                  {unread > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--orange-600)] ring-2 ring-white" />
+                  )}
+                </button>
+
+                {notifOpen && (
+                  <div className="absolute right-0 mt-2 w-[340px] rounded-xl border border-[var(--line-amber)] bg-white shadow-card overflow-hidden z-50">
+                    <div className="px-4 py-2 flex items-center justify-between border-b border-[var(--line-amber)]/60">
+                      <div className="font-medium text-[var(--brown-700)]">Notifications</div>
+                      <button
+                        type="button"
+                        onClick={markAllRead}
+                        className="text-[12px] px-2 py-1 rounded border border-[var(--line-amber)] hover:bg-[var(--cream-50)]"
+                      >
+                        Mark all as read
+                      </button>
+                    </div>
+
+                    <div className="max-h-80 overflow-auto">
+                      {items.length === 0 ? (
+                        <div className="px-4 py-6 text-sm text-[var(--brown-700)]/60">No notifications.</div>
+                      ) : (
+                        items.map((n) => (
+                          <button
+                            key={n.id}
+                            type="button"
+                            onClick={() => {
+                              markRead(n.id);
+                              if (n.link) navigate(n.link);
+                              setNotifOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-3 flex gap-2 items-start border-b border-[var(--line-amber)]/50 hover:bg-[var(--cream-50)] ${
+                              n.read ? "opacity-80" : ""
+                            }`}
+                          >
+                            <span className="mt-0.5 h-4 w-4 rounded-full border border-[var(--line-amber)] bg-[var(--cream-50)] flex items-center justify-center text-[9px] font-semibold text-[var(--orange-700)]">
+                              {n.type === "success"
+                                ? "S"
+                                : n.type === "warning"
+                                ? "!"
+                                : n.type === "error"
+                                ? "!"
+                                : "i"}
+                            </span>
+                            <span className="flex-1">
+                              <div className="text-[13px] font-medium text-[var(--brown-700)]">{n.title}</div>
+                              {n.body && (
+                                <div className="text-[12px] text-[var(--brown-700)]/80">{n.body}</div>
+                              )}
+                              <div className="text-[11px] text-[var(--brown-700)]/50 mt-0.5">
+                                {new Date(n.ts).toLocaleString()}
+                              </div>
+                            </span>
+                            {!n.read && (
+                              <span className="mt-1 h-2 w-2 rounded-full bg-[var(--orange-600)]" />
+                            )}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 )}
-              </button>
+              </div>
 
               {/* Messages – match SellerTopbar icon style */}
               <NavLink

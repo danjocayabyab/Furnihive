@@ -224,14 +224,14 @@ export default function SellerTopbar() {
                           n.read ? "opacity-80" : ""
                         }`}
                       >
-                        <span className="mt-0.5 text-[16px]">
+                        <span className="mt-0.5 h-4 w-4 rounded-full border border-[var(--line-amber)] bg-[var(--cream-50)] flex items-center justify-center text-[9px] font-semibold text-[var(--orange-700)]">
                           {n.type === "success"
-                            ? "✅"
+                            ? "S"
                             : n.type === "warning"
-                            ? "⚠️"
+                            ? "!"
                             : n.type === "error"
-                            ? "⛔"
-                            : "🛈"}
+                            ? "!"
+                            : "i"}
                         </span>
                         <span className="flex-1">
                           <div className="text-[13px] font-medium text-[var(--brown-700)]">{n.title}</div>
