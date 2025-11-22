@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, ScrollView } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabaseClient";
 import { ProductCard, MobileProduct } from "@/src/components/ProductCard";
@@ -17,6 +18,7 @@ export function ShopScreen() {
   const [priceMax, setPriceMax] = useState(100000);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [sort, setSort] = useState<"featured" | "priceLow" | "priceHigh">("featured");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [remoteProducts, setRemoteProducts] = useState<MobileProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -156,72 +158,89 @@ export function ShopScreen() {
         </Text>
       </View>
 
-      {/* Filters */}
+      {/* Filters dropdown */}
       <View style={styles.filtersCard}>
-        <Text style={styles.filtersTitle}>Filters</Text>
-        <Text style={styles.filtersLabel}>Categories</Text>
-        <View style={styles.chipRow}>
-          {CATS.map((c) => {
-            const active = checkedCats.includes(c);
-            return (
-              <TouchableOpacity
-                key={c}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => toggleCat(c)}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{c}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        <View style={styles.switchRow}>
-          <TouchableOpacity onPress={() => setInStockOnly((v) => !v)}>
-            <Text style={styles.switchLabel}>
-              {inStockOnly ? "☑" : "☐"} In Stock Only
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.sortRow}>
-          <Text style={styles.filtersLabel}>Sort</Text>
-          <View style={styles.sortButtons}>
-            <TouchableOpacity
-              style={[styles.sortChip, sort === "featured" && styles.sortChipActive]}
-              onPress={() => setSort("featured")}
-            >
-              <Text
-                style={[styles.sortChipText, sort === "featured" && styles.sortChipTextActive]}
-              >
-                Featured
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sortChip, sort === "priceLow" && styles.sortChipActive]}
-              onPress={() => setSort("priceLow")}
-            >
-              <Text
-                style={[styles.sortChipText, sort === "priceLow" && styles.sortChipTextActive]}
-              >
-                Price: Low
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sortChip, sort === "priceHigh" && styles.sortChipActive]}
-              onPress={() => setSort("priceHigh")}
-            >
-              <Text
-                style={[styles.sortChipText, sort === "priceHigh" && styles.sortChipTextActive]}
-              >
-                Price: High
+        <TouchableOpacity
+          style={styles.filtersTitleRow}
+          onPress={() => setFiltersOpen((open) => !open)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.filtersTitleLeft}>
+            <Feather name="filter" size={16} color="#ea580c" style={styles.filtersIcon} />
+            <Text style={styles.filtersTitle}>Filters</Text>
+          </View>
+          <View style={styles.filtersTitleRight}>
+            <TouchableOpacity onPress={() => setInStockOnly((v) => !v)}>
+              <Text style={styles.filtersMiniLabel}>
+                {inStockOnly ? "☑" : "☐"} In Stock Only
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
-
-        <TouchableOpacity style={styles.clearButton} onPress={clearAll}>
-          <Text style={styles.clearButtonText}>Clear All Filters</Text>
         </TouchableOpacity>
+
+        {filtersOpen && (
+          <>
+            <Text style={styles.filtersLabel}>Categories</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipRow}
+            >
+              {CATS.map((c) => {
+                const active = checkedCats.includes(c);
+                return (
+                  <TouchableOpacity
+                    key={c}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => toggleCat(c)}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{c}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.sortRow}>
+              <Text style={styles.filtersLabel}>Sort</Text>
+              <View style={styles.sortButtons}>
+                <TouchableOpacity
+                  style={[styles.sortChip, sort === "featured" && styles.sortChipActive]}
+                  onPress={() => setSort("featured")}
+                >
+                  <Text
+                    style={[styles.sortChipText, sort === "featured" && styles.sortChipTextActive]}
+                  >
+                    Featured
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.sortChip, sort === "priceLow" && styles.sortChipActive]}
+                  onPress={() => setSort("priceLow")}
+                >
+                  <Text
+                    style={[styles.sortChipText, sort === "priceLow" && styles.sortChipTextActive]}
+                  >
+                    Price: Low
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.sortChip, sort === "priceHigh" && styles.sortChipActive]}
+                  onPress={() => setSort("priceHigh")}
+                >
+                  <Text
+                    style={[styles.sortChipText, sort === "priceHigh" && styles.sortChipTextActive]}
+                  >
+                    Price: High
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.clearButton} onPress={clearAll}>
+              <Text style={styles.clearButtonText}>Clear All Filters</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* Products */}
@@ -281,8 +300,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fefce8",
-    paddingTop: 16,
-    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingHorizontal: 12,
   },
   headerRow: {
     flexDirection: "row",
@@ -296,64 +315,90 @@ const styles = StyleSheet.create({
     color: "#422006",
   },
   countText: {
-    fontSize: 12,
-    color: "#422006",
+    fontSize: 11,
+    color: "#6b7280",
+    fontWeight: "500",
   },
   filtersCard: {
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#facc6b",
     backgroundColor: "#ffffff",
-    padding: 12,
-    marginBottom: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  filtersTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  filtersTitleLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  filtersIcon: {
+    marginRight: 6,
   },
   filtersTitle: {
     fontSize: 14,
     fontWeight: "600",
     color: "#422006",
-    marginBottom: 8,
+    marginBottom: 2,
+  },
+  filtersTitleRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  filtersMiniLabel: {
+    fontSize: 11,
+    color: "#ea580c",
+    fontWeight: "500",
   },
   filtersLabel: {
     fontSize: 12,
     fontWeight: "500",
     color: "#4b5563",
-    marginTop: 4,
-    marginBottom: 4,
+    marginTop: 2,
+    marginBottom: 2,
   },
   chipRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
     gap: 8,
+    paddingRight: 4,
   },
   chip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#e5e7eb",
     backgroundColor: "#f9fafb",
   },
   chipActive: {
-    borderColor: "#f97316",
-    backgroundColor: "#fffbeb",
+    borderColor: "#ea580c",
+    backgroundColor: "#ea580c",
   },
   chipText: {
     fontSize: 12,
-    color: "#4b5563",
+    color: "#374151",
   },
   chipTextActive: {
-    color: "#ea580c",
+    color: "#ffffff",
     fontWeight: "600",
   },
   switchRow: {
-    marginTop: 12,
+    marginTop: 6,
   },
   switchLabel: {
     fontSize: 12,
     color: "#374151",
   },
   sortRow: {
-    marginTop: 12,
+    marginTop: 6,
   },
   sortButtons: {
     flexDirection: "row",
@@ -362,31 +407,31 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sortChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#e5e7eb",
     backgroundColor: "#f9fafb",
   },
   sortChipActive: {
-    borderColor: "#f97316",
-    backgroundColor: "#fffbeb",
+    borderColor: "#ea580c",
+    backgroundColor: "#ea580c",
   },
   sortChipText: {
     fontSize: 12,
-    color: "#4b5563",
+    color: "#374151",
   },
   sortChipTextActive: {
-    color: "#ea580c",
+    color: "#ffffff",
     fontWeight: "600",
   },
   clearButton: {
-    marginTop: 12,
+    marginTop: 8,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#facc6b",
-    paddingVertical: 8,
+    paddingVertical: 6,
     alignItems: "center",
     backgroundColor: "#fffbeb",
   },
@@ -417,10 +462,10 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   productRow: {
-    gap: 12,
+    justifyContent: "space-between",
     marginBottom: 12,
   },
   productCol: {
-    flex: 1,
+    width: "48%",
   },
 });

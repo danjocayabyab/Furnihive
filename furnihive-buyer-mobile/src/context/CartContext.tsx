@@ -5,6 +5,8 @@ export type CartItem = {
   title: string;
   price: number;
   image: string;
+  seller_id?: string | null;
+  color?: string | null;
   qty: number;
 };
 

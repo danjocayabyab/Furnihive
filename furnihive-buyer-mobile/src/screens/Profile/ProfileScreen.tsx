@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Image } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { supabase } from "@/src/lib/supabaseClient";
 
 export function ProfileScreen() {
+  const router = useRouter();
   const { user, loading, error, login, logout } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,6 +18,10 @@ export function ProfileScreen() {
     { id: string | number; label: string; line: string; isDefault: boolean }[]
   >([]);
   const [addressesLoading, setAddressesLoading] = useState(false);
+  const [orders, setOrders] = useState<
+    { id: string | number; date: string; total: number; status: string | null; title: string }[]
+  >([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) return;
@@ -23,6 +30,44 @@ export function ProfileScreen() {
 
   const handleLogout = async () => {
     await logout();
+  };
+
+  const handleSetDefaultAddress = async (id: string | number) => {
+    if (!user?.id) return;
+    try {
+      await supabase
+        .from("addresses")
+        .update({ is_default: false })
+        .eq("user_id", user.id)
+        .is("deleted_at", null);
+      await supabase
+        .from("addresses")
+        .update({ is_default: true })
+        .eq("id", id);
+      // Reload addresses
+      if (user?.id) {
+        const { data, error } = await supabase
+          .from("addresses")
+          .select(
+            "id,label,name,line1,postal_code,province,city,is_default,deleted_at"
+          )
+          .eq("user_id", user.id)
+          .is("deleted_at", null)
+          .order("is_default", { ascending: false })
+          .order("created_at", { ascending: true });
+        if (!error && data) {
+          const normalized = (data || []).map((r: any) => ({
+            id: r.id,
+            label: r.label || "Home Address",
+            line: [r.line1, r.city, r.province].filter(Boolean).join(", "),
+            isDefault: !!r.is_default,
+          }));
+          setAddresses(normalized);
+        }
+      }
+    } catch {
+      // best-effort; ignore errors here
+    }
   };
 
   useEffect(() => {
@@ -59,6 +104,55 @@ export function ProfileScreen() {
       }
     }
     loadProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setOrders([]);
+      return;
+    }
+    let cancelled = false;
+    async function loadOrders() {
+      setOrdersLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("orders")
+          .select("id, created_at, total_amount, item_count, summary_title, status")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(5);
+        if (error || !data) {
+          if (!cancelled) setOrders([]);
+          return;
+        }
+        const mapped = (data || []).map((o: any) => {
+          const raw = (o.status as string | null) || null;
+          let normalized: string | null = null;
+          if (raw) {
+            const s = raw.toLowerCase();
+            if (s.includes("deliver")) normalized = "Delivered";
+            else if (s.includes("ship")) normalized = "Shipped";
+            else if (s.includes("process")) normalized = "Processing";
+            else if (s.includes("pend")) normalized = "Pending";
+            else normalized = raw;
+          }
+          return {
+            id: o.id,
+            date: (o.created_at || "").slice(0, 10),
+            total: Number(o.total_amount || 0),
+            status: normalized,
+            title: (o.summary_title as string | null) || "Order",
+          };
+        });
+        if (!cancelled) setOrders(mapped);
+      } finally {
+        if (!cancelled) setOrdersLoading(false);
+      }
+    }
+    loadOrders();
     return () => {
       cancelled = true;
     };
@@ -106,7 +200,16 @@ export function ProfileScreen() {
   if (!user) {
     return (
       <View style={styles.container}>
-        <Text style={styles.heading}>Profile</Text>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Feather name="arrow-left" size={18} color="#422006" />
+          </TouchableOpacity>
+          <Text style={styles.heading}>Profile</Text>
+        </View>
 
         {loading && (
           <View style={styles.row}>
@@ -148,7 +251,16 @@ export function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Profile</Text>
+      <View style={styles.headerRow}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
+          <Feather name="arrow-left" size={18} color="#422006" />
+        </TouchableOpacity>
+        <Text style={styles.heading}>Profile</Text>
+      </View>
 
       {loading && (
         <View style={styles.row}>
@@ -159,22 +271,41 @@ export function ProfileScreen() {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {/* Header card */}
+      {/* Header + account overview card */}
       <View style={styles.headerCard}>
-        <View style={styles.headerLeft}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>{avatarInitial}</Text>
+        <View style={styles.headerTopRow}>
+          <View style={styles.headerLeft}>
+            <View style={styles.avatarCircle}>
+              <Text style={styles.avatarText}>{avatarInitial}</Text>
+            </View>
+            <View>
+              <Text style={styles.headerName}>{displayName}</Text>
+              <Text style={styles.headerMeta}>
+                🪪 Member{profilePhone ? ` • ${profilePhone}` : ""}
+              </Text>
+            </View>
           </View>
-          <View>
-            <Text style={styles.headerName}>{displayName}</Text>
-            <Text style={styles.headerMeta}>
-              🪪 Member{profilePhone ? ` • ${profilePhone}` : ""}
-            </Text>
-          </View>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} disabled={loading}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} disabled={loading}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+
+        {tab === "overview" && (
+          <View style={{ marginTop: 12, gap: 4 }}>
+            <Text style={styles.label}>Account overview</Text>
+            <Text style={styles.value}>{displayName}</Text>
+            <Text style={styles.subtle}>{displayEmail}</Text>
+            {profileLoading && <Text style={styles.subtle}>Refreshing profile...</Text>}
+            {user.role ? <Text style={styles.subtle}>Role: {user.role}</Text> : null}
+            <Text style={styles.subtle}>Default address and recent orders are shown below.</Text>
+            <TouchableOpacity
+              style={styles.viewOrdersButton}
+              onPress={() => router.push({ pathname: "/profile-orders" })}
+            >
+              <Text style={styles.viewOrdersText}>View all orders</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Tabs */}
@@ -183,7 +314,7 @@ export function ProfileScreen() {
           style={[styles.tabButton, tab === "overview" && styles.tabButtonActive]}
           onPress={() => setTab("overview")}
         >
-          <Text style={[styles.tabText, tab === "overview" && styles.tabTextActive]}>Overview</Text>
+          <Text style={[styles.tabText, tab === "overview" && styles.tabTextActive]}>My Orders</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tabButton, tab === "settings" && styles.tabButtonActive]}
@@ -194,13 +325,43 @@ export function ProfileScreen() {
       </View>
 
       {tab === "overview" && (
-        <View style={styles.card}>
-          <Text style={styles.label}>Account overview</Text>
-          <Text style={styles.value}>{displayName}</Text>
-          <Text style={styles.subtle}>{displayEmail}</Text>
-          {profileLoading && <Text style={styles.subtle}>Refreshing profile...</Text>}
-          {user.role ? <Text style={styles.subtle}>Role: {user.role}</Text> : null}
-          <Text style={styles.subtle}>Default address and recent orders can be shown here.</Text>
+        <View style={[styles.card, { marginTop: 12 }] }>
+          <Text style={styles.label}>My Orders</Text>
+          {ordersLoading && (
+            <Text style={styles.subtle}>Loading orders...</Text>
+          )}
+          {!ordersLoading && orders.length === 0 && (
+            <Text style={styles.subtle}>You have no orders yet.</Text>
+          )}
+          {!ordersLoading && orders.length > 0 && (
+            <View style={styles.orderList}>
+              {orders.map((o) => (
+                <View key={o.id} style={styles.orderItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.orderTitle} numberOfLines={1}>
+                      {o.title}
+                    </Text>
+                    <Text style={styles.orderMeta}>
+                      {o.date} • ₱{o.total.toLocaleString()}
+                    </Text>
+                  </View>
+                  {o.status && (
+                    <View
+                      style={[
+                        styles.orderBadge,
+                        o.status === "Delivered" && styles.orderBadgeDelivered,
+                        o.status === "Shipped" && styles.orderBadgeShipped,
+                        o.status === "Processing" && styles.orderBadgeProcessing,
+                        o.status === "Pending" && styles.orderBadgePending,
+                      ]}
+                    >
+                      <Text style={styles.orderBadgeText}>{o.status}</Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       )}
 
@@ -222,20 +383,39 @@ export function ProfileScreen() {
           {!addressesLoading && addresses.length > 0 && (
             <View style={styles.addressList}>
               {addresses.map((a) => (
-                <View key={a.id} style={styles.addressItem}>
+                <TouchableOpacity
+                  key={a.id}
+                  style={styles.addressItem}
+                  onPress={() =>
+                    router.push({ pathname: "/profile-address-edit/[id]", params: { id: String(a.id) } })
+                  }
+                >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.addressLabel}>{a.label}</Text>
                     <Text style={styles.addressLine} numberOfLines={2}>
                       {a.line || "Address not set"}
                     </Text>
                   </View>
-                  {a.isDefault && (
+                  {a.isDefault ? (
                     <View style={styles.addressBadge}>
                       <Text style={styles.addressBadgeText}>Default</Text>
                     </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.setDefaultButton}
+                      onPress={() => handleSetDefaultAddress(a.id)}
+                    >
+                      <Text style={styles.setDefaultText}>Set default</Text>
+                    </TouchableOpacity>
                   )}
-                </View>
+                </TouchableOpacity>
               ))}
+              <TouchableOpacity
+                style={styles.changeAddressButton}
+                onPress={() => router.push({ pathname: "/profile-address-add" })}
+              >
+                <Text style={styles.changeAddressText}>Add address</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -248,14 +428,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fefce8",
-    paddingTop: 32,
+    paddingTop: 8,
     paddingHorizontal: 16,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  backButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
   },
   heading: {
     fontSize: 20,
     fontWeight: "700",
     color: "#422006",
-    marginBottom: 16,
+    marginBottom: 0,
   },
   row: {
     flexDirection: "row",
@@ -278,10 +474,12 @@ const styles = StyleSheet.create({
     borderColor: "#facc6b",
     backgroundColor: "#ffffff",
     padding: 16,
+    marginBottom: 12,
+  },
+  headerTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
   },
   headerLeft: {
     flexDirection: "row",
@@ -437,5 +635,101 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: "#ea580c",
+  },
+  changeAddressButton: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#fffbeb",
+  },
+  changeAddressText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#ea580c",
+  },
+  setDefaultButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: "#fffbeb",
+  },
+  setDefaultText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#ea580c",
+  },
+  viewOrdersButton: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#fffbeb",
+  },
+  viewOrdersText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#ea580c",
+  },
+  orderList: {
+    marginTop: 6,
+    gap: 6,
+  },
+  orderItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  orderTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#422006",
+  },
+  orderMeta: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#4b5563",
+  },
+  orderBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: "#fffbeb",
+    borderWidth: 1,
+    borderColor: "#facc6b",
+  },
+  orderBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#166534",
+  },
+  orderBadgeDelivered: {
+    backgroundColor: "#dcfce7",
+    borderColor: "#16a34a",
+  },
+  orderBadgeShipped: {
+    backgroundColor: "#dbeafe",
+    borderColor: "#2563eb",
+  },
+  orderBadgeProcessing: {
+    backgroundColor: "#fef3c7",
+    borderColor: "#f59e0b",
+  },
+  orderBadgePending: {
+    backgroundColor: "#f3f4f6",
+    borderColor: "#9ca3af",
   },
 });

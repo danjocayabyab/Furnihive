@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator, Image, ScrollView, TouchableOpacity } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { supabase } from "@/src/lib/supabaseClient";
 import { useAuth } from "@/src/context/AuthContext";
 import { useCart } from "@/src/context/CartContext";
@@ -265,16 +266,14 @@ export function ProductDetailsScreen({ id, onBack }: Props) {
 
   const handleAddToCart = () => {
     if (product.outOfStock) return;
-    if (!user) {
-      router.push("/(tabs)/profile");
-      return;
-    }
     addToCart(
       {
         id: product.id,
         title: product.title,
         price: product.price,
         image: product.image,
+        seller_id: product.seller_id ? String(product.seller_id) : null,
+        color: product.color || null,
       },
       qty
     );
@@ -292,10 +291,12 @@ export function ProductDetailsScreen({ id, onBack }: Props) {
         title: product.title,
         price: product.price,
         image: product.image,
+        seller_id: product.seller_id ? String(product.seller_id) : null,
+        color: product.color || null,
       },
       qty
     );
-    router.push({ pathname: "/cart" });
+    router.push({ pathname: "/checkout" });
   };
 
   const handleChat = async () => {
@@ -365,22 +366,8 @@ export function ProductDetailsScreen({ id, onBack }: Props) {
   );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 32 }}>
-      <View style={styles.breadcrumbRow}>
-        <TouchableOpacity
-          style={styles.breadcrumbBack}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.breadcrumbBackText}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.breadcrumbText} numberOfLines={1}>
-          <Text style={styles.breadcrumbLink}>Shop</Text>
-          <Text> / </Text>
-          <Text>{product.category || ""}</Text>
-          <Text> / </Text>
-          <Text style={styles.breadcrumbTitle}>{product.title}</Text>
-        </Text>
-      </View>
+    <View style={styles.root}>
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 88 }}>
 
       <View style={styles.imageWrapper}>
         <Image source={{ uri: mainImage }} style={styles.image} />
@@ -445,33 +432,41 @@ export function ProductDetailsScreen({ id, onBack }: Props) {
           <Text style={styles.inStock}>In Stock</Text>
         )}
 
-        <TouchableOpacity
-          style={[styles.addButton, product.outOfStock && styles.addButtonDisabled]}
-          disabled={product.outOfStock}
-          onPress={handleAddToCart}
-        >
-          <Text style={[styles.addButtonText, product.outOfStock && styles.addButtonTextDisabled]}>
-            {product.outOfStock ? "Out of Stock" : "Add to Cart"}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.addButton, product.outOfStock && styles.addButtonDisabled]}
+            disabled={product.outOfStock}
+            onPress={handleAddToCart}
+          >
+            <Text
+              style={[styles.addButtonText, product.outOfStock && styles.addButtonTextDisabled]}
+            >
+              {product.outOfStock ? "Out of Stock" : "Add to Cart"}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.buyButton, product.outOfStock && styles.addButtonDisabled]}
-          disabled={product.outOfStock}
-          onPress={handleBuyNow}
-        >
-          <Text style={[styles.buyButtonText, product.outOfStock && styles.addButtonTextDisabled]}>
-            {product.outOfStock
-              ? "Buy Now"
-              : `Buy Now – ₱${(product.price * qty).toLocaleString()}`}
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.buyButton, product.outOfStock && styles.addButtonDisabled]}
+            disabled={product.outOfStock}
+            onPress={handleBuyNow}
+          >
+            <Text
+              style={[styles.buyButtonText, product.outOfStock && styles.addButtonTextDisabled]}
+            >
+              {product.outOfStock
+                ? "Buy Now"
+                : `Buy Now – ₱${(product.price * qty).toLocaleString()}`}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {product.seller && (
           <View style={styles.sellerCard}>
             <View>
               <Text style={styles.sellerName}>{product.seller}</Text>
-              <Text style={styles.sellerMeta}>⭐ 4.8 • 0 sales</Text>
+              <Text style={styles.sellerMeta}>
+                ⭐ {averageRating.toFixed(1)} • {reviewCount} reviews
+              </Text>
             </View>
             <TouchableOpacity style={styles.chatButton} onPress={handleChat}>
               <Text style={styles.chatText}>Chat</Text>
@@ -629,11 +624,42 @@ export function ProductDetailsScreen({ id, onBack }: Props) {
           </View>
         )}
       </View>
-    </ScrollView>
+      </ScrollView>
+      <View style={styles.bottomNav}>
+        <TouchableOpacity
+          style={styles.bottomNavItem}
+          onPress={() => router.push({ pathname: "/" })}
+        >
+          <Feather name="home" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bottomNavItem}
+          onPress={() => router.push({ pathname: "/explore" })}
+        >
+          <Feather name="shopping-bag" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bottomNavItem}
+          onPress={() => router.push({ pathname: "/cart" })}
+        >
+          <Feather name="shopping-cart" size={20} color="#ea580c" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bottomNavItem}
+          onPress={() => router.push({ pathname: "/profile" })}
+        >
+          <Feather name="user" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: "#fefce8",
+  },
   container: {
     flex: 1,
     backgroundColor: "#fefce8",
@@ -779,6 +805,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#facc6b",
+    backgroundColor: "#ffffff",
   },
   qtyButton: {
     paddingHorizontal: 10,
@@ -806,7 +833,15 @@ const styles = StyleSheet.create({
     color: "#b91c1c",
     marginBottom: 12,
   },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 4,
+  },
   addButton: {
+    flex: 1,
     borderRadius: 14,
     backgroundColor: "#ea580c",
     paddingVertical: 12,
@@ -814,13 +849,14 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   buyButton: {
-    borderRadius: 14,
-    backgroundColor: "#fffbeb",
+    flex: 1,
+    marginTop: 4,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+    backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "#facc6b",
-    paddingVertical: 12,
-    alignItems: "center",
-    marginTop: 8,
   },
   addButtonDisabled: {
     backgroundColor: "#e5e7eb",
@@ -876,7 +912,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginTop: 20,
     borderRadius: 999,
-    backgroundColor: "#fefce8",
+    backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "#facc6b",
     padding: 3,
@@ -888,7 +924,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   tabButtonActive: {
-    backgroundColor: "#fffbeb",
+    backgroundColor: "#ffffff",
   },
   tabText: {
     fontSize: 13,
@@ -903,7 +939,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#facc6b",
-    backgroundColor: "#fffbeb",
+    backgroundColor: "#ffffff",
     padding: 12,
   },
   panelText: {
@@ -1034,5 +1070,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#6b7280",
     textAlign: "right",
+  },
+  bottomNav: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderTopWidth: 1,
+    borderTopColor: "#facc6b",
+    paddingVertical: 4,
+    height: 56,
+  },
+  bottomNavItem: {
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
