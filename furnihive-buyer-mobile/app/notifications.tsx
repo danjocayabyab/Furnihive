@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { supabase } from "@/src/lib/supabaseClient";
 
@@ -13,6 +15,7 @@ interface NotificationRow {
 
 export default function NotificationsRoute() {
   const { user } = useAuth();
+  const router = useRouter();
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -74,78 +77,174 @@ export default function NotificationsRoute() {
 
   if (!user) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.heading}>Notifications</Text>
-        <Text style={styles.text}>Please log in to view notifications.</Text>
+      <View style={styles.root}>
+        <View style={styles.container}>
+          <View style={styles.headerRow}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => router.back()}
+              activeOpacity={0.7}
+            >
+              <Feather name="arrow-left" size={18} color="#422006" />
+            </TouchableOpacity>
+            <Text style={styles.heading}>Notifications</Text>
+          </View>
+          <Text style={styles.text}>Please log in to view notifications.</Text>
+        </View>
+        <View style={styles.bottomNav}>
+          <TouchableOpacity
+            style={styles.bottomNavItem}
+            onPress={() => router.push({ pathname: "/" })}
+          >
+            <Feather name="home" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.bottomNavItem}
+            onPress={() => router.push({ pathname: "/explore" })}
+          >
+            <Feather name="shopping-bag" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.bottomNavItem}
+            onPress={() => router.push({ pathname: "/cart" })}
+          >
+            <Feather name="shopping-cart" size={20} color="#ea580c" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.bottomNavItem}
+            onPress={() => router.push({ pathname: "/profile" })}
+          >
+            <Feather name="user" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.heading}>Notifications</Text>
-      {loading && (
-        <View style={styles.row}>
-          <ActivityIndicator color="#ea580c" />
-          <Text style={styles.text}>Loading...</Text>
+    <View style={styles.root}>
+      <View style={styles.container}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Feather name="arrow-left" size={18} color="#422006" />
+          </TouchableOpacity>
+          <Text style={styles.heading}>Notifications</Text>
         </View>
-      )}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {!loading && !error && items.length === 0 && (
-        <Text style={styles.text}>No notifications yet.</Text>
-      )}
-      {!loading && !error && items.length > 0 && (
-        <FlatList
-          data={items}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle} numberOfLines={1}>
-                  {item.title}
+        {loading && (
+          <View style={styles.row}>
+            <ActivityIndicator color="#ea580c" />
+            <Text style={styles.text}>Loading...</Text>
+          </View>
+        )}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {!loading && !error && items.length === 0 && (
+          <Text style={styles.text}>No notifications yet.</Text>
+        )}
+        {!loading && !error && items.length > 0 && (
+          <FlatList
+            data={items}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={({ item }) => (
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  {item.status && (
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        item.status === "Delivered" && styles.statusDelivered,
+                        item.status === "Shipped" && styles.statusShipped,
+                        item.status === "Processing" && styles.statusProcessing,
+                        item.status === "Pending" && styles.statusPending,
+                      ]}
+                    >
+                      <Text style={styles.statusText}>{item.status}</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.cardBody} numberOfLines={2}>
+                  {item.body}
                 </Text>
-                {item.status && (
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      item.status === "Delivered" && styles.statusDelivered,
-                      item.status === "Shipped" && styles.statusShipped,
-                      item.status === "Processing" && styles.statusProcessing,
-                      item.status === "Pending" && styles.statusPending,
-                    ]}
-                  >
-                    <Text style={styles.statusText}>{item.status}</Text>
-                  </View>
+                {item.createdAt && (
+                  <Text style={styles.cardTime}>
+                    {new Date(item.createdAt).toLocaleString()}
+                  </Text>
                 )}
               </View>
-              <Text style={styles.cardBody} numberOfLines={2}>
-                {item.body}
-              </Text>
-              {item.createdAt && (
-                <Text style={styles.cardTime}>
-                  {new Date(item.createdAt).toLocaleString()}
-                </Text>
-              )}
-            </View>
-          )}
-        />
-      )}
+            )}
+          />
+        )}
+      </View>
+
+      <View style={styles.bottomNav}>
+        <TouchableOpacity
+          style={styles.bottomNavItem}
+          onPress={() => router.push({ pathname: "/" })}
+        >
+          <Feather name="home" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bottomNavItem}
+          onPress={() => router.push({ pathname: "/explore" })}
+        >
+          <Feather name="shopping-bag" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bottomNavItem}
+          onPress={() => router.push({ pathname: "/cart" })}
+        >
+          <Feather name="shopping-cart" size={20} color="#ea580c" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bottomNavItem}
+          onPress={() => router.push({ pathname: "/profile" })}
+        >
+          <Feather name="user" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: "#fefce8",
+  },
   container: {
     flex: 1,
     backgroundColor: "#fefce8",
-    paddingTop: 32,
+    paddingTop: 8,
     paddingHorizontal: 16,
+    paddingBottom: 72,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  backButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
   },
   heading: {
     fontSize: 20,
     fontWeight: "700",
     color: "#422006",
-    marginBottom: 16,
+    marginBottom: 0,
   },
   text: {
     fontSize: 13,
@@ -220,5 +319,23 @@ const styles = StyleSheet.create({
   statusPending: {
     backgroundColor: "#e5e7eb",
     borderColor: "#9ca3af",
+  },
+  bottomNav: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderTopWidth: 1,
+    borderTopColor: "#facc6b",
+    paddingVertical: 4,
+    height: 56,
+  },
+  bottomNavItem: {
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

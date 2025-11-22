@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, ScrollView } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/src/lib/supabaseClient";
 import { ProductCard, MobileProduct } from "@/src/components/ProductCard";
 import { TopBar } from "@/src/components/TopBar";
@@ -12,13 +12,17 @@ const CATS = ["Living Room", "Bedroom", "Dining", "Office"];
 
 export function ShopScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const initialCategory = typeof params.category === "string" ? params.category : null;
   const { user } = useAuth();
   const { add: addToCart } = useCart();
-  const [checkedCats, setCheckedCats] = useState<string[]>([]);
+  const [checkedCats, setCheckedCats] = useState<string[]>(
+    initialCategory && CATS.includes(initialCategory) ? [initialCategory] : []
+  );
   const [priceMax, setPriceMax] = useState(100000);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [sort, setSort] = useState<"featured" | "priceLow" | "priceHigh">("featured");
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(!!initialCategory);
   const [remoteProducts, setRemoteProducts] = useState<MobileProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
