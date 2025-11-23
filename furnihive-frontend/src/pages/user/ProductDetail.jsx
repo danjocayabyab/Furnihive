@@ -48,6 +48,21 @@ export default function ProductDetail() {
           return;
         }
 
+        // load live inventory quantity for this product + seller, if available
+        let availableQty = null;
+        if (p.seller_id) {
+          const { data: inv } = await supabase
+            .from("inventory_items")
+            .select("quantity_on_hand")
+            .eq("product_id", p.id)
+            .eq("seller_id", p.seller_id)
+            .maybeSingle();
+
+          if (inv && typeof inv.quantity_on_hand === "number") {
+            availableQty = inv.quantity_on_hand;
+          }
+        }
+
         // load store name
         let storeName = undefined;
         if (p.seller_id) {
@@ -106,9 +121,14 @@ export default function ProductDetail() {
           reviews: 0,
           seller: storeName,
           outOfStock:
-            (typeof p.stock_qty === "number" ? p.stock_qty <= 0 : false) ||
+            (typeof (availableQty ?? p.stock_qty) === "number"
+              ? (availableQty ?? p.stock_qty) <= 0
+              : false) ||
             (p.status && p.status.toLowerCase() !== "active" && p.status.toLowerCase() !== "published"),
-          stock_qty: typeof p.stock_qty === "number" ? p.stock_qty : null,
+          stock_qty:
+            typeof (availableQty ?? p.stock_qty) === "number"
+              ? (availableQty ?? p.stock_qty)
+              : null,
           length_cm: p.length_cm ?? null,
           width_cm: p.width_cm ?? null,
           height_cm: p.height_cm ?? null,
@@ -116,6 +136,15 @@ export default function ProductDetail() {
           weight_kg: p.weight_kg ?? null,
           color: p.color || "",
         };
+        // Debug: verify which stock value is driving the UI
+        // eslint-disable-next-line no-console
+        console.log("PRODUCT INVENTORY DEBUG", {
+          productId: p.id,
+          sellerId: p.seller_id,
+          stock_qty_from_products: p.stock_qty,
+          availableQty,
+          mappedStockQty: mapped.stock_qty,
+        });
         if (!cancelled) setProduct(mapped);
       } catch (e) {
         if (!cancelled) setProduct(null);
