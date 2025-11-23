@@ -29,6 +29,7 @@ export default function ProductDetail() {
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
   const [storeStats, setStoreStats] = useState({ rating: 0, sales: 0 });
+  const [stockWarning, setStockWarning] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -279,16 +280,47 @@ export default function ProductDetail() {
       }
     : null;
 
+  // Clamp requested quantity so total (cart + this selection) never exceeds stock
+  const cartItems = cart?.items || [];
+  const inCartQty = product
+    ? (cartItems.find((i) => String(i.id) === String(product.id))?.qty || 0)
+    : 0;
+  const availableStock =
+    typeof product?.stock_qty === "number" && product.stock_qty > 0 ? product.stock_qty : 0;
+  const remainingStock = Math.max(0, availableStock - inCartQty);
+  const maxAddable = remainingStock; // how many more units can still be added
+  const addDisabled = product?.outOfStock || maxAddable <= 0;
+
+  // Keep qty state within valid range whenever stock/cart changes
+  useEffect(() => {
+    if (!product) return;
+    if (maxAddable > 0) {
+      setQty((q) => {
+        const clamped = Math.min(Math.max(1, q || 1), maxAddable);
+        return clamped;
+      });
+    } else {
+      setQty(1);
+    }
+  }, [product?.id, maxAddable]);
+
   const handleAddToCart = () => {
-    if (!product || product.outOfStock) return;
+    if (!product || addDisabled) {
+      if (product && !product.outOfStock && maxAddable <= 0) {
+        setStockWarning("You already have the maximum available stock for this product in your cart.");
+      }
+      return;
+    }
     if (!user) {
       openAuth("login");
       return;
     }
-    addToCartCtx(baseItem, qty);
+    const qtyToAdd = Math.min(qty, maxAddable || 0);
+    if (qtyToAdd <= 0) return;
+    addToCartCtx(baseItem, qtyToAdd);
     showAddToCart({
       title: product.title,
-      qty,
+      qty: qtyToAdd,
       onViewCart: () => navigate("/cart"),
     });
   };
@@ -299,7 +331,12 @@ export default function ProductDetail() {
       openAuth("login");
       return;
     }
-    addToCartCtx(baseItem, qty);
+    const qtyToBuy = Math.min(qty, maxAddable > 0 ? maxAddable : availableStock || qty);
+    if (qtyToBuy <= 0) {
+      setStockWarning("Not enough stock available for this quantity.");
+      return;
+    }
+    addToCartCtx(baseItem, qtyToBuy);
     navigate("/checkout", {
       state: {
         // Limit checkout to just this product when coming from Buy Now
@@ -444,7 +481,15 @@ export default function ProductDetail() {
                 </button>
                 <span className="px-4">{qty}</span>
                 <button
-                  onClick={() => setQty((q) => q + 1)}
+                  onClick={() =>
+                    setQty((q) => {
+                      const next = q + 1;
+                      if (maxAddable > 0) {
+                        return Math.min(next, maxAddable);
+                      }
+                      return next;
+                    })
+                  }
                   className="px-3 py-1 hover:bg-[var(--cream-50)]"
                 >
                   +
@@ -669,6 +714,27 @@ export default function ProductDetail() {
                 alt="Review image preview"
                 className="max-h-[80vh] w-auto object-contain"
               />
+            </div>
+          </div>
+        </div>
+      )}
+      {stockWarning && (
+        <div className="fixed inset-0 z-50 grid place-items-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setStockWarning("")}
+          />
+          <div className="relative w-full max-w-sm rounded-2xl border border-[var(--line-amber)] bg-white shadow-xl p-5 space-y-4">
+            <div className="text-sm font-semibold text-[var(--brown-700)]">Stock limit reached</div>
+            <div className="text-sm text-gray-700">{stockWarning}</div>
+            <div className="flex justify-end gap-2 mt-2">
+              <button
+                type="button"
+                className="rounded-lg border border-[var(--line-amber)] px-4 py-2 text-sm hover:bg-[var(--cream-50)]"
+                onClick={() => setStockWarning("")}
+              >
+                OK
+              </button>
             </div>
           </div>
         </div>

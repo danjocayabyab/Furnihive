@@ -76,6 +76,7 @@ export default function SellerOrders() {
             paymentProvider: null,
             payoutStatus: null,
             payoutNet: 0,
+            totalAmount: null,
             customer: {
               name: row.buyer_name || "Customer",
               address: row.buyer_address || "",
@@ -102,7 +103,7 @@ export default function SellerOrders() {
       if (orderIds.length) {
         const { data: orderRows, error: ordersErr } = await supabase
           .from("orders")
-          .select("id, payment_status, payment_provider, lalamove_order_id, lalamove_share_link")
+          .select("id, total_amount, payment_status, payment_provider, lalamove_order_id, lalamove_share_link")
           .in("id", orderIds);
 
         console.log("SELLER ORDERS orderRows", { ordersErr, orderRows });
@@ -111,6 +112,9 @@ export default function SellerOrders() {
           orderRows.forEach((row) => {
             const o = byOrder.get(row.id);
             if (!o) return;
+            if (typeof row.total_amount !== "undefined" && row.total_amount !== null) {
+              o.totalAmount = Number(row.total_amount) || 0;
+            }
             if (row.payment_status) {
               o.paymentStatus = String(row.payment_status).toLowerCase();
             }
@@ -565,10 +569,126 @@ function PaymentStatusPill({ status }) {
   );
 }
 
+function printInvoice(order) {
+  if (!order) return;
+  const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
+  const subtotal = order.items.reduce((s, it) => s + it.qty * it.price, 0);
+  const shipping = order.shipping || 0;
+  const vat = Math.round(subtotal * 0.12);
+  const grossTotal = subtotal + shipping + vat;
+  const total = typeof order.totalAmount === "number" && !Number.isNaN(order.totalAmount)
+    ? order.totalAmount
+    : grossTotal;
+  const voucherDiscount = Math.max(0, grossTotal - total);
+
+  let win;
+  try {
+    win = window.open("", "_blank");
+  } catch (e) {
+    console.error("Failed to open print window", e);
+    return;
+  }
+  if (!win) {
+    console.error("Print window was blocked by the browser");
+    return;
+  }
+
+  const rowsHtml = (order.items || [])
+    .map(
+      (it) => `
+        <tr>
+          <td style="padding:4px 8px;border-bottom:1px solid #eee;">${
+            it.title || "Item"
+          } ×${it.qty || 1}</td>
+          <td style="padding:4px 8px;text-align:right;border-bottom:1px solid #eee;">${peso(
+            it.price,
+          )}</td>
+        </tr>`
+    )
+    .join("");
+
+  const voucherRow =
+    voucherDiscount > 0
+      ? `<tr><td style="padding:4px 8px;">Voucher Discount</td><td style="padding:4px 8px;text-align:right;">- ${peso(
+          voucherDiscount,
+        )}</td></tr>`
+      : "";
+
+  const html = `<!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Invoice ${formatOrderId(order.id)}</title>
+        <style>
+          body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 24px; color: #1f2933; }
+          h1 { font-size: 20px; margin-bottom: 4px; }
+          h2 { font-size: 14px; margin-top: 16px; margin-bottom: 4px; }
+          table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        </style>
+      </head>
+      <body>
+        <h1>Invoice</h1>
+        <div style="font-size:13px;margin-bottom:16px;">
+          <div><strong>Order:</strong> ${formatOrderId(order.id)}</div>
+          <div><strong>Date:</strong> ${formatOrderDate(order.dateISO)}</div>
+          <div><strong>Status:</strong> ${order.status}</div>
+        </div>
+
+        <h2>Customer</h2>
+        <div style="font-size:13px;margin-bottom:16px;">
+          <div>${order.customer?.name || "Customer"}</div>
+          <div>${order.customer?.address || ""}</div>
+        </div>
+
+        <h2>Items</h2>
+        <table>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <h2>Summary</h2>
+        <table>
+          <tbody>
+            <tr><td style="padding:4px 8px;">Subtotal</td><td style="padding:4px 8px;text-align:right;">${peso(subtotal)}</td></tr>
+            <tr><td style="padding:4px 8px;">Shipping Fee</td><td style="padding:4px 8px;text-align:right;">${peso(shipping)}</td></tr>
+            <tr><td style="padding:4px 8px;">Tax (VAT 12%)</td><td style="padding:4px 8px;text-align:right;">${peso(vat)}</td></tr>
+            ${voucherRow}
+            <tr><td style="padding:4px 8px;"><strong>Total</strong></td><td style="padding:4px 8px;text-align:right;"><strong>${peso(total)}</strong></td></tr>
+          </tbody>
+        </table>
+
+        <h2>Payment</h2>
+        <div style="font-size:13px;">
+          <div><strong>Method:</strong> ${order.payment || ""}</div>
+          <div><strong>Status:</strong> ${order.paymentStatus || ""}</div>
+        </div>
+      </body>
+    </html>`;
+
+  try {
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  } catch (e) {
+    console.error("Failed to write/print invoice", e);
+  }
+}
+
 function DetailsModal({ order, onClose }) {
   const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
   const subtotal = order.items.reduce((s, it) => s + it.qty * it.price, 0);
-  const total = subtotal + (order.shipping || 0);
+  const shipping = order.shipping || 0;
+  const vat = Math.round(subtotal * 0.12);
+  // If the order row stored a final total_amount (including discounts),
+  // use that so seller sees exactly what the buyer paid.
+  const grossTotal = subtotal + shipping + vat;
+  const total = typeof order.totalAmount === "number" && !Number.isNaN(order.totalAmount)
+    ? order.totalAmount
+    : grossTotal;
+  const voucherDiscount = Math.max(0, grossTotal - total);
   const first = order.items[0];
 
   return (
@@ -627,7 +747,11 @@ function DetailsModal({ order, onClose }) {
               ))}
               <div className="my-2 h-px bg-[var(--line-amber)]/60" />
               <Row label="Subtotal" value={peso(subtotal)} />
-              <Row label="Shipping Fee" value={peso(order.shipping || 0)} />
+              <Row label="Shipping Fee" value={peso(shipping)} />
+              <Row label="Tax (VAT 12%)" value={peso(vat)} />
+              {voucherDiscount > 0 && (
+                <Row label="Voucher Discount" value={`- ${peso(voucherDiscount)}`} />
+              )}
               <Row label="Total" value={peso(total)} bold />
               <Row label="Payment Method" value={order.payment} />
               {order.paymentStatus && order.paymentStatus !== "pending" && (
@@ -665,7 +789,10 @@ function DetailsModal({ order, onClose }) {
 
         {/* footer */}
         <div className="flex items-center justify-end gap-2 p-4 border-t border-[var(--line-amber)]">
-          <button className="rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm hover:bg-[var(--cream-50)]">
+          <button
+            className="rounded-lg border border-[var(--line-amber)] px-3 py-2 text-sm hover:bg-[var(--cream-50)]"
+            onClick={() => printInvoice(order)}
+          >
             Print Invoice
           </button>
           <button

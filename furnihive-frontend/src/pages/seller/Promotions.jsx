@@ -286,34 +286,19 @@ export default function SellerPromotions() {
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="bg-[var(--orange-600)] hover:brightness-95 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-1"
+          className="bg-[var(--orange-600)] hover:brightness-95 text-white text-sm font-medium px-4 py-2 rounded-lg"
         >
-          <span className="text-lg leading-none">＋</span> Create Promotion
+          Create Promotion
         </button>
       </div>
 
       {/* KPI Row */}
       <div className="-mx-4 px-4 overflow-x-auto">
         <div className="min-w-[720px] grid grid-cols-4 gap-4">
-          <StatCard label="Active Promotions" value={activePromotions} icon="%" />
-          <StatCard
-            label="Vouchers"
-            value={vouchers}
-            icon="🎁"
-            accent="text-purple-600"
-          />
-          <StatCard
-            label="Flash Sales"
-            value={flashSales}
-            icon="⚡"
-            accent="text-orange-500"
-          />
-          <StatCard
-            label="Discounts"
-            value={discounts}
-            icon="💸"
-            accent="text-emerald-600"
-          />
+          <StatCard label="Active Promotions" value={activePromotions} />
+          <StatCard label="Vouchers" value={vouchers} />
+          <StatCard label="Flash Sales" value={flashSales} />
+          <StatCard label="Discounts" value={discounts} />
         </div>
       </div>
 
@@ -342,8 +327,8 @@ export default function SellerPromotions() {
                 className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-4 flex justify-between items-center"
               >
                 <div className="flex items-start gap-3">
-                  <div className="text-2xl">
-                    {promo.type === "Voucher" ? "🎁" : promo.type === "Flash Sale" ? "⚡" : "💸"}
+                  <div className="text-xs font-semibold px-2 py-1 rounded-full border border-[var(--line-amber)] bg-white text-[var(--brown-700)]">
+                    {promo.type === "Voucher" ? "VCHR" : promo.type === "Flash Sale" ? "FLASH" : "DISC"}
                   </div>
                   <div>
                     <h3 className="font-semibold text-[var(--brown-700)]">
@@ -448,7 +433,7 @@ export default function SellerPromotions() {
 
 /* ----------- COMPONENTS ----------- */
 
-function StatCard({ label, value, icon, accent }) {
+function StatCard({ label, value }) {
   return (
     <div className="rounded-xl border border-[var(--line-amber)] bg-white h-[80px] p-4 flex justify-between items-center">
       <div>
@@ -457,7 +442,6 @@ function StatCard({ label, value, icon, accent }) {
           {value}
         </div>
       </div>
-      <div className={`text-2xl ${accent}`}>{icon}</div>
     </div>
   );
 }
@@ -580,7 +564,7 @@ function CreatePromotionModal({ onClose, onCreate, onUpdate, initialPromo }) {
                         : "bg-white hover:bg-[var(--amber-50)] text-[var(--brown-700)]"
                     }`}
                 >
-                  {t === "Voucher" ? "🎁" : t === "Flash Sale" ? "⚡" : "💸"} {t}
+                  {t}
                 </button>
               ))}
             </div>
@@ -633,18 +617,12 @@ function CreatePromotionModal({ onClose, onCreate, onUpdate, initialPromo }) {
           </div>
 
           {type === "Voucher" && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <Input
                 label="Min. Purchase (₱)"
                 placeholder="5000"
                 value={minPurchase}
                 onChange={setMinPurchase}
-              />
-              <Input
-                label="Max. Discount (₱)"
-                placeholder="2000"
-                value={maxDiscount}
-                onChange={setMaxDiscount}
               />
             </div>
           )}
