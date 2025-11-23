@@ -102,7 +102,7 @@ export default function SellerOrders() {
       if (orderIds.length) {
         const { data: orderRows, error: ordersErr } = await supabase
           .from("orders")
-          .select("id, payment_status, payment_provider, lalamove_order_id")
+          .select("id, payment_status, payment_provider, lalamove_order_id, lalamove_share_link")
           .in("id", orderIds);
 
         console.log("SELLER ORDERS orderRows", { ordersErr, orderRows });
@@ -117,9 +117,12 @@ export default function SellerOrders() {
             if (row.payment_provider) {
               o.paymentProvider = row.payment_provider;
             }
-            // Always map tracking id from DB onto the in-memory order object
+            // Always map tracking id and share link from DB onto the in-memory order object
             if (typeof row.lalamove_order_id !== "undefined") {
               o.lalamoveOrderId = row.lalamove_order_id || null;
+            }
+            if (typeof row.lalamove_share_link !== "undefined") {
+              o.lalamoveShareLink = row.lalamove_share_link || null;
             }
           });
         }
@@ -221,13 +224,10 @@ export default function SellerOrders() {
       prev.map((o) => (o.id === id ? { ...o, status: "shipped" } : o))
     );
     try {
-      // 1) Generate a sandbox tracking id on the client
-      const trackingId = `SANDBOX-${id}-${Date.now()}`;
-
-      // 2) Update order + items status (and tracking id) in DB
+      // 1) Update order + items status in DB
       const { error: ordersErr } = await supabase
         .from("orders")
-        .update({ status: "Shipped", lalamove_order_id: trackingId })
+        .update({ status: "Shipped" })
         .eq("id", id);
       console.log("MARK_SHIPPED orders update error", ordersErr);
 
@@ -237,12 +237,55 @@ export default function SellerOrders() {
         .eq("order_id", id);
       console.log("MARK_SHIPPED order_items update error", itemsErr);
 
-      // 3) Update local state so UI immediately shows tracking
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === id ? { ...o, lalamoveOrderId: trackingId } : o
+      // 2) Load Lalamove quotation metadata for this order
+      const { data: meta, error: metaErr } = await supabase
+        .from("orders")
+        .select(
+          "lalamove_quotation_id, lalamove_sender_stop_id, lalamove_recipient_stop_id"
         )
+        .eq("id", id)
+        .maybeSingle();
+
+      console.log("MARK_SHIPPED meta", { meta, metaErr });
+
+      if (!meta || !meta.lalamove_quotation_id) {
+        console.log("MARK_SHIPPED: missing Lalamove quotation metadata for order", id);
+        return;
+      }
+
+      const current = orders.find((o) => o.id === id) || null;
+
+      // 3) Invoke lalamove-book edge function to create a real sandbox order
+      const { data: result, error: fnErr } = await supabase.functions.invoke(
+        "lalamove-book",
+        {
+          body: {
+            order_id: id,
+            quotationId: meta.lalamove_quotation_id,
+            sender: {
+              stopId: meta.lalamove_sender_stop_id,
+              name: current?.customer?.name || "Sender",
+              phone: "",
+            },
+            recipient: {
+              stopId: meta.lalamove_recipient_stop_id,
+              name: current?.customer?.name || "Customer",
+              phone: "",
+            },
+          },
+        }
       );
+
+      console.log("MARK_SHIPPED lalamove-book result", { result, fnErr });
+
+      if (!fnErr && result?.lalamove_order_id) {
+        // 4) Update local state so UI shows real Lalamove tracking id
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === id ? { ...o, lalamoveOrderId: result.lalamove_order_id } : o
+          )
+        );
+      }
     } catch (e) {
       console.log("MARK_SHIPPED exception", e);
     }
@@ -389,7 +432,7 @@ export default function SellerOrders() {
                     </div>
                     <div className="text-xs text-gray-600">{o.payment}</div>
                     {o.lalamoveOrderId && (
-                      <div className="mt-1 text-[11px] text-gray-600 flex items-center gap-2">
+                      <div className="mt-1 text-[11px] text-gray-600 flex flex-wrap items-center gap-2">
                         <span>Tracking: {o.lalamoveOrderId}</span>
                         <button
                           type="button"
@@ -398,6 +441,16 @@ export default function SellerOrders() {
                         >
                           Copy
                         </button>
+                        {o.lalamoveShareLink && (
+                          <a
+                            href={o.lalamoveShareLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2 py-0.5 rounded border border-[var(--line-amber)] hover:bg-[var(--cream-50)]"
+                          >
+                            Track on Lalamove
+                          </a>
+                        )}
                       </div>
                     )}
                     {o.payoutStatus && (

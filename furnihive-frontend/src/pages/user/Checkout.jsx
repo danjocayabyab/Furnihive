@@ -351,6 +351,15 @@ export default function Checkout() {
       const dropoffLng = geo?.lng ?? null;
       const dropoffAddress = geo?.formatted || buildFullAddress() || null;
 
+      // Capture Lalamove quotation + stop metadata if available so seller can later book real order
+      const lalamoveQuotationId = lalamoveQuote?.raw?.quotationId || null;
+      const lalamoveSenderStopId = Array.isArray(lalamoveQuote?.raw?.stops)
+        ? lalamoveQuote.raw.stops[0]?.stopId || null
+        : null;
+      const lalamoveRecipientStopId = Array.isArray(lalamoveQuote?.raw?.stops)
+        ? lalamoveQuote.raw.stops[1]?.stopId || null
+        : null;
+
       const { data: created, error: orderErr } = await supabase
         .from("orders")
         .insert({
@@ -364,6 +373,9 @@ export default function Checkout() {
           dropoff_lat: dropoffLat,
           dropoff_lng: dropoffLng,
           dropoff_address: dropoffAddress,
+          lalamove_quotation_id: lalamoveQuotationId,
+          lalamove_sender_stop_id: lalamoveSenderStopId,
+          lalamove_recipient_stop_id: lalamoveRecipientStopId,
           status: "Pending",
         })
         .select("id")

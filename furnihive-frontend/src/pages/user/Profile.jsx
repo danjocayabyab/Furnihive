@@ -99,7 +99,7 @@ export default function Profile() {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, created_at, total_amount, item_count, summary_title, summary_image, status, seller_display, color, lalamove_order_id, dropoff_lat, dropoff_lng, dropoff_address"
+          "id, created_at, total_amount, item_count, summary_title, summary_image, status, seller_display, color, lalamove_order_id, lalamove_share_link, dropoff_lat, dropoff_lng, dropoff_address"
         )
         .eq("user_id", authUser.id)
         .order("created_at", { ascending: false });
@@ -184,6 +184,10 @@ export default function Profile() {
             ? o.lalamove_order_id || null
             : null;
 
+        const trackingUrl = trackingId && o.lalamove_share_link
+          ? o.lalamove_share_link
+          : null;
+
         const addressLines = o.dropoff_address
           ? [o.dropoff_address]
           : [];
@@ -207,6 +211,7 @@ export default function Profile() {
           address: addressLines,
           shippingFee: 0,
           trackingId,
+          trackingUrl,
           dropoffLat: o.dropoff_lat ?? null,
           dropoffLng: o.dropoff_lng ?? null,
           storeLat: storeCoords?.lat ?? null,
@@ -713,10 +718,10 @@ function OrdersPanel({ money, orders, reviews, onViewDetails, onWriteReview }) {
               <div className="flex-1 min-w-0">
                 <div className="text-[var(--brown-700)] font-medium truncate">{o.title}</div>
                 <div className="text-xs text-gray-600">
-                  {o.items} item{o.items > 1 ? "s" : ""}  {money(o.price)}
+                  {o.items} item{o.items > 1 ? "s" : ""} • {money(o.price)}
                 </div>
                 {o.trackingId && (
-                  <div className="mt-1 text-[11px] text-gray-600 flex items-center gap-2">
+                  <div className="mt-1 text-[11px] text-gray-600 flex flex-wrap items-center gap-2">
                     <span>Tracking: {o.trackingId}</span>
                     <button
                       type="button"
@@ -725,6 +730,16 @@ function OrdersPanel({ money, orders, reviews, onViewDetails, onWriteReview }) {
                     >
                       Copy
                     </button>
+                    {o.trackingUrl && (
+                      <a
+                        href={o.trackingUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2 py-0.5 rounded border border-[var(--line-amber)] hover:bg-[var(--cream-50)]"
+                      >
+                        Track on Lalamove
+                      </a>
+                    )}
                   </div>
                 )}
               </div>
@@ -862,8 +877,18 @@ function OrderRow({ o, money }) {
           {displayDate} • {money(o.price)}
         </div>
         {o.trackingId && (
-          <div className="text-[11px] text-gray-600 mt-0.5">
-            Tracking: {o.trackingId}
+          <div className="text-[11px] text-gray-600 mt-0.5 flex flex-wrap items-center gap-2">
+            <span>Tracking: {o.trackingId}</span>
+            {o.trackingUrl && (
+              <a
+                href={o.trackingUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-2 py-0.5 rounded border border-[var(--line-amber)] hover:bg-[var(--cream-50)]"
+              >
+                Track on Lalamove
+              </a>
+            )}
           </div>
         )}
       </div>
