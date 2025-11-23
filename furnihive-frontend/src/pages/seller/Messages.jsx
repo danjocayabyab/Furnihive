@@ -125,40 +125,85 @@ export default function SellerMessages() {
     fileInputRef.current?.click();
   }
 
-  function onFileChange(e) {
+  async function onFileChange(e) {
     const file = (e.target.files || [])[0];
-    if (!file || !activeId || !sellerId) return;
+    if (!file || !activeId || !sellerId) {
+      e.target.value = "";
+      return;
+    }
 
     const isImage = file.type.startsWith("image/");
-    const url = URL.createObjectURL(file);
 
     const fallbackText = isImage
       ? "Sent a photo"
       : `Sent a file: ${file.name}`;
 
-    setMessagesById((prev) => ({
-      ...prev,
-      [activeId]: [
-        ...(prev[activeId] || []),
-        msg("seller", fallbackText, timeNow(), {
-          attachment: { name: file.name, url, isImage },
-        }),
-      ],
-    }));
-    updateSnippet(activeId, fallbackText);
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+      const path = `${sellerId}/${activeId}/${Date.now()}-${safeName}`;
+      const { error: uploadErr } = await supabase
+        .storage
+        .from("message-attachments")
+        .upload(path, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+      if (uploadErr) {
+        // eslint-disable-next-line no-console
+        console.warn("Failed to upload attachment", uploadErr.message || uploadErr);
+        e.target.value = "";
+        return;
+      }
 
-    // TODO: upload attachment to storage and use real URL
-    supabase.from("messages").insert({
-      conversation_id: activeId,
-      sender_id: sellerId,
-      sender_role: "seller",
-      text: fallbackText,
-      attachment_name: file.name,
-      attachment_type: file.type,
-      attachment_url: url,
-    });
+      const { data: pub } = supabase.storage
+        .from("message-attachments")
+        .getPublicUrl(path);
+      const publicUrl = pub?.publicUrl || null;
+      if (!publicUrl) {
+        e.target.value = "";
+        return;
+      }
 
-    e.target.value = "";
+      setMessagesById((prev) => ({
+        ...prev,
+        [activeId]: [
+          ...(prev[activeId] || []),
+          msg("seller", fallbackText, timeNow(), {
+            attachment: { name: file.name, url: publicUrl, isImage },
+          }),
+        ],
+      }));
+      updateSnippet(activeId, fallbackText);
+
+      try {
+        await supabase.from("messages").insert({
+          conversation_id: activeId,
+          sender_id: sellerId,
+          sender_role: "seller",
+          text: fallbackText,
+          attachment_name: file.name,
+          attachment_type: file.type,
+          attachment_url: publicUrl,
+        });
+
+        await supabase
+          .from("conversations")
+          .update({
+            last_message: fallbackText,
+            last_message_at: new Date().toISOString(),
+          })
+          .eq("id", activeId);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("Failed to save attachment message", err?.message || err);
+      } finally {
+        e.target.value = "";
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("Seller attachment send failed", err?.message || err);
+      e.target.value = "";
+    }
   }
 
   // Load conversations for this seller
