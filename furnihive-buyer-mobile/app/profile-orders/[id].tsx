@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Feather } from "@expo/vector-icons";
 import { supabase } from "@/src/lib/supabaseClient";
 import { useAuth } from "@/src/context/AuthContext";
 
 interface OrderItemRow {
   id: string | number;
+  productId: string | number | null;
   title: string;
   qty: number;
   unitPrice: number;
@@ -27,6 +29,10 @@ export default function OrderDetailRoute() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [reviewingItemId, setReviewingItemId] = useState<string | number | null>(null);
+  const [reviewRating, setReviewRating] = useState<number>(5);
+  const [reviewText, setReviewText] = useState("");
+  const [savingReview, setSavingReview] = useState(false);
 
   useEffect(() => {
     if (!orderId || !user?.id) return;
@@ -65,7 +71,7 @@ export default function OrderDetailRoute() {
 
         const { data: rows, error: itemsErr } = await supabase
           .from("order_items")
-          .select("id, title, qty, unit_price, status")
+          .select("id, product_id, title, qty, unit_price, status")
           .eq("order_id", orderId);
 
         if (itemsErr || !rows) {
@@ -75,6 +81,7 @@ export default function OrderDetailRoute() {
 
         const mapped: OrderItemRow[] = rows.map((r: any) => ({
           id: r.id,
+          productId: r.product_id || null,
           title: (r.title as string | null) || "Item",
           qty: Number(r.qty || 1),
           unitPrice: Number(r.unit_price || 0),
@@ -106,10 +113,44 @@ export default function OrderDetailRoute() {
     return () => clearInterval(interval);
   }, [orderId, user?.id]);
 
+  const handleSaveReview = async () => {
+    if (!user?.id || !orderId || !reviewingItemId || savingReview) return;
+    const item = items.find((it) => it.id === reviewingItemId);
+    if (!item || !item.productId) return;
+
+    const rating = Math.min(5, Math.max(1, reviewRating || 0));
+    const text = reviewText.trim();
+
+    try {
+      setSavingReview(true);
+      await supabase.from("reviews").insert({
+        order_id: orderId,
+        product_id: item.productId,
+        user_id: user.id,
+        rating,
+        text: text || null,
+      });
+      setReviewingItemId(null);
+      setReviewText("");
+      setReviewRating(5);
+    } finally {
+      setSavingReview(false);
+    }
+  };
+
   if (!user) {
     return (
       <View style={styles.container}>
-        <Text style={styles.heading}>Order Details</Text>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Feather name="arrow-left" size={18} color="#422006" />
+          </TouchableOpacity>
+          <Text style={styles.heading}>Order Details</Text>
+        </View>
         <Text style={styles.text}>Please log in to view this order.</Text>
       </View>
     );
@@ -117,7 +158,16 @@ export default function OrderDetailRoute() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Order Details</Text>
+      <View style={styles.headerRow}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
+          <Feather name="arrow-left" size={18} color="#422006" />
+        </TouchableOpacity>
+        <Text style={styles.heading}>Order Details</Text>
+      </View>
       {summaryTitle && <Text style={styles.summaryTitle}>{summaryTitle}</Text>}
       <View style={styles.summaryRow}>
         <Text style={styles.summaryLabel}>Total</Text>
@@ -161,6 +211,66 @@ export default function OrderDetailRoute() {
                 <Text style={styles.itemMeta}>
                   x{item.qty} • ₱{item.unitPrice.toLocaleString()} each
                 </Text>
+                {status === "Delivered" && (
+                  <TouchableOpacity
+                    style={styles.reviewButton}
+                    onPress={() => {
+                      setReviewingItemId(item.id);
+                      setReviewRating(5);
+                      setReviewText("");
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.reviewButtonText}>Write review</Text>
+                  </TouchableOpacity>
+                )}
+                {reviewingItemId === item.id && (
+                  <View style={styles.reviewBox}>
+                    <Text style={styles.reviewLabel}>Rating</Text>
+                    <View style={styles.starsRow}>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <TouchableOpacity
+                          key={star}
+                          onPress={() => setReviewRating(star)}
+                          style={styles.starButton}
+                        >
+                          <Text style={styles.starText}>
+                            {reviewRating >= star ? "★" : "☆"}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <Text style={[styles.reviewLabel, { marginTop: 8 }]}>Comment (optional)</Text>
+                    <TextInput
+                      style={styles.reviewInput}
+                      value={reviewText}
+                      onChangeText={setReviewText}
+                      placeholder="Share your experience with this item"
+                      multiline
+                    />
+                    <View style={styles.reviewActions}>
+                      <TouchableOpacity
+                        style={styles.reviewCancel}
+                        onPress={() => {
+                          setReviewingItemId(null);
+                          setReviewText("");
+                          setReviewRating(5);
+                        }}
+                      >
+                        <Text style={styles.reviewCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.reviewSave}
+                        onPress={handleSaveReview}
+                        disabled={savingReview}
+                      >
+                        <Text style={styles.reviewSaveText}>
+                          {savingReview ? "Saving..." : "Save review"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
               </View>
               <View style={{ alignItems: "flex-end" }}>
                 <Text style={styles.itemTotal}>
@@ -182,14 +292,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fefce8",
-    paddingTop: 32,
+    paddingTop: 40,
     paddingHorizontal: 16,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  backButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
   },
   heading: {
     fontSize: 20,
     fontWeight: "700",
     color: "#422006",
-    marginBottom: 8,
+    marginBottom: 0,
   },
   summaryTitle: {
     fontSize: 14,
@@ -291,5 +417,89 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     color: "#6b7280",
+  },
+  reviewButton: {
+    marginTop: 6,
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: "#fffbeb",
+  },
+  reviewButtonText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#ea580c",
+  },
+  reviewBox: {
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    backgroundColor: "#ffffff",
+    padding: 8,
+    gap: 4,
+  },
+  reviewLabel: {
+    fontSize: 12,
+    color: "#4b5563",
+  },
+  starsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+  },
+  starButton: {
+    paddingHorizontal: 4,
+  },
+  starText: {
+    fontSize: 18,
+    color: "#f59e0b",
+  },
+  reviewInput: {
+    marginTop: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 12,
+    minHeight: 60,
+    textAlignVertical: "top",
+  },
+  reviewActions: {
+    marginTop: 6,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
+  reviewCancel: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: "#ffffff",
+  },
+  reviewCancelText: {
+    fontSize: 11,
+    color: "#6b7280",
+  },
+  reviewSave: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#ea580c",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: "#ea580c",
+  },
+  reviewSaveText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#fefce8",
   },
 });

@@ -14,6 +14,7 @@ export function ShopScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const initialCategory = typeof params.category === "string" ? params.category : null;
+  const initialQuery = typeof params.q === "string" ? params.q.trim() : "";
   const { user } = useAuth();
   const { add: addToCart } = useCart();
   const [checkedCats, setCheckedCats] = useState<string[]>(
@@ -26,6 +27,7 @@ export function ShopScreen() {
   const [remoteProducts, setRemoteProducts] = useState<MobileProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [query, setQuery] = useState(initialQuery);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,16 +132,22 @@ export function ShopScreen() {
   }, []);
 
   const filtered = useMemo(() => {
-    let list = remoteProducts.filter(
-      (p) =>
-        p.price <= priceMax &&
-        (!inStockOnly || !p.outOfStock) &&
-        (checkedCats.length === 0 || checkedCats.includes((p as any).category))
-    );
+    const q = query.trim().toLowerCase();
+    let list = remoteProducts.filter((p) => {
+      if (p.price > priceMax) return false;
+      if (inStockOnly && p.outOfStock) return false;
+      if (checkedCats.length > 0 && !checkedCats.includes((p as any).category)) return false;
+      if (q) {
+        const name = (p.title || "").toLowerCase();
+        const cat = ((p as any).category || "").toLowerCase();
+        if (!name.includes(q) && !cat.includes(q)) return false;
+      }
+      return true;
+    });
     if (sort === "priceLow") list = [...list].sort((a, b) => a.price - b.price);
     if (sort === "priceHigh") list = [...list].sort((a, b) => b.price - a.price);
     return list;
-  }, [remoteProducts, priceMax, inStockOnly, checkedCats, sort]);
+  }, [remoteProducts, priceMax, inStockOnly, checkedCats, sort, query]);
 
   const toggleCat = (c: string) => {
     setCheckedCats((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));

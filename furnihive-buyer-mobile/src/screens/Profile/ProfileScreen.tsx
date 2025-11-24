@@ -22,6 +22,10 @@ export function ProfileScreen() {
     { id: string | number; date: string; total: number; status: string | null; title: string }[]
   >([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [editingPersonal, setEditingPersonal] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [savingPersonal, setSavingPersonal] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) return;
@@ -108,6 +112,31 @@ export function ProfileScreen() {
       cancelled = true;
     };
   }, [user?.id]);
+
+  const handleSavePersonalInfo = async () => {
+    if (!user?.id || savingPersonal) return;
+    const trimmedName = editName.trim();
+    const trimmedPhone = editPhone.trim();
+    try {
+      setSavingPersonal(true);
+      const updates: any = {
+        full_name: trimmedName || null,
+        phone: trimmedPhone || null,
+      };
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update(updates)
+        .eq("id", user.id);
+
+      if (!updateError) {
+        setProfileName(trimmedName || profileName || null);
+        setProfilePhone(trimmedPhone || null);
+        setEditingPersonal(false);
+      }
+    } finally {
+      setSavingPersonal(false);
+    }
+  };
 
   useEffect(() => {
     if (!user?.id) {
@@ -319,12 +348,6 @@ export function ProfileScreen() {
             {profileLoading && <Text style={styles.subtle}>Refreshing profile...</Text>}
             {user.role ? <Text style={styles.subtle}>Role: {user.role}</Text> : null}
             <Text style={styles.subtle}>Default address and recent orders are shown below.</Text>
-            <TouchableOpacity
-              style={styles.viewOrdersButton}
-              onPress={() => router.push({ pathname: "/profile-orders" })}
-            >
-              <Text style={styles.viewOrdersText}>View all orders</Text>
-            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -357,7 +380,14 @@ export function ProfileScreen() {
           {!ordersLoading && orders.length > 0 && (
             <View style={styles.orderList}>
               {orders.map((o) => (
-                <View key={o.id} style={styles.orderItem}>
+                <TouchableOpacity
+                  key={o.id}
+                  style={styles.orderItem}
+                  onPress={() =>
+                    router.push({ pathname: "/profile-orders/[id]", params: { id: String(o.id) } })
+                  }
+                  activeOpacity={0.8}
+                >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.orderTitle} numberOfLines={1}>
                       {o.title}
@@ -379,7 +409,7 @@ export function ProfileScreen() {
                       <Text style={styles.orderBadgeText}>{o.status}</Text>
                     </View>
                   )}
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           )}
@@ -390,9 +420,74 @@ export function ProfileScreen() {
         <View style={styles.card}>
           <Text style={styles.label}>Account settings</Text>
           <Text style={styles.sectionLabel}>Personal info</Text>
-          <Text style={styles.subtle}>Name: {displayName}</Text>
-          <Text style={styles.subtle}>Email: {displayEmail}</Text>
-          <Text style={styles.subtle}>Phone: {profilePhone || "Not set"}</Text>
+          <View style={styles.personalRow}>
+            <View style={{ flex: 1, gap: 4 }}>
+              {editingPersonal ? (
+                <>
+                  <Text style={styles.subtle}>Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editName}
+                    onChangeText={setEditName}
+                    placeholder={displayName || "Full name"}
+                  />
+                  <Text style={[styles.subtle, { marginTop: 8 }]}>Phone</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editPhone}
+                    onChangeText={setEditPhone}
+                    keyboardType="phone-pad"
+                    placeholder={profilePhone || "Phone number"}
+                  />
+                  <Text style={[styles.subtle, { marginTop: 8 }]}>Email: {displayEmail}</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.subtle}>Name: {displayName}</Text>
+                  <Text style={styles.subtle}>Email: {displayEmail}</Text>
+                  <Text style={styles.subtle}>Phone: {profilePhone || "Not set"}</Text>
+                </>
+              )}
+            </View>
+            <View style={styles.personalButtons}>
+              {editingPersonal ? (
+                <>
+                  <TouchableOpacity
+                    style={styles.smallButton}
+                    onPress={handleSavePersonalInfo}
+                    disabled={savingPersonal}
+                  >
+                    <Text style={styles.smallButtonText}>
+                      {savingPersonal ? "Saving..." : "Save"}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.smallButton, styles.smallButtonSecondary]}
+                    onPress={() => {
+                      setEditName("");
+                      setEditPhone("");
+                      setEditingPersonal(false);
+                    }}
+                  >
+                    <Text style={[styles.smallButtonText, styles.smallButtonSecondaryText]}>
+                      Cancel
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={styles.smallButton}
+                  onPress={() => {
+                    setEditName(profileName || "");
+                    setEditPhone(profilePhone || "");
+                    setEditingPersonal(true);
+                  }}
+                >
+                  <Text style={styles.smallButtonText}>Edit</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
           <View style={styles.sectionDivider} />
           <Text style={styles.sectionLabel}>Addresses</Text>
           {addressesLoading && (
@@ -663,6 +758,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#422006",
   },
+  personalRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  personalButtons: {
+    justifyContent: "flex-start",
+    alignItems: "flex-end",
+    gap: 6,
+  },
   sectionDivider: {
     marginVertical: 8,
     height: 1,
@@ -747,6 +853,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#ea580c",
+  },
+  smallButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "#fffbeb",
+  },
+  smallButtonSecondary: {
+    backgroundColor: "#ffffff",
+  },
+  smallButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#ea580c",
+  },
+  smallButtonSecondaryText: {
+    color: "#6b7280",
   },
   orderList: {
     marginTop: 6,
