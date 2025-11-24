@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fefce8",
-    paddingTop: 8,
+    paddingTop: 40,
     paddingHorizontal: 16,
   },
   headerRow: {
