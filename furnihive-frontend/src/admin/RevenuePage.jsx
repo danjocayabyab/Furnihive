@@ -168,27 +168,33 @@ export default function RevenuePage() {
       rows.forEach((p) => {
         const gross = Number(p.gross_amount || 0);
         const fee = Number(p.platform_fee || 0);
-        const net = Number(p.net_amount || 0);
+        // We treat gross as VAT-inclusive. Estimate VAT portion at 12/112
+        // and deduct both VAT and platform fee from the seller payout.
+        const vatPortion = gross > 0 ? (gross * 12) / 112 : 0;
+        const payout = Math.max(0, gross - fee - vatPortion);
+
         totalSales += gross;
         totalCommission += fee;
 
         const sid = p.seller_id || "unknown";
         if (!bySeller.has(sid)) {
-          bySeller.set(sid, { sellerId: sid, sales: 0, net: 0, fee: 0 });
+          bySeller.set(sid, { sellerId: sid, sales: 0, net: 0, fee: 0, vat: 0 });
         }
         const agg = bySeller.get(sid);
         agg.sales += gross;
-        agg.net += net;
+        agg.net += payout;
         agg.fee += fee;
+        agg.vat += vatPortion;
 
         if (String(p.status || "").toLowerCase() === "pending") {
           if (!pendingMap.has(sid)) {
-            pendingMap.set(sid, { sellerId: sid, sales: 0, net: 0, fee: 0 });
+            pendingMap.set(sid, { sellerId: sid, sales: 0, net: 0, fee: 0, vat: 0 });
           }
           const pen = pendingMap.get(sid);
           pen.sales += gross;
-          pen.net += net;
+          pen.net += payout;
           pen.fee += fee;
+          pen.vat += vatPortion;
         }
       });
 
@@ -348,6 +354,7 @@ export default function RevenuePage() {
               <tr className="bg-[var(--cream-50)] border-b border-[var(--line-amber)]/60 text-xs text-[var(--brown-700)]/70">
                 <th className="text-left px-5 py-3 font-medium">Seller Name</th>
                 <th className="text-right px-5 py-3 font-medium">Total Sales</th>
+                <th className="text-right px-5 py-3 font-medium">VAT (12%)</th>
                 <th className="text-right px-5 py-3 font-medium">Seller Payout (95%)</th>
                 <th className="text-right px-5 py-3 font-medium">Platform Commission (5%)</th>
               </tr>
@@ -374,6 +381,9 @@ export default function RevenuePage() {
                   </td>
                   <td className="px-5 py-3 text-right text-[var(--brown-700)]">
                     {peso(row.sales)}
+                  </td>
+                  <td className="px-5 py-3 text-right text-[var(--brown-700)]/80">
+                    {peso(row.vat)}
                   </td>
                   <td className="px-5 py-3 text-right text-emerald-600 font-medium">
                     {peso(row.net)}
@@ -406,6 +416,7 @@ export default function RevenuePage() {
               <tr className="bg-[var(--cream-50)] border-b border-[var(--line-amber)]/60 text-xs text-[var(--brown-700)]/70">
                 <th className="text-left px-5 py-3 font-medium">Seller Name</th>
                 <th className="text-right px-5 py-3 font-medium">Total Sales</th>
+                <th className="text-right px-5 py-3 font-medium">VAT (12%)</th>
                 <th className="text-right px-5 py-3 font-medium">Amount to Pay (95%)</th>
                 <th className="text-right px-5 py-3 font-medium">Revenue Earned (5%)</th>
                 <th className="text-right px-5 py-3 font-medium">Action</th>

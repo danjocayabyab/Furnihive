@@ -219,7 +219,12 @@ export function HomeScreen() {
           contentContainerStyle={styles.categoryList}
           renderItem={({ item }) => (
             <View style={styles.categoryCol}>
-              <CategoryCard item={item} />
+              <CategoryCard
+                item={item}
+                onPress={() =>
+                  router.push({ pathname: "/explore", params: { category: item.label } })
+                }
+              />
             </View>
           )}
         />

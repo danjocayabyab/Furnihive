@@ -10,78 +10,78 @@ export function CartScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-          activeOpacity={0.7}
-        >
-          <Feather name="arrow-left" size={18} color="#422006" />
-        </TouchableOpacity>
-        <Text style={styles.heading}>Cart</Text>
-      </View>
-      {items.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Text style={styles.emptyText}>Your cart is empty.</Text>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Feather name="arrow-left" size={18} color="#422006" />
+          </TouchableOpacity>
+          <Text style={styles.heading}>Cart</Text>
         </View>
-      ) : (
-        <>
-          <FlatList
-            data={items}
-            keyExtractor={(item) => String(item.id)}
-            contentContainerStyle={styles.listContent}
-            renderItem={({ item }) => (
-              <View style={styles.itemRow}>
-                <Image source={{ uri: item.image }} style={styles.image} />
-                <View style={styles.info}>
-                  <Text style={styles.title} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  <Text style={styles.price}>₱{item.price.toLocaleString()}</Text>
-                  <View style={styles.qtyRow}>
-                    <TouchableOpacity
-                      style={styles.qtyButton}
-                      onPress={() => updateQty(item.id, item.qty - 1)}
-                    >
-                      <Text style={styles.qtyButtonText}>-</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.qtyText}>{item.qty}</Text>
-                    <TouchableOpacity
-                      style={styles.qtyButton}
-                      onPress={() => updateQty(item.id, item.qty + 1)}
-                    >
-                      <Text style={styles.qtyButtonText}>+</Text>
+        {items.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>Your cart is empty.</Text>
+          </View>
+        ) : (
+          <>
+            <FlatList
+              data={items}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={styles.listContent}
+              renderItem={({ item }) => (
+                <View style={styles.itemRow}>
+                  <Image source={{ uri: item.image }} style={styles.image} />
+                  <View style={styles.info}>
+                    <Text style={styles.title} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.price}>₱{item.price.toLocaleString()}</Text>
+                    <View style={styles.qtyRow}>
+                      <TouchableOpacity
+                        style={styles.qtyButton}
+                        onPress={() => updateQty(item.id, item.qty - 1)}
+                      >
+                        <Text style={styles.qtyButtonText}>-</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.qtyText}>{item.qty}</Text>
+                      <TouchableOpacity
+                        style={styles.qtyButton}
+                        onPress={() => updateQty(item.id, item.qty + 1)}
+                      >
+                        <Text style={styles.qtyButtonText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  <View style={styles.lineTotalBox}>
+                    <Text style={styles.lineTotal}>₱{(item.price * item.qty).toLocaleString()}</Text>
+                    <TouchableOpacity onPress={() => remove(item.id)}>
+                      <Text style={styles.removeText}>Remove</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
-                <View style={styles.lineTotalBox}>
-                  <Text style={styles.lineTotal}>₱{(item.price * item.qty).toLocaleString()}</Text>
-                  <TouchableOpacity onPress={() => remove(item.id)}>
-                    <Text style={styles.removeText}>Remove</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-          />
+              )}
+            />
 
-          <View style={styles.footer}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Subtotal</Text>
-              <Text style={styles.summaryValue}>₱{total.toLocaleString()}</Text>
+            <View style={styles.footer}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Subtotal</Text>
+                <Text style={styles.summaryValue}>₱{total.toLocaleString()}</Text>
+              </View>
+              <TouchableOpacity style={styles.clearButton} onPress={clear}>
+                <Text style={styles.clearButtonText}>Clear Cart</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.checkoutButton, items.length > 0 ? styles.checkoutButtonEnabled : styles.checkoutButtonDisabled]}
+                disabled={items.length === 0}
+                onPress={() => router.push({ pathname: "/checkout" })}
+              >
+                <Text style={styles.checkoutText}>Go to Checkout</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.clearButton} onPress={clear}>
-              <Text style={styles.clearButtonText}>Clear Cart</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.checkoutButton, items.length > 0 ? styles.checkoutButtonEnabled : styles.checkoutButtonDisabled]}
-              disabled={items.length === 0}
-              onPress={() => router.push({ pathname: "/checkout" })}
-            >
-              <Text style={styles.checkoutText}>Go to Checkout</Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
+          </>
+        )}
     </View>
   );
 }
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fefce8",
-    paddingTop: 8,
+    paddingTop: 40,
     paddingHorizontal: 16,
   },
   headerRow: {

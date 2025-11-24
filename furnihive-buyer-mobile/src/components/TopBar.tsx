@@ -118,6 +118,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    paddingTop: 40,
     marginBottom: 16,
   },
   brandWrapper: {

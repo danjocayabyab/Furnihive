@@ -33,15 +33,40 @@ function reducer(state, action) {
       const idx = state.findIndex((i) => String(i.id) === String(item.id));
       if (idx >= 0) {
         const next = [...state];
-        next[idx] = { ...next[idx], qty: (next[idx].qty || 1) + qty };
+        const current = next[idx];
+        const maxStock =
+          typeof item.stock_qty === "number"
+            ? item.stock_qty
+            : typeof current.stock_qty === "number"
+            ? current.stock_qty
+            : null;
+        const newQtyRaw = (current.qty || 1) + qty;
+        const newQty = maxStock != null ? Math.min(newQtyRaw, maxStock) : newQtyRaw;
+        next[idx] = { ...current, stock_qty: maxStock ?? current.stock_qty ?? item.stock_qty, qty: newQty };
         return next;
       }
-      return [...state, { ...item, qty }];
+      return [
+        ...state,
+        {
+          ...item,
+          stock_qty:
+            typeof item.stock_qty === "number" ? item.stock_qty : item.stock_qty == null ? null : item.stock_qty,
+          qty,
+        },
+      ];
     }
     case "UPDATE_QTY": {
       const { id, qty } = action.payload;
       return state.map((i) =>
-        String(i.id) === String(id) ? { ...i, qty: Math.max(1, qty) } : i
+        String(i.id) === String(id)
+          ? {
+              ...i,
+              qty:
+                typeof i.stock_qty === "number"
+                  ? Math.max(1, Math.min(qty, i.stock_qty))
+                  : Math.max(1, qty),
+            }
+          : i
       );
     }
     case "REMOVE": {
@@ -156,15 +181,21 @@ export function CartProvider({ children }) {
           .eq("product_id", item.id)
           .maybeSingle();
         if (row?.id) {
+          const maxStock =
+            typeof item.stock_qty === "number" ? item.stock_qty : null;
+          const newQtyRaw = (row.qty || 0) + qty;
+          const newQty = maxStock != null ? Math.min(newQtyRaw, maxStock) : newQtyRaw;
           await supabase
             .from("cart_items")
-            .update({ qty: (row.qty || 0) + qty })
+            .update({ qty: newQty })
             .eq("id", row.id);
         } else {
+          const initialQty =
+            typeof item.stock_qty === "number" ? Math.min(qty, item.stock_qty) : qty;
           await supabase.from("cart_items").insert({
             cart_id: cartId,
             product_id: item.id,
-            qty: qty,
+            qty: initialQty,
             unit_price: Number(item.price || 0),
             title: item.title || null,
             image: item.image || null,
@@ -189,9 +220,15 @@ export function CartProvider({ children }) {
           .eq("product_id", id)
           .maybeSingle();
         if (row?.id) {
+          const currentItem = items.find((it) => String(it.id) === String(id));
+          const maxStock =
+            currentItem && typeof currentItem.stock_qty === "number"
+              ? currentItem.stock_qty
+              : null;
+          const clampedQty = maxStock != null ? Math.min(Math.max(1, Number(qty || 1)), maxStock) : Math.max(1, Number(qty || 1));
           await supabase
             .from("cart_items")
-            .update({ qty: Math.max(1, Number(qty || 1)) })
+            .update({ qty: clampedQty })
             .eq("id", row.id);
         }
       } catch {}
