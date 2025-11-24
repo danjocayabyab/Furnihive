@@ -134,7 +134,7 @@ export default function SellerOrders() {
         // Load payout info for this seller across these orders
         const { data: payoutRows, error: payoutsErr } = await supabase
           .from("seller_payouts")
-          .select("order_id, seller_id, status, net_amount")
+          .select("order_id, seller_id, status, gross_amount")
           .eq("seller_id", sellerId)
           .in("order_id", orderIds);
 
@@ -145,7 +145,10 @@ export default function SellerOrders() {
             const oid = p.order_id;
             if (!oid) return;
             const current = payoutByOrder.get(oid) || { net: 0, hasPending: false, hasPaid: false };
-            current.net += Number(p.net_amount || 0);
+
+            const gross = Number(p.gross_amount || 0) || 0;
+            const payout = gross * 0.83; // 83% amount to pay (must match Admin Revenue)
+            current.net += payout;
             const st = String(p.status || "").toLowerCase();
             if (st === "pending") current.hasPending = true;
             if (st === "paid") current.hasPaid = true;
@@ -177,6 +180,59 @@ export default function SellerOrders() {
     loadOrders();
     return () => {
       cancelled = true;
+    };
+  }, [sellerId]);
+
+  // Realtime: keep orders in sync when orders table is updated (e.g. Lalamove tracking added)
+  useEffect(() => {
+    if (!sellerId) return;
+
+    const channel = supabase
+      .channel(`seller-orders-realtime-${sellerId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+        },
+        (payload) => {
+          const row = payload?.new;
+          if (!row || !row.id) return;
+
+          setOrders((prev) => {
+            let changed = false;
+            const next = prev.map((o) => {
+              if (o.id !== row.id) return o;
+              changed = true;
+              const updated = { ...o };
+
+              if (typeof row.status === 'string') {
+                updated.status = row.status.toLowerCase();
+              }
+              if (typeof row.total_amount !== 'undefined' && row.total_amount !== null) {
+                updated.totalAmount = Number(row.total_amount) || 0;
+              }
+              if (typeof row.payment_status === 'string') {
+                updated.paymentStatus = String(row.payment_status).toLowerCase();
+              }
+              if (typeof row.lalamove_order_id !== 'undefined') {
+                updated.lalamoveOrderId = row.lalamove_order_id || null;
+              }
+              if (typeof row.lalamove_share_link !== 'undefined') {
+                updated.lalamoveShareLink = row.lalamove_share_link || null;
+              }
+
+              return updated;
+            });
+            return changed ? next : prev;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
   }, [sellerId]);
 

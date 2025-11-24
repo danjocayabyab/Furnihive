@@ -137,9 +137,8 @@ export default function Checkout() {
   const totals = useMemo(() => {
     const subtotal = checkoutItems.reduce((s, it) => s + (it.price || 0) * (it.qty || 1), 0);
     const dynamicShipping = lalamoveQuote?.amount ?? null;
-    const baseShipping = subtotal >= 25000 || checkoutItems.length === 0 ? 0 : 500;
-    const shipping = dynamicShipping != null ? Number(dynamicShipping) : baseShipping;
-    const vat = Math.round(subtotal * 0.12);
+    // Shipping now only uses the Lalamove quote; no fixed base fee.
+    const shipping = dynamicShipping != null ? Number(dynamicShipping) : 0;
 
     let promoDiscount = 0;
     if (selectedVoucherId) {
@@ -161,8 +160,8 @@ export default function Checkout() {
       }
     }
 
-    const total = Math.max(0, subtotal + shipping + vat - promoDiscount);
-    return { subtotal, shipping, vat, promoDiscount, total };
+    const total = Math.max(0, subtotal + shipping - promoDiscount);
+    return { subtotal, shipping, promoDiscount, total };
   }, [checkoutItems, applicableVouchers, selectedVoucherId, lalamoveQuote]);
 
   const canContinueShipping =
@@ -414,10 +413,10 @@ export default function Checkout() {
           await supabase.from("order_items").insert(itemsPayload);
         }
 
-        // For cash on delivery, do not redirect to PayMongo; show the same success modal flow
+        // For cash on delivery, do not redirect to PayMongo; show a COD-specific success banner
         if (payMethod === "cod") {
           clearCart();
-          navigate("/checkout?paystatus=success", { replace: true });
+          navigate("/checkout?paystatus=cod", { replace: true });
           return;
         }
 
@@ -480,19 +479,25 @@ export default function Checkout() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      {(payStatus === "success" || payStatus === "cancel") && (
+      {(payStatus === "success" || payStatus === "cancel" || payStatus === "cod") && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl border border-[var(--line-amber)]">
             <div
               className={`mb-1 text-sm font-semibold ${
-                payStatus === "success" ? "text-emerald-700" : "text-red-700"
+                payStatus === "cancel" ? "text-red-700" : "text-emerald-700"
               }`}
             >
-              {payStatus === "success" ? "Payment successful" : "Payment failed or cancelled"}
+              {payStatus === "success"
+                ? "Payment successful"
+                : payStatus === "cod"
+                ? "Order placed (Cash on Delivery)"
+                : "Payment failed or cancelled"}
             </div>
             <p className="mb-4 text-xs text-gray-700">
               {payStatus === "success"
                 ? "Your order has been placed. You can review it in your orders page."
+                : payStatus === "cod"
+                ? "Your order has been placed with Cash on Delivery. Please prepare payment upon delivery."
                 : "Your payment attempt was not completed. You may try again or choose another payment method."}
             </p>
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -652,7 +657,6 @@ export default function Checkout() {
                   : ""}
               </div>
             )}
-            <Row label={`Tax (VAT 12%)`} value={peso(totals.vat)} />
             {totals.promoDiscount > 0 && (
               <Row label={`Voucher Discount`} value={`- ${peso(totals.promoDiscount)}`} />
             )}
@@ -662,7 +666,23 @@ export default function Checkout() {
 
             <div className="mt-2 rounded-xl bg-[var(--amber-50)] border border-[var(--line-amber)] p-3 text-sm text-[var(--brown-700)]">
               <div className="font-medium mb-1">Estimated Delivery</div>
-              <div className="text-xs text-gray-700">7–10 business days</div>
+              <div className="text-xs text-gray-700">
+                {totals.shipping > 0
+                  ? (() => {
+                      const rawMeters = lalamoveQuote?.distance?.value;
+                      if (!rawMeters) {
+                        return "Delivery time will follow Lalamove once the rider is booked (typically same-day).";
+                      }
+                      const km = Number(rawMeters) / 1000;
+                      if (!Number.isFinite(km)) {
+                        return "Delivery time will follow Lalamove once the rider is booked (typically same-day).";
+                      }
+                      if (km <= 10) return "Same-day delivery after seller books with Lalamove.";
+                      if (km <= 40) return "Approximately 1–2 business days after booking with Lalamove.";
+                      return "Approximately 2–4 business days after booking with Lalamove.";
+                    })()
+                  : "7–10 business days"}
+              </div>
             </div>
           </div>
         </aside>
