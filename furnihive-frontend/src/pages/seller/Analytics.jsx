@@ -193,8 +193,8 @@ export default function SellerAnalytics() {
         }
 
         let grossTotal = 0;
-        let netTotal = 0;
-        let pendingNet = 0;
+        let netTotal = 0; // seller earnings (83% of gross)
+        let pendingNet = 0; // pending payout (83% of gross for pending rows)
 
         const history = payoutRows
           .slice()
@@ -206,11 +206,15 @@ export default function SellerAnalytics() {
 
         history.forEach((row) => {
           const gross = Number(row?.gross_amount || 0) || 0;
-          const net = Number(row?.net_amount || 0) || 0;
+          const payout = gross * 0.83; // 83% amount to pay to seller
+
           grossTotal += gross;
-          netTotal += net;
+          netTotal += payout;
+
           const st = String(row?.status || "").toLowerCase();
-          if (st === "pending") pendingNet += net;
+          if (st === "pending") {
+            pendingNet += payout;
+          }
         });
 
         if (!cancelled) {

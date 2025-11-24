@@ -32,7 +32,7 @@ export default function Shop() {
       const { data, error } = await supabase
         .from("products")
         .select(
-          "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, weight_kg, created_at, categories(name)"
+          "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, weight_kg, created_at, featured_rank, categories(name)"
         )
         .order("created_at", { ascending: false });
       let rows = data;
@@ -43,7 +43,7 @@ export default function Shop() {
         const retry = await supabase
           .from("products")
           .select(
-            "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, weight_kg, created_at"
+            "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, weight_kg, created_at, featured_rank"
           )
           .order("created_at", { ascending: false });
         rows = retry.data;
@@ -70,6 +70,8 @@ export default function Shop() {
             category_id: r.category_id || null,
             color: r.color || "",
             weight_kg: r.weight_kg ?? null,
+            featured_rank: typeof r.featured_rank === "number" ? r.featured_rank : 0,
+            created_at: r.created_at || null,
             seller: undefined,
           }));
 
@@ -239,6 +241,23 @@ export default function Shop() {
         (checkedCats.length === 0 || checkedCats.includes(p.category))
       );
     });
+
+    if (sort === "featured") {
+      // Only show products explicitly marked as featured (featured_rank > 0)
+      list = list.filter((p) => (typeof p.featured_rank === "number" ? p.featured_rank : 0) > 0);
+
+      list = [...list].sort((a, b) => {
+        const fa = typeof a.featured_rank === "number" ? a.featured_rank : 0;
+        const fb = typeof b.featured_rank === "number" ? b.featured_rank : 0;
+        if (fb !== fa) return fb - fa; // higher featured_rank first
+
+        // tie-breaker: newest first by created_at
+        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return tb - ta;
+      });
+    }
+
     if (sort === "priceLow") list = [...list].sort((a, b) => a.price - b.price);
     if (sort === "priceHigh") list = [...list].sort((a, b) => b.price - a.price);
     return list;

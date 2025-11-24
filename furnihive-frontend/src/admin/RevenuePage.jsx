@@ -161,20 +161,19 @@ export default function RevenuePage() {
       }
 
       let totalSales = 0;
-      let totalCommission = 0;
+      let totalCommission = 0; // this will represent 5% of total sales
       const bySeller = new Map();
       const pendingMap = new Map();
 
       rows.forEach((p) => {
         const gross = Number(p.gross_amount || 0);
-        const fee = Number(p.platform_fee || 0);
-        // We treat gross as VAT-inclusive. Estimate VAT portion at 12/112
-        // and deduct both VAT and platform fee from the seller payout.
-        const vatPortion = gross > 0 ? (gross * 12) / 112 : 0;
-        const payout = Math.max(0, gross - fee - vatPortion);
+        // New model: all amounts are simple percentages of total sales.
+        const vatPortion = gross * 0.12; // 12% VAT
+        const revenuePortion = gross * 0.05; // 5% platform revenue
+        const payout = gross * 0.83; // 83% amount to pay to seller
 
         totalSales += gross;
-        totalCommission += fee;
+        totalCommission += revenuePortion;
 
         const sid = p.seller_id || "unknown";
         if (!bySeller.has(sid)) {
@@ -182,9 +181,9 @@ export default function RevenuePage() {
         }
         const agg = bySeller.get(sid);
         agg.sales += gross;
-        agg.net += payout;
-        agg.fee += fee;
-        agg.vat += vatPortion;
+        agg.net += payout; // amount to pay (83%)
+        agg.fee += revenuePortion; // revenue earned (5%)
+        agg.vat += vatPortion; // VAT (12%)
 
         if (String(p.status || "").toLowerCase() === "pending") {
           if (!pendingMap.has(sid)) {
@@ -192,9 +191,9 @@ export default function RevenuePage() {
           }
           const pen = pendingMap.get(sid);
           pen.sales += gross;
-          pen.net += payout;
-          pen.fee += fee;
-          pen.vat += vatPortion;
+          pen.net += payout; // amount to pay (83%)
+          pen.fee += revenuePortion; // revenue earned (5%)
+          pen.vat += vatPortion; // VAT (12%)
         }
       });
 
@@ -355,7 +354,7 @@ export default function RevenuePage() {
                 <th className="text-left px-5 py-3 font-medium">Seller Name</th>
                 <th className="text-right px-5 py-3 font-medium">Total Sales</th>
                 <th className="text-right px-5 py-3 font-medium">VAT (12%)</th>
-                <th className="text-right px-5 py-3 font-medium">Seller Payout (95%)</th>
+                <th className="text-right px-5 py-3 font-medium">Seller Payout (83%)</th>
                 <th className="text-right px-5 py-3 font-medium">Platform Commission (5%)</th>
               </tr>
             </thead>
@@ -406,7 +405,7 @@ export default function RevenuePage() {
               Pending Seller Payouts
             </div>
             <div className="text-xs text-[var(--brown-700)]/70">
-              Process payments to sellers based on 95% payout / 5% commission
+              Process payments to sellers based on 83% payout / 5% commission
             </div>
           </div>
         </div>
@@ -417,7 +416,7 @@ export default function RevenuePage() {
                 <th className="text-left px-5 py-3 font-medium">Seller Name</th>
                 <th className="text-right px-5 py-3 font-medium">Total Sales</th>
                 <th className="text-right px-5 py-3 font-medium">VAT (12%)</th>
-                <th className="text-right px-5 py-3 font-medium">Amount to Pay (95%)</th>
+                <th className="text-right px-5 py-3 font-medium">Amount to Pay (83%)</th>
                 <th className="text-right px-5 py-3 font-medium">Revenue Earned (5%)</th>
                 <th className="text-right px-5 py-3 font-medium">Action</th>
               </tr>
@@ -444,6 +443,9 @@ export default function RevenuePage() {
                   </td>
                   <td className="px-5 py-3 text-right text-[var(--brown-700)]">
                     {peso(row.sales)}
+                  </td>
+                  <td className="px-5 py-3 text-right text-[var(--brown-700)]/80">
+                    {peso(row.vat)}
                   </td>
                   <td className="px-5 py-3 text-right text-emerald-600 font-medium">
                     {peso(row.net)}

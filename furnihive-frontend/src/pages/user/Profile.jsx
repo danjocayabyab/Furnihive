@@ -1004,7 +1004,7 @@ function OrderDetailsModal({ order, onClose, money, onMarkReceived }) {
         </div>
 
         <div className="flex justify-end gap-2">
-          {order.status !== "Delivered" && (
+          {order.status === "Shipped" && (
             <Button onClick={() => onMarkReceived?.(order.id)}>
               Mark as Received
             </Button>
