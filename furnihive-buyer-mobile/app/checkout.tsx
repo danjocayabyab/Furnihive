@@ -19,6 +19,9 @@ export default function CheckoutRoute() {
   >([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | number | null>(null);
   const [payMethod, setPayMethod] = useState<"cod" | "online">("cod");
+  const [vouchers, setVouchers] = useState<any[]>([]);
+  const [selectedVoucherId, setSelectedVoucherId] = useState<string | number | null>(null);
+  const [voucherOpen, setVoucherOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,6 +88,72 @@ export default function CheckoutRoute() {
     };
   }, [user?.id]);
 
+  // Load active voucher-type promotions (same table used on web checkout)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const today = new Date();
+        const { data, error } = await supabase
+          .from("promotions")
+          .select(
+            "id, seller_id, name, code, type, discount_type, discount_value, min_purchase, max_discount, status, start_date, end_date"
+          )
+          .eq("type", "voucher")
+          .eq("status", "active");
+
+        if (error || cancelled) return;
+
+        const usable = (data || []).filter((p: any) => {
+          const start = p.start_date ? new Date(p.start_date) : null;
+          const end = p.end_date ? new Date(p.end_date) : null;
+          if (start && start > today) return false;
+          if (end && end < today) return false;
+          return true;
+        });
+
+        setVouchers(usable);
+      } catch {
+        if (!cancelled) setVouchers([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Derive seller_id for this checkout (single-seller assumption like web)
+  const checkoutSellerId = items.length ? (items[0] as any).seller_id || null : null;
+
+  const applicableVouchers = vouchers.filter((v) => {
+    if (!checkoutSellerId) return true;
+    return v.seller_id === checkoutSellerId;
+  });
+
+  const subtotal = items.reduce((n, it) => n + (it.price || 0) * (it.qty || 1), 0);
+
+  // VAT only; shipping is not charged in this mobile flow
+  const vat = Math.round(subtotal * 0.12);
+
+  let promoDiscount = 0;
+  if (selectedVoucherId) {
+    const v = applicableVouchers.find((p) => p.id === selectedVoucherId);
+    if (v && subtotal > 0) {
+      const isPercentage = v.discount_type === "percentage";
+      const rawValue = Number(v.discount_value) || 0;
+      let rawDiscount = 0;
+      if (isPercentage) {
+        rawDiscount = Math.round(subtotal * (rawValue / 100));
+      } else {
+        rawDiscount = rawValue;
+      }
+      promoDiscount = Math.max(0, rawDiscount);
+    }
+  }
+
+  const finalTotal = Math.max(0, subtotal + vat - promoDiscount);
+
   const handlePlaceOrder = async () => {
     if (!items.length || placing) return;
     setPlacing(true);
@@ -98,7 +167,7 @@ export default function CheckoutRoute() {
         .from("orders")
         .insert({
           user_id: user?.id || null,
-          total_amount: total,
+          total_amount: finalTotal,
           item_count: itemCount,
           summary_title: first.title,
           summary_image: first.image || null,
@@ -142,7 +211,7 @@ export default function CheckoutRoute() {
 
       if (payMethod === "cod") {
         clear();
-        router.replace({ pathname: "/checkout-success" as any, params: { total: String(total) } });
+        router.replace({ pathname: "/checkout-success" as any, params: { total: String(finalTotal) } });
       } else {
         const { data: session, error: sessionErr } = await supabase.functions.invoke(
           "create-checkout-session",
@@ -322,10 +391,101 @@ export default function CheckoutRoute() {
           )}
         />
       </View>
+      {applicableVouchers.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Voucher</Text>
+          <View style={{ gap: 6 }}>
+            {/* Dropdown trigger */}
+            <TouchableOpacity
+              style={[styles.voucherRow, styles.voucherRowSelected]}
+              onPress={() => setVoucherOpen((open) => !open)}
+              activeOpacity={0.8}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.voucherName}>
+                  {selectedVoucherId
+                    ? (applicableVouchers.find((v) => v.id === selectedVoucherId)?.name || "Voucher")
+                    : "No voucher"}
+                </Text>
+                <Text style={styles.voucherMeta}>
+                  {selectedVoucherId
+                    ? applicableVouchers.find((v) => v.id === selectedVoucherId)?.code || ""
+                    : "Tap to choose a voucher for this order."}
+                </Text>
+              </View>
+              <Feather
+                name={voucherOpen ? "chevron-up" : "chevron-down"}
+                size={18}
+                color="#92400e"
+              />
+            </TouchableOpacity>
+
+            {/* Dropdown options */}
+            {voucherOpen && (
+              <View style={{ gap: 4 }}>
+                <TouchableOpacity
+                  style={styles.voucherRow}
+                  onPress={() => {
+                    setSelectedVoucherId(null);
+                    setVoucherOpen(false);
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.voucherName}>No voucher</Text>
+                    <Text style={styles.voucherMeta}>
+                      Do not apply any voucher discount.
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {applicableVouchers.map((v) => (
+                  <TouchableOpacity
+                    key={v.id}
+                    style={styles.voucherRow}
+                    onPress={() => {
+                      setSelectedVoucherId(v.id);
+                      setVoucherOpen(false);
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.voucherName}>{v.name || "Voucher"}</Text>
+                      <Text style={styles.voucherMeta}>{v.code}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {selectedVoucherId && promoDiscount > 0 && (
+              <Text style={styles.voucherApplied}>
+                Voucher applied: you save ₱{promoDiscount.toLocaleString()} on this order.
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
       <View style={styles.section}>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Total</Text>
-          <Text style={styles.summaryValue}>₱{total.toLocaleString()}</Text>
+          <Text style={styles.summaryLabel}>Subtotal</Text>
+          <Text style={styles.summaryValue}>₱{subtotal.toLocaleString()}</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>VAT (12%)</Text>
+          <Text style={styles.summaryValue}>₱{vat.toLocaleString()}</Text>
+        </View>
+        {promoDiscount > 0 && (
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Voucher Discount</Text>
+            <Text style={styles.summaryDiscount}>- ₱{promoDiscount.toLocaleString()}</Text>
+          </View>
+        )}
+        <View style={[styles.summaryRow, { marginTop: 4 }] }>
+          <Text style={[styles.summaryLabel, { fontWeight: "700" }] }>
+            Total
+          </Text>
+          <Text style={[styles.summaryValue, { fontWeight: "700" }] }>
+            ₱{finalTotal.toLocaleString()}
+          </Text>
         </View>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <TouchableOpacity style={styles.placeOrderButton} onPress={handlePlaceOrder}>
@@ -496,6 +656,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#422006",
   },
+  summaryDiscount: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#16a34a",
+  },
   error: {
     marginBottom: 6,
     fontSize: 12,
@@ -560,5 +725,34 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 11,
     color: "#6b7280",
+  },
+  voucherRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  voucherRowSelected: {
+    backgroundColor: "#fffbeb",
+  },
+  voucherName: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#422006",
+  },
+  voucherMeta: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#6b7280",
+  },
+  voucherApplied: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#16a34a",
+    fontWeight: "600",
   },
 });

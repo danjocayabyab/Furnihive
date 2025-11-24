@@ -16,6 +16,7 @@ export function TopBar({ placeholder = "Search products" }: Props) {
   const { user } = useAuth();
   const cartCount = items.reduce((sum, it) => sum + (it.qty || 0), 0);
   const [msgUnread, setMsgUnread] = useState(0);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!user?.id) {
@@ -82,6 +83,14 @@ export function TopBar({ placeholder = "Search products" }: Props) {
           style={styles.searchInput}
           placeholder={placeholder}
           placeholderTextColor="#9ca3af"
+          value={search}
+          onChangeText={setSearch}
+          returnKeyType="search"
+          onSubmitEditing={() => {
+            const q = search.trim();
+            if (!q) return;
+            router.push({ pathname: "/explore", params: { q } });
+          }}
         />
       </View>
       <View style={styles.iconRow}>

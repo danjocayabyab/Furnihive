@@ -28,6 +28,8 @@ export default function RootLayout() {
             <Stack.Screen name="checkout-success" options={{ headerShown: false }} />
             <Stack.Screen name="profile-signup" options={{ headerShown: false }} />
             <Stack.Screen name="notifications" options={{ headerShown: false }} />
+            <Stack.Screen name="profile-orders" options={{ headerShown: false }} />
+            <Stack.Screen name="profile-orders/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </Stack>
         </CartProvider>
