@@ -450,11 +450,6 @@ export default function SellerMessages() {
         <h1 className="text-xl font-semibold text-[var(--brown-700)]">
           Messages
         </h1>
-        {totalUnread(threads) > 0 && (
-          <span className="ml-2 rounded-full bg-[var(--orange-600)] text-white text-xs px-2 py-0.5">
-            {totalUnread(threads)}
-          </span>
-        )}
       </div>
 
       <div className="flex h-[calc(100%-56px)] gap-4">
@@ -496,11 +491,6 @@ export default function SellerMessages() {
                     <span className="text-[10px] rounded-full bg-blue-100 text-blue-700 px-1.5 py-0.5 border border-blue-200">
                       {t.buyerRole}
                     </span>
-                    {t.unread > 0 && (
-                      <span className="ml-auto text-[10px] rounded-full bg-[var(--orange-600)] text-white px-1.5 py-0.5">
-                        {t.unread}
-                      </span>
-                    )}
                   </div>
                   <div className="text-xs text-gray-600 truncate">
                     {t.lastSnippet}

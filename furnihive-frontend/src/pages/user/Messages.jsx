@@ -698,11 +698,6 @@ export default function Messages() {
           </button>
           <h1 className="text-xl font-semibold text-[var(--brown-700)]">Messages</h1>
         </div>
-        {totalUnread(threads) > 0 && (
-          <span className="ml-2 grid h-5 min-w-[20px] place-items-center rounded-full bg-[var(--orange-600)] px-1.5 text-[11px] font-semibold text-white">
-            {totalUnread(threads)}
-          </span>
-        )}
       </div>
 
       {/* 2-pane layout */}
@@ -748,11 +743,6 @@ export default function Messages() {
                         {t.role}
                       </span>
                       {t.online && <span className="ml-1 h-2 w-2 rounded-full bg-emerald-500" />}
-                      {t.unread > 0 && (
-                        <span className="ml-auto rounded-full bg-[var(--orange-600)] px-1.5 text-[10px] font-semibold text-white">
-                          {t.unread}
-                        </span>
-                      )}
                     </div>
                     <div className="text-xs text-gray-600 truncate">
                       {t.last}
