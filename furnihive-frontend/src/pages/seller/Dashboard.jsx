@@ -70,7 +70,7 @@ export default function SellerDashboard() {
     })();
 
     return () => {
-      cancelled = true;
+      cancelled = true; 
     };
   }, [authUser?.id]);
 
