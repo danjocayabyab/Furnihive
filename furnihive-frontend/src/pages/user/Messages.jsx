@@ -225,36 +225,191 @@ export default function Messages() {
     fileInputRef.current?.click();
   }
 
-  function onFileChange(e) {
+  async function onFileChange(e) {
     const file = (e.target.files || [])[0];
-    if (!file) return;
+    if (!file || !buyerId) {
+      e.target.value = "";
+      return;
+    }
 
     const isImage = file.type.startsWith("image/");
-    const url = URL.createObjectURL(file);
     const fallbackText = isImage
       ? "Sent a photo"
       : `Sent a file: ${file.name}`;
 
-    setMessagesById((prev) => ({
-      ...prev,
-      [activeId]: [
-        ...(prev[activeId] || []),
-        {
-          id: Date.now(),
-          from: "me",
-          text: fallbackText,
-          time: timeNow(),
-          attachment: {
-            name: file.name,
-            url,
-            isImage,
-          },
-        },
-      ],
-    }));
-    updateSnippet(activeId, fallbackText);
+    let conversationId = activeId;
+    const sellerIdFromQuery = sp.get("sellerId");
 
-    e.target.value = "";
+    try {
+      // Ensure we have a real conversation row, similar to send()
+      if (!conversationId && sellerIdFromQuery) {
+        const { data: existing, error: existingError } = await supabase
+          .from("conversations")
+          .select(
+            "id, seller_id, last_message, last_message_at, buyer_unread_count, seller_unread_count"
+          )
+          .eq("buyer_id", buyerId)
+          .eq("seller_id", sellerIdFromQuery)
+          .maybeSingle();
+
+        if (!existingError && existing) {
+          conversationId = existing.id;
+          setActiveId(existing.id);
+        } else {
+          const { data: created, error: createError } = await supabase
+            .from("conversations")
+            .insert({
+              buyer_id: buyerId,
+              seller_id: sellerIdFromQuery,
+              last_message: fallbackText,
+              last_message_at: new Date().toISOString(),
+              buyer_unread_count: 0,
+              seller_unread_count: 1,
+            })
+            .select("id, seller_id, last_message, last_message_at")
+            .single();
+
+          if (createError || !created) {
+            e.target.value = "";
+            return;
+          }
+
+          conversationId = created.id;
+          setActiveId(created.id);
+
+          let sellerProfile = null;
+          if (created.seller_id) {
+            const { data: sellers } = await supabase
+              .from("profiles")
+              .select("id, store_name, first_name, last_name, avatar_url")
+              .eq("id", created.seller_id)
+              .limit(1);
+            sellerProfile = sellers?.[0] || null;
+          }
+
+          const name =
+            sellerProfile?.store_name ||
+            [sellerProfile?.first_name, sellerProfile?.last_name]
+              .filter(Boolean)
+              .join(" ") ||
+            "Seller";
+
+          const newThread = {
+            id: created.id,
+            name,
+            role: "seller",
+            avatar: sellerProfile?.avatar_url || "",
+            last: created.last_message || fallbackText,
+            time: created.last_message_at,
+            online: false,
+            unread: 0,
+          };
+
+          setThreads((prev) => {
+            if (prev.some((t) => t.id === created.id)) return prev;
+            return [newThread, ...prev];
+          });
+        }
+      }
+
+      if (!conversationId) {
+        e.target.value = "";
+        return;
+      }
+
+      // Upload the file to Supabase storage so the attachment URL is stable
+      const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+      const path = `${buyerId}/${conversationId}/${Date.now()}-${safeName}`;
+      const { error: uploadErr } = await supabase
+        .storage
+        .from("message-attachments")
+        .upload(path, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+      if (uploadErr) {
+        // eslint-disable-next-line no-console
+        console.warn("Failed to upload attachment", uploadErr.message || uploadErr);
+        e.target.value = "";
+        return;
+      }
+
+      const { data: pub } = supabase.storage
+        .from("message-attachments")
+        .getPublicUrl(path);
+      const publicUrl = pub?.publicUrl || null;
+      if (!publicUrl) {
+        e.target.value = "";
+        return;
+      }
+
+      const optimistic = {
+        id: Date.now(),
+        from: "me",
+        text: fallbackText,
+        time: timeNow(),
+        attachment: {
+          name: file.name,
+          url: publicUrl,
+          isImage,
+        },
+      };
+
+      setMessagesById((prev) => ({
+        ...prev,
+        [conversationId]: [...(prev[conversationId] || []), optimistic],
+      }));
+      updateSnippet(conversationId, fallbackText);
+
+      try {
+        await supabase.from("messages").insert({
+          conversation_id: conversationId,
+          sender_id: buyerId,
+          sender_role: "buyer",
+          text: fallbackText,
+          attachment_name: file.name,
+          attachment_type: file.type,
+          attachment_url: publicUrl,
+        });
+
+        // Update conversation last message + unread count for the seller
+        try {
+          const { data: convo } = await supabase
+            .from("conversations")
+            .select("seller_unread_count")
+            .eq("id", conversationId)
+            .single();
+
+          const nextUnread = (convo?.seller_unread_count || 0) + 1;
+
+          await supabase
+            .from("conversations")
+            .update({
+              last_message: fallbackText,
+              last_message_at: new Date().toISOString(),
+              seller_unread_count: nextUnread,
+            })
+            .eq("id", conversationId);
+        } catch {
+          await supabase
+            .from("conversations")
+            .update({
+              last_message: fallbackText,
+              last_message_at: new Date().toISOString(),
+            })
+            .eq("id", conversationId);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("Failed to save attachment message", err?.message || err);
+      } finally {
+        e.target.value = "";
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("Attachment send failed", err?.message || err);
+      e.target.value = "";
+    }
   }
 
   /** Prefill from Product Detail:
@@ -543,11 +698,6 @@ export default function Messages() {
           </button>
           <h1 className="text-xl font-semibold text-[var(--brown-700)]">Messages</h1>
         </div>
-        {totalUnread(threads) > 0 && (
-          <span className="ml-2 grid h-5 min-w-[20px] place-items-center rounded-full bg-[var(--orange-600)] px-1.5 text-[11px] font-semibold text-white">
-            {totalUnread(threads)}
-          </span>
-        )}
       </div>
 
       {/* 2-pane layout */}
@@ -593,11 +743,6 @@ export default function Messages() {
                         {t.role}
                       </span>
                       {t.online && <span className="ml-1 h-2 w-2 rounded-full bg-emerald-500" />}
-                      {t.unread > 0 && (
-                        <span className="ml-auto rounded-full bg-[var(--orange-600)] px-1.5 text-[10px] font-semibold text-white">
-                          {t.unread}
-                        </span>
-                      )}
                     </div>
                     <div className="text-xs text-gray-600 truncate">
                       {t.last}

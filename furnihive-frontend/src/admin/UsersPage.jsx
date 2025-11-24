@@ -229,13 +229,15 @@ function UserCard({ user, onView, onSuspend }) {
   const fullId = String(user.id || "");
   const compactId = fullId.replace(/-/g, "").toUpperCase().slice(0, 8);
   const displayId = compactId ? `USR-${compactId}` : "USR-UNKNOWN";
+  const isSeller = user.role === "seller";
+  const avatarSrc = isSeller && user.storeLogo ? user.storeLogo : user.avatarUrl;
   return (
     <div className="relative rounded-xl border border-[var(--line-amber)] bg-gradient-to-br from-[#fffdf5] to-[#fffaf0] p-5 flex flex-col sm:flex-row sm:items-center justify-between">
       {/* Left: basic info */}
       <div className="flex items-start gap-4">
-        {user.avatarUrl ? (
+        {avatarSrc ? (
           <img
-            src={user.avatarUrl}
+            src={avatarSrc}
             alt={user.name || "User"}
             className="h-10 w-10 rounded-full object-cover border border-[var(--line-amber)] bg-white"
           />

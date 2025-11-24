@@ -41,6 +41,9 @@ export default function SellerAnalytics() {
     pendingNet: 0,
   });
 
+  // Payout history rows for this seller
+  const [payoutHistory, setPayoutHistory] = useState([]);
+
   // Date range filter: 7d | 30d | all
   const [range, setRange] = useState("30d");
 
@@ -172,7 +175,7 @@ export default function SellerAnalytics() {
 
         let query = supabase
           .from("seller_payouts")
-          .select("gross_amount, net_amount, status, created_at")
+          .select("id, order_id, gross_amount, net_amount, status, created_at")
           .eq("seller_id", sellerId);
 
         if (fromISO) {
@@ -184,6 +187,7 @@ export default function SellerAnalytics() {
         if (cancelled || error || !payoutRows) {
           if (!cancelled) {
             setPayoutsSummary({ grossTotal: 0, netTotal: 0, pendingNet: 0 });
+            setPayoutHistory([]);
           }
           return;
         }
@@ -192,7 +196,15 @@ export default function SellerAnalytics() {
         let netTotal = 0;
         let pendingNet = 0;
 
-        payoutRows.forEach((row) => {
+        const history = payoutRows
+          .slice()
+          .sort((a, b) => {
+            const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+            const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+            return tb - ta;
+          });
+
+        history.forEach((row) => {
           const gross = Number(row?.gross_amount || 0) || 0;
           const net = Number(row?.net_amount || 0) || 0;
           grossTotal += gross;
@@ -203,10 +215,12 @@ export default function SellerAnalytics() {
 
         if (!cancelled) {
           setPayoutsSummary({ grossTotal, netTotal, pendingNet });
+          setPayoutHistory(history);
         }
       } catch {
         if (!cancelled) {
           setPayoutsSummary({ grossTotal: 0, netTotal: 0, pendingNet: 0 });
+          setPayoutHistory([]);
         }
       }
     })();
@@ -354,7 +368,7 @@ export default function SellerAnalytics() {
         </ul>
       </section>
 
-      {/* Payout summary */}
+      {/* Payout summary + history */}
       <section className="rounded-2xl border border-[var(--line-amber)] bg-white">
         <div className="px-5 py-4 border-b border-[var(--line-amber)]">
           <h3 className="font-semibold text-[var(--brown-700)]">Payout Summary</h3>
@@ -363,7 +377,7 @@ export default function SellerAnalytics() {
           </p>
         </div>
 
-        <div className="p-4 grid sm:grid-cols-2 gap-4">
+        <div className="p-4 grid sm:grid-cols-2 gap-4 border-b border-[var(--line-amber)]/60">
           <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--amber-50)]/40 p-4 text-sm text-[var(--brown-700)]/90 space-y-1">
             <div className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
               Net Earnings
@@ -382,6 +396,60 @@ export default function SellerAnalytics() {
             <p className="text-xs text-gray-600">
               Amount from completed orders that is still marked as pending in payouts and has not been paid out yet.
             </p>
+          </div>
+        </div>
+
+        <div className="p-4">
+          <div className="mb-2 text-xs font-semibold text-gray-700 uppercase tracking-wide">
+            Payout History
+          </div>
+          <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)]/40 max-h-72 overflow-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[var(--line-amber)] bg-[var(--cream-50)]/80 text-[var(--brown-700)]">
+                  <th className="px-3 py-2 text-left font-semibold">Date</th>
+                  <th className="px-3 py-2 text-left font-semibold">Order</th>
+                  <th className="px-3 py-2 text-left font-semibold">Status</th>
+                  <th className="px-3 py-2 text-right font-semibold">Net Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payoutHistory.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-3 text-center text-gray-600">
+                      No payouts recorded for this period yet.
+                    </td>
+                  </tr>
+                )}
+                {payoutHistory.map((row) => {
+                  const labelStatus = String(row.status || "").toLowerCase();
+                  return (
+                    <tr key={row.id} className="border-t border-[var(--line-amber)]/50">
+                      <td className="px-3 py-2 text-gray-700">
+                        {row.created_at
+                          ? new Date(row.created_at).toLocaleString("en-PH", {
+                              year: "numeric",
+                              month: "short",
+                              day: "2-digit",
+                            })
+                          : ""}
+                      </td>
+                      <td className="px-3 py-2 text-gray-700">
+                        {row.order_id ? `ORD-${String(row.order_id).slice(0, 8).toUpperCase()}` : "—"}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="inline-flex items-center rounded-full border border-[var(--line-amber)] px-2 py-0.5 text-[10px] capitalize bg-white">
+                          {labelStatus || "pending"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold text-[var(--brown-700)]">
+                        {peso(row.net_amount)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       </section>

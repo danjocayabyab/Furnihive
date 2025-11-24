@@ -9,6 +9,7 @@ export default function UserProfileModal({ open, onClose, user, peso }) {
   const displayId = compactId ? `USR-${compactId}` : "USR-UNKNOWN";
   const isSeller = String(user.role || "").toLowerCase() === "seller";
   const title = isSeller ? "Seller Profile" : "User Profile";
+  const avatarSrc = isSeller && user.storeLogo ? user.storeLogo : user.avatarUrl;
 
   return (
     <div className="fixed inset-0 z-[60]">
@@ -29,7 +30,7 @@ export default function UserProfileModal({ open, onClose, user, peso }) {
           {/* profile summary */}
           <div className="px-6 py-4">
             <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-4 flex gap-3">
-              <Avatar name={user.name} src={user.avatarUrl} />
+              <Avatar name={user.name} src={avatarSrc} />
 
               <div className="flex-1">
                 <div className="font-semibold text-[var(--brown-700)]">{user.name}</div>

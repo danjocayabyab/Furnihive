@@ -145,8 +145,33 @@ export default function SellerTopbar() {
           table: 'conversations',
           filter: `seller_id=eq.${sellerId}`,
         },
-        () => {
-          if (!cancelled) loadUnread();
+        (payload) => {
+          if (!cancelled) {
+            try {
+              const oldRow = payload?.old || {};
+              const newRow = payload?.new || {};
+              const oldCount = Number.isFinite(oldRow.seller_unread_count)
+                ? oldRow.seller_unread_count
+                : 0;
+              const newCount = Number.isFinite(newRow.seller_unread_count)
+                ? newRow.seller_unread_count
+                : 0;
+
+              // If unread count increased, treat it as a new buyer message
+              if (newCount > oldCount && newRow.last_message) {
+                addNotification({
+                  title: 'New message from customer',
+                  body: newRow.last_message,
+                  link: '/seller/messages',
+                  type: 'info',
+                });
+              }
+            } catch {
+              // best-effort; ignore notification errors
+            }
+
+            loadUnread();
+          }
         }
       )
       .subscribe();
@@ -154,9 +179,9 @@ export default function SellerTopbar() {
     return () => {
       cancelled = true;
       clearInterval(id);
-       supabase.removeChannel(channel);
+      supabase.removeChannel(channel);
     };
-  }, [sellerId]);
+  }, [sellerId, addNotification]);
 
   const handleLogout = () => {
     logout();
@@ -195,9 +220,6 @@ export default function SellerTopbar() {
               title="Notifications"
             >
               <span className="text-[16px] leading-none text-[var(--orange-700)]">⩍</span>
-              {unread > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--orange-600)] ring-2 ring-white" />
-              )}
             </button>
 
             {notifOpen && (
@@ -253,7 +275,7 @@ export default function SellerTopbar() {
             )}
           </div>
 
-          {/* Messages */}
+          {/* Messages – simple icon without numeric badge */}
           <button
             onClick={() => navigate("/seller/messages")}
             className="text-sm font-medium px-2 py-1 rounded-full hover:bg-[var(--cream-50)]"

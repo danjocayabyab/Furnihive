@@ -283,6 +283,7 @@ export async function listUsers() {
     .map((p) => p.id)
     .filter(Boolean);
   const sellerLocationById = {};
+  const sellerLogoById = {};
   if (sellerIds.length) {
     try {
       const { data: verRows } = await supabase
@@ -297,6 +298,20 @@ export async function listUsers() {
       });
     } catch {
       // ignore errors; fallback to other location sources
+    }
+
+    try {
+      const { data: storeRows } = await supabase
+        .from("stores")
+        .select("owner_id, logo_url")
+        .in("owner_id", sellerIds);
+      (storeRows || []).forEach((s) => {
+        const oid = s.owner_id;
+        if (!oid || sellerLogoById[oid]) return;
+        if (s.logo_url) sellerLogoById[oid] = s.logo_url;
+      });
+    } catch {
+      // ignore errors; store logo will just be blank
     }
   }
 
@@ -351,6 +366,7 @@ export async function listUsers() {
     revenue: 0,
     phone: p.phone || "",
     avatarUrl: p.avatar_url || "",
+    storeLogo: sellerLogoById[p.id] || "",
   }));
 }
 

@@ -351,6 +351,15 @@ export default function Checkout() {
       const dropoffLng = geo?.lng ?? null;
       const dropoffAddress = geo?.formatted || buildFullAddress() || null;
 
+      // Capture Lalamove quotation + stop metadata if available so seller can later book real order
+      const lalamoveQuotationId = lalamoveQuote?.raw?.quotationId || null;
+      const lalamoveSenderStopId = Array.isArray(lalamoveQuote?.raw?.stops)
+        ? lalamoveQuote.raw.stops[0]?.stopId || null
+        : null;
+      const lalamoveRecipientStopId = Array.isArray(lalamoveQuote?.raw?.stops)
+        ? lalamoveQuote.raw.stops[1]?.stopId || null
+        : null;
+
       const { data: created, error: orderErr } = await supabase
         .from("orders")
         .insert({
@@ -364,6 +373,9 @@ export default function Checkout() {
           dropoff_lat: dropoffLat,
           dropoff_lng: dropoffLng,
           dropoff_address: dropoffAddress,
+          lalamove_quotation_id: lalamoveQuotationId,
+          lalamove_sender_stop_id: lalamoveSenderStopId,
+          lalamove_recipient_stop_id: lalamoveRecipientStopId,
           status: "Pending",
         })
         .select("id")
@@ -371,9 +383,14 @@ export default function Checkout() {
 
       if (!orderErr && created?.id) {
         const orderId = created.id;
-        const itemsPayload = checkoutItems
-          .filter((it) => it.seller_id) // only items with a known seller
-          .map((it) => ({
+        const baseItems = checkoutItems.filter((it) => it.seller_id); // only items with a known seller
+
+        // Distribute total shipping fee across items so that
+        // sum(order_items.shipping_fee) ~= totals.shipping.
+        let itemsPayload = [];
+        if (baseItems.length) {
+          const perItemShipping = (totals.shipping || 0) / baseItems.length;
+          itemsPayload = baseItems.map((it, idx) => ({
             order_id: orderId,
             seller_id: it.seller_id,
             product_id: it.id,
@@ -381,12 +398,17 @@ export default function Checkout() {
             image: it.image || null,
             qty: it.qty || 1,
             unit_price: Number(it.price || 0),
-            shipping_fee: 0,
+            // For the last item, adjust to fix any rounding diff so total matches
+            shipping_fee:
+              idx === baseItems.length - 1
+                ? (totals.shipping || 0) - perItemShipping * (baseItems.length - 1)
+                : perItemShipping,
             buyer_name: buyerName,
             buyer_address: buyerAddress,
             payment_method: payMethod || null,
             status: "Pending",
           }));
+        }
 
         if (itemsPayload.length) {
           await supabase.from("order_items").insert(itemsPayload);

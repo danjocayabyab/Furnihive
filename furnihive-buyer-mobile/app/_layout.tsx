@@ -20,11 +20,14 @@ export default function RootLayout() {
         <CartProvider>
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="cart" options={{ headerShown: false }} />
             <Stack.Screen name="messages" options={{ headerShown: false }} />
             <Stack.Screen name="messages/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="product/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="checkout" options={{ headerShown: false }} />
             <Stack.Screen name="checkout-success" options={{ headerShown: false }} />
+            <Stack.Screen name="profile-signup" options={{ headerShown: false }} />
+            <Stack.Screen name="notifications" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </Stack>
         </CartProvider>

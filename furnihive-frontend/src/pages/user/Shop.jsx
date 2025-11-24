@@ -61,9 +61,11 @@ export default function Shop() {
             image: "",
             rating: 0,
             reviews: 0,
+            stock_qty: typeof r.stock_qty === "number" ? r.stock_qty : null,
             outOfStock:
               (typeof r.stock_qty === "number" ? r.stock_qty <= 0 : false) ||
               (r.status && r.status.toLowerCase() !== "active" && r.status.toLowerCase() !== "published"),
+            status: (r.status || "").toLowerCase(),
             category: r.categories?.name || r.category || CATS[i % CATS.length],
             category_id: r.category_id || null,
             color: r.color || "",
@@ -226,12 +228,17 @@ export default function Shop() {
   const products = useMemo(() => remoteProducts, [remoteProducts]);
 
   const filtered = useMemo(() => {
-    let list = products.filter(
-      (p) =>
+    let list = products.filter((p) => {
+      const status = (p.status || "").toLowerCase();
+      const isVisibleStatus =
+        !status || status === "active" || status === "published";
+      return (
+        isVisibleStatus &&
         p.price <= priceMax &&
         (!inStockOnly || !p.outOfStock) &&
         (checkedCats.length === 0 || checkedCats.includes(p.category))
-    );
+      );
+    });
     if (sort === "priceLow") list = [...list].sort((a, b) => a.price - b.price);
     if (sort === "priceHigh") list = [...list].sort((a, b) => b.price - a.price);
     return list;

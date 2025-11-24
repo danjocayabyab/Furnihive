@@ -371,12 +371,13 @@ export default function SellerDashboard() {
       try {
         setLoadingStats(true);
 
-        const { data: products, error } = await supabase
+        // 1) Load products to compute listed and low-stock counts
+        const { data: products, error: prodErr } = await supabase
           .from("products")
-          .select("id, status, seller_id, stock_qty, inventory_items(quantity_on_hand)")
+          .select("id, name, status, seller_id, stock_qty, inventory_items(quantity_on_hand)")
           .eq("seller_id", authUser.id);
 
-        if (error) throw error;
+        if (prodErr) throw prodErr;
 
         const list = products || [];
         const activeProducts = list.filter((p) => p.status !== "archived");
@@ -399,10 +400,72 @@ export default function SellerDashboard() {
 
         const lowStockItems = lowStock.length;
 
+        // 2) Load orders + order_items to compute total sales and active orders
+        let totalSales = 0;
+        let activeOrders = 0;
+
+        try {
+          const { data: itemRows, error: itemsErr } = await supabase
+            .from("order_items")
+            .select("order_id, qty, unit_price")
+            .eq("seller_id", authUser.id);
+
+          if (!itemsErr && itemRows && itemRows.length) {
+            const orderIds = Array.from(
+              new Set(
+                itemRows
+                  .map((r) => r.order_id)
+                  .filter((id) => !!id),
+              ),
+            );
+
+            let ordersById = {};
+            if (orderIds.length) {
+              const { data: orderRows, error: ordersErr } = await supabase
+                .from("orders")
+                .select("id, status, payment_status")
+                .in("id", orderIds);
+
+              if (!ordersErr && orderRows) {
+                orderRows.forEach((o) => {
+                  if (!o?.id) return;
+                  ordersById[o.id] = o;
+                });
+              }
+            }
+
+            const activeOrderIds = new Set();
+
+            itemRows.forEach((row) => {
+              const order = row?.order_id ? ordersById[row.order_id] : null;
+              if (!order) return;
+
+              const paymentStatus = (order.payment_status || "").toLowerCase();
+              const orderStatus = (order.status || "").toLowerCase();
+
+              // Count sales only for paid orders
+              if (paymentStatus === "paid") {
+                const qty = Number(row.qty || 0) || 0;
+                const price = Number(row.unit_price || 0) || 0;
+                totalSales += qty * price;
+              }
+
+              // Active orders: pending / processing / shipped
+              if (["pending", "processing", "shipped"].includes(orderStatus)) {
+                activeOrderIds.add(row.order_id);
+              }
+            });
+
+            activeOrders = activeOrderIds.size;
+          }
+        } catch (innerErr) {
+          console.error("Failed to compute seller sales stats", innerErr);
+        }
+
         if (!cancelled) {
           setStats({
-            totalSales: 0,
-            activeOrders: 0,
+            totalSales,
+            activeOrders,
             productsListed,
             lowStockItems,
           });

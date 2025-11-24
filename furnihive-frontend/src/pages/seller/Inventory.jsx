@@ -97,6 +97,34 @@ export default function Inventory() {
     return { total, active, low, oos };
   }, [items]);
 
+  const toggleActive = async (id, currentActive) => {
+    if (!authUser?.id) return;
+    try {
+      const newStatus = currentActive ? "inactive" : "active";
+      const { error: statusErr } = await supabase
+        .from("products")
+        .update({ status: newStatus })
+        .eq("id", id)
+        .eq("seller_id", authUser.id);
+      if (statusErr) throw statusErr;
+
+      setItems((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                active: !currentActive,
+              }
+            : p,
+        ),
+      );
+      toast.success(newStatus === "active" ? "Product activated." : "Product deactivated.");
+    } catch (e) {
+      console.error("Toggle product status failed", e);
+      toast.error(e?.message || "Failed to update product status.");
+    }
+  };
+
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     return items.filter((p) => {
@@ -502,6 +530,14 @@ export default function Inventory() {
                   </button>
                   {menu === p.id && (
                     <Menu onClose={() => setMenu(null)}>
+                      <MenuItem
+                        onClick={async () => {
+                          setMenu(null);
+                          await toggleActive(p.id, p.active);
+                        }}
+                      >
+                        {p.active ? "Deactivate" : "Activate"}
+                      </MenuItem>
                       <MenuItem onClick={() => { setEdit(p); setMenu(null); }}>
                         Edit product
                       </MenuItem>
@@ -525,7 +561,18 @@ export default function Inventory() {
       {/* View details modal */}
       {view && (
         <Modal onClose={() => setView(null)} maxWidth="880px">
-          <ViewProductDetails view={view} onClose={() => setView(null)} onEdit={(v) => { setEdit(v); setView(null); }} />
+          <ViewProductDetails
+            view={view}
+            onClose={() => setView(null)}
+            onEdit={(v) => {
+              setEdit(v);
+              setView(null);
+            }}
+            onToggleActive={async () => {
+              await toggleActive(view.id, view.active);
+              setView((prev) => (prev ? { ...prev, active: !prev.active } : prev));
+            }}
+          />
         </Modal>
       )}
 
@@ -580,7 +627,7 @@ export default function Inventory() {
   );
 }
 
-function ViewProductDetails({ view, onClose, onEdit }) {
+function ViewProductDetails({ view, onClose, onEdit, onToggleActive }) {
   const [mainIndex, setMainIndex] = useState(0);
   const images = view.images && view.images.length ? view.images : (view.image ? [view.image] : []);
   const mainImage = images[mainIndex] || images[0] || "";
@@ -677,6 +724,12 @@ function ViewProductDetails({ view, onClose, onEdit }) {
           onClick={onClose}
         >
           Close
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-amber)] px-4 py-2 text-sm hover:bg-[var(--cream-50)]"
+          onClick={onToggleActive}
+        >
+          {view.active ? "Deactivate" : "Activate"}
         </button>
         <button
           className="rounded-lg bg-[var(--orange-600)] text-white px-4 py-2 text-sm hover:brightness-95"

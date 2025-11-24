@@ -221,25 +221,46 @@ export function ProfileScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <View style={styles.card}>
-          <Text style={styles.label}>Login</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
+          <View style={styles.loginHeader}>
+            <View style={styles.loginLogoCircle}>
+              <Text style={styles.loginLogoText}>F</Text>
+            </View>
+            <Text style={styles.loginTitle}>FurniHive</Text>
+          </View>
+
+          <View style={styles.loginFieldGroup}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+            />
+          </View>
+
+          <View style={styles.loginFieldGroup}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your password"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
+          </View>
+
           <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
             <Text style={styles.buttonText}>{loading ? "Logging in..." : "Login"}</Text>
           </TouchableOpacity>
+
+          <View style={styles.loginSignupRow}>
+            <Text style={styles.loginSignupText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => router.push({ pathname: "/profile-signup" })}>
+              <Text style={styles.loginSignupLink}>Sign up</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -428,7 +449,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fefce8",
-    paddingTop: 8,
+    paddingTop: 40,
     paddingHorizontal: 16,
   },
   headerRow: {
@@ -452,6 +473,54 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#422006",
     marginBottom: 0,
+  },
+  loginHeader: {
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  loginLogoCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: "#ea580c",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  loginLogoText: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  loginTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#422006",
+  },
+  loginSubtitle: {
+    marginTop: 2,
+    fontSize: 13,
+    color: "#ea580c",
+  },
+  loginFieldGroup: {
+    width: "100%",
+    marginTop: 8,
+    gap: 4,
+  },
+  loginSignupRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loginSignupText: {
+    fontSize: 12,
+    color: "#6b7280",
+  },
+  loginSignupLink: {
+    fontSize: 12,
+    color: "#ea580c",
+    fontWeight: "600",
   },
   row: {
     flexDirection: "row",
