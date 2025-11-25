@@ -24,7 +24,9 @@ export default function Cart() {
       (s, i) => s + ((i.oldPrice || i.price) - (i.price || 0)) * (i.qty || 1),
       0
     );
-    const shipping = subtotal >= 25000 || selectedItems.length === 0 ? 0 : 500;
+    // Shipping is now fully handled in Checkout via Lalamove.
+    // In the cart summary we always show shipping as 0 / FREE.
+    const shipping = 0;
     return { subtotal, discounts, shipping, total: subtotal + shipping };
   }, [items, selected]);
 
@@ -210,12 +212,6 @@ export default function Cart() {
               <span>Product Discounts</span>
               <span>−{peso(totals.discounts)}</span>
             </div>
-            {selected.length > 0 && totals.shipping === 0 && (
-              <div className="flex justify-between">
-                <span>Shipping Fee</span>
-                <span>FREE</span>
-              </div>
-            )}
             <div className="my-2 h-px bg-[var(--line-amber)]/60" />
             <div className="flex justify-between font-semibold text-[var(--brown-700)]">
               <span>Total</span>
