@@ -102,7 +102,7 @@ export default function UserNavbar() {
   const onSearchKey = (e) => {
     if (e.key === "Enter") {
       const q = e.currentTarget.value.trim();
-      navigate(q ? `/shop?query=${encodeURIComponent(q)}` : "/shop");
+      navigate(q ? `/shop?q=${encodeURIComponent(q)}` : "/shop");
     }
   };
 

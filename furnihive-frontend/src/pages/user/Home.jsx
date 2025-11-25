@@ -7,6 +7,7 @@ import { supabase } from "../../lib/supabaseClient";
 
 export default function Home() {
   const navigate = useNavigate();
+  const [search, setSearch] = useState("");
   const [catCards, setCatCards] = useState([]);
   const [featProducts, setFeatProducts] = useState([]);
   const [loadingCats, setLoadingCats] = useState(false);
@@ -121,6 +122,17 @@ export default function Home() {
       cancelled = true;
     };
   }, []);
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    const term = (search || "").trim();
+    if (!term) {
+      navigate("/shop");
+      return;
+    }
+    const qp = new URLSearchParams({ q: term }).toString();
+    navigate(`/shop?${qp}`);
+  };
 
   // Load hero slideshow items via hero_rank
   useEffect(() => {
@@ -357,9 +369,21 @@ export default function Home() {
               Discover thousands of furniture pieces from trusted Filipino retailers.
               From modern designs to classic styles, find everything you need.
             </p>
-            <div className="mt-4 flex items-center gap-2">
-              <Button onClick={() => navigate("/shop")}>Shop Now</Button>
-            </div>
+            <form
+              onSubmit={handleSearchSubmit}
+              className="mt-4 flex flex-col sm:flex-row gap-2 items-stretch sm:items-center max-w-xl"
+            >
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search for furniture, brands, or categories..."
+                className="flex-1 rounded-full border border-[var(--line-amber)] px-4 py-2 text-sm outline-none focus:ring-1 focus:ring-[var(--orange-600)]"
+              />
+              <Button type="submit" className="whitespace-nowrap px-5">
+                Search
+              </Button>
+            </form>
           </div>
 
           <div className="rounded-xl overflow-hidden border border-[var(--line-amber)] relative bg-[var(--cream-50)]">

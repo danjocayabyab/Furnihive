@@ -230,6 +230,8 @@ export default function Shop() {
   const products = useMemo(() => remoteProducts, [remoteProducts]);
 
   const filtered = useMemo(() => {
+    const rawQ = searchParams.get("q") || searchParams.get("query") || "";
+    const q = rawQ.trim().toLowerCase();
     let list = products.filter((p) => {
       const status = (p.status || "").toLowerCase();
       const isVisibleStatus =
@@ -238,7 +240,10 @@ export default function Shop() {
         isVisibleStatus &&
         p.price <= priceMax &&
         (!inStockOnly || !p.outOfStock) &&
-        (checkedCats.length === 0 || checkedCats.includes(p.category))
+        (checkedCats.length === 0 || checkedCats.includes(p.category)) &&
+        (!q ||
+          (p.title || "").toLowerCase().includes(q) ||
+          (p.category || "").toLowerCase().includes(q))
       );
     });
 
@@ -261,7 +266,7 @@ export default function Shop() {
     if (sort === "priceLow") list = [...list].sort((a, b) => a.price - b.price);
     if (sort === "priceHigh") list = [...list].sort((a, b) => b.price - a.price);
     return list;
-  }, [products, priceMax, inStockOnly, checkedCats, sort]);
+  }, [products, priceMax, inStockOnly, checkedCats, sort, searchParams]);
 
   const toggleCat = (c) =>
     setCheckedCats((prev) =>
