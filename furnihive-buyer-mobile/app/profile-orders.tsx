@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Linking } from "react-native";
 import { useRouter } from "expo-router";
 import { supabase } from "@/src/lib/supabaseClient";
 import { useAuth } from "@/src/context/AuthContext";
@@ -10,6 +10,8 @@ interface OrderRow {
   total: number;
   status: string | null;
   title: string;
+  trackingId?: string | null;
+  trackingUrl?: string | null;
 }
 
 export default function MyOrdersRoute() {
@@ -20,7 +22,8 @@ export default function MyOrdersRoute() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!user?.id) return;
+    const userId = user?.id;
+    if (!userId) return;
     let cancelled = false;
     async function load() {
       setLoading(true);
@@ -28,8 +31,8 @@ export default function MyOrdersRoute() {
       try {
         const { data, error: err } = await supabase
           .from("orders")
-          .select("id, created_at, total_amount, summary_title, status")
-          .eq("user_id", user.id)
+          .select("id, created_at, total_amount, summary_title, status, lalamove_order_id, lalamove_share_link")
+          .eq("user_id", userId)
           .order("created_at", { ascending: false });
         if (err || !data) {
           if (!cancelled) {
@@ -49,12 +52,16 @@ export default function MyOrdersRoute() {
             else if (s.includes("pend")) normalized = "Pending";
             else normalized = raw;
           }
+          const trackingId = o.lalamove_order_id || null;
+          const trackingUrl = o.lalamove_share_link || null;
           return {
             id: o.id,
             date: (o.created_at || "").slice(0, 10),
             total: Number(o.total_amount || 0),
             status: normalized,
             title: (o.summary_title as string | null) || "Order",
+            trackingId,
+            trackingUrl,
           };
         });
         if (!cancelled) setOrders(mapped);
@@ -114,6 +121,25 @@ export default function MyOrdersRoute() {
                 <Text style={styles.orderMeta}>
                   {item.date} • ₱{item.total.toLocaleString()}
                 </Text>
+                {item.trackingId && (
+                  <View style={styles.trackingRow}>
+                    <Text style={styles.trackingText}>Tracking: {item.trackingId}</Text>
+                    {item.trackingUrl ? (
+                      <TouchableOpacity
+                        style={styles.trackingButton}
+                        onPress={async () => {
+                          try {
+                            await Linking.openURL(item.trackingUrl!);
+                          } catch {
+                            // best-effort; ignore failures
+                          }
+                        }}
+                      >
+                        <Text style={styles.trackingButtonText}>Track on Lalamove</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                )}
               </View>
               {item.status && (
                 <View
@@ -201,6 +227,30 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: "#166534",
+  },
+  trackingRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  trackingText: {
+    fontSize: 11,
+    color: "#4b5563",
+  },
+  trackingButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#facc6b",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: "#fffbeb",
+  },
+  trackingButtonText: {
+    fontSize: 11,
+    color: "#ea580c",
+    fontWeight: "600",
   },
   orderBadgeDelivered: {
     backgroundColor: "#dcfce7",
