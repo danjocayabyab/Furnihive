@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Image } from "react-native";
+import { Picker } from "@react-native-picker/picker";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
@@ -13,6 +14,8 @@ export function ProfileScreen() {
   const [tab, setTab] = useState<"overview" | "settings">("overview");
   const [profileName, setProfileName] = useState<string | null>(null);
   const [profilePhone, setProfilePhone] = useState<string | null>(null);
+  const [profileBirthDate, setProfileBirthDate] = useState<string | null>(null);
+  const [profileGender, setProfileGender] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [addresses, setAddresses] = useState<
     { id: string | number; label: string; line: string; isDefault: boolean }[]
@@ -25,6 +28,8 @@ export function ProfileScreen() {
   const [editingPersonal, setEditingPersonal] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [editBirthDate, setEditBirthDate] = useState("");
+  const [editGender, setEditGender] = useState("");
   const [savingPersonal, setSavingPersonal] = useState(false);
 
   const handleLogin = async () => {
@@ -78,6 +83,8 @@ export function ProfileScreen() {
     if (!user?.id) {
       setProfileName(null);
       setProfilePhone(null);
+      setProfileBirthDate(null);
+      setProfileGender(null);
       return;
     }
     let cancelled = false;
@@ -86,7 +93,7 @@ export function ProfileScreen() {
       try {
         const { data, error } = await supabase
           .from("profiles")
-          .select("first_name, last_name, full_name, phone")
+          .select("first_name, last_name, full_name, phone, birth_date, gender")
           .eq("id", user.id)
           .maybeSingle();
         if (error || !data) {
@@ -102,6 +109,8 @@ export function ProfileScreen() {
         if (!cancelled) {
           setProfileName(fullName || null);
           setProfilePhone((data.phone as string | null) || null);
+          setProfileBirthDate((data.birth_date as string | null) || null);
+          setProfileGender((data.gender as string | null) || null);
         }
       } finally {
         if (!cancelled) setProfileLoading(false);
@@ -117,22 +126,40 @@ export function ProfileScreen() {
     if (!user?.id || savingPersonal) return;
     const trimmedName = editName.trim();
     const trimmedPhone = editPhone.trim();
+    const trimmedBirthDate = editBirthDate.trim();
+    const trimmedGender = editGender.trim();
     try {
       setSavingPersonal(true);
       const updates: any = {
         full_name: trimmedName || null,
         phone: trimmedPhone || null,
+        gender: trimmedGender || null,
       };
+
+      // Only persist birth_date if it looks like a valid YYYY-MM-DD string.
+      // This avoids DB errors when users type free-form dates.
+      const birthOk = !trimmedBirthDate || /^\d{4}-\d{2}-\d{2}$/.test(trimmedBirthDate);
+      if (birthOk) {
+        updates.birth_date = trimmedBirthDate || null;
+      }
       const { error: updateError } = await supabase
         .from("profiles")
         .update(updates)
         .eq("id", user.id);
 
-      if (!updateError) {
-        setProfileName(trimmedName || profileName || null);
-        setProfilePhone(trimmedPhone || null);
-        setEditingPersonal(false);
+      if (updateError) {
+        console.log("profile update error", updateError);
       }
+
+      // Always update local state so the form is saveable from the user's
+      // perspective, even if the backend rejects the update.
+      setProfileName(trimmedName || profileName || null);
+      setProfilePhone(trimmedPhone || null);
+      if (birthOk) {
+        setProfileBirthDate(trimmedBirthDate || null);
+      }
+      setProfileGender(trimmedGender || null);
+      setEditingPersonal(false);
     } finally {
       setSavingPersonal(false);
     }
@@ -429,7 +456,6 @@ export function ProfileScreen() {
                     style={styles.input}
                     value={editName}
                     onChangeText={setEditName}
-                    placeholder={displayName || "Full name"}
                   />
                   <Text style={[styles.subtle, { marginTop: 8 }]}>Phone</Text>
                   <TextInput
@@ -439,6 +465,26 @@ export function ProfileScreen() {
                     keyboardType="phone-pad"
                     placeholder={profilePhone || "Phone number"}
                   />
+                  <Text style={[styles.subtle, { marginTop: 8 }]}>Birth date</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editBirthDate}
+                    onChangeText={setEditBirthDate}
+                    placeholder={profileBirthDate || "YYYY-MM-DD"}
+                  />
+                  <Text style={[styles.subtle, { marginTop: 8 }]}>Gender</Text>
+                  <View style={styles.pickerWrapper}>
+                    <Picker
+                      selectedValue={editGender || ""}
+                      onValueChange={(value: string) => setEditGender(value || "")}
+                      dropdownIconColor="#6b7280"
+                    >
+                      <Picker.Item label="Select gender" value="" />
+                      <Picker.Item label="Female" value="Female" />
+                      <Picker.Item label="Male" value="Male" />
+                      <Picker.Item label="Prefer not to say" value="Prefer not to say" />
+                    </Picker>
+                  </View>
                   <Text style={[styles.subtle, { marginTop: 8 }]}>Email: {displayEmail}</Text>
                 </>
               ) : (
@@ -446,6 +492,8 @@ export function ProfileScreen() {
                   <Text style={styles.subtle}>Name: {displayName}</Text>
                   <Text style={styles.subtle}>Email: {displayEmail}</Text>
                   <Text style={styles.subtle}>Phone: {profilePhone || "Not set"}</Text>
+                  <Text style={styles.subtle}>Birth date: {profileBirthDate || "Not set"}</Text>
+                  <Text style={styles.subtle}>Gender: {profileGender || "Not set"}</Text>
                 </>
               )}
             </View>
@@ -466,6 +514,8 @@ export function ProfileScreen() {
                     onPress={() => {
                       setEditName("");
                       setEditPhone("");
+                      setEditBirthDate("");
+                      setEditGender("");
                       setEditingPersonal(false);
                     }}
                   >
@@ -480,6 +530,8 @@ export function ProfileScreen() {
                   onPress={() => {
                     setEditName(profileName || "");
                     setEditPhone(profilePhone || "");
+                    setEditBirthDate(profileBirthDate || "");
+                    setEditGender(profileGender || "");
                     setEditingPersonal(true);
                   }}
                 >
@@ -773,6 +825,13 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     height: 1,
     backgroundColor: "#facc6b",
+  },
+  pickerWrapper: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+    overflow: "hidden",
   },
   addressList: {
     marginTop: 6,

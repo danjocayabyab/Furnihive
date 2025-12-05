@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Linking } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useCart } from "@/src/context/CartContext";
@@ -15,13 +15,18 @@ export default function CheckoutRoute() {
   const [buyerName, setBuyerName] = useState<string | null>(null);
   const [buyerAddress, setBuyerAddress] = useState<string | null>(null);
   const [addresses, setAddresses] = useState<
-    { id: string | number; label: string; line: string; isDefault: boolean }[]
+    { id: string | number; label: string; line: string; fullAddress?: string; isDefault: boolean }[]
   >([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | number | null>(null);
   const [payMethod, setPayMethod] = useState<"cod" | "online">("cod");
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [selectedVoucherId, setSelectedVoucherId] = useState<string | number | null>(null);
   const [voucherOpen, setVoucherOpen] = useState(false);
+  const [lalamoveQuote, setLalamoveQuote] = useState<any | null>(null);
+  const [lalamoveLoading, setLalamoveLoading] = useState(false);
+  const [lalamoveError, setLalamoveError] = useState("");
+  const [geo, setGeo] = useState<{ lat: number; lng: number; formatted?: string } | null>(null);
+  const [storePickup, setStorePickup] = useState<{ lat: number; lng: number; address: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,17 +63,23 @@ export default function CheckoutRoute() {
           .order("created_at", { ascending: true });
 
         if (!cancelled) {
-          const normalized = (addrRows || []).map((r: any) => ({
-            id: r.id,
-            label: r.label || "Home Address",
-            line: [r.line1, r.city, r.province].filter(Boolean).join(", "),
-            isDefault: !!r.is_default,
-          }));
+          const normalized = (addrRows || []).map((r: any) => {
+            const cityProv = [r.city, r.province].filter(Boolean).join(", ");
+            const withPostal = [cityProv, r.postal_code].filter(Boolean).join(" ");
+            const full = [r.line1, withPostal].filter(Boolean).join(", ");
+            return {
+              id: r.id,
+              label: r.label || "Home Address",
+              line: [r.line1, r.city, r.province].filter(Boolean).join(", "),
+              fullAddress: full || undefined,
+              isDefault: !!r.is_default,
+            };
+          });
           setAddresses(normalized);
           const selected = normalized.find((a) => a.isDefault) || normalized[0];
           if (selected) {
             setSelectedAddressId(selected.id);
-            setBuyerAddress(selected.line || null);
+            setBuyerAddress((selected.fullAddress as string | null) || selected.line || null);
           } else {
             setSelectedAddressId(null);
             setBuyerAddress(null);
@@ -126,14 +137,34 @@ export default function CheckoutRoute() {
   // Derive seller_id for this checkout (single-seller assumption like web)
   const checkoutSellerId = items.length ? (items[0] as any).seller_id || null : null;
 
+  // Total cart weight in kilograms (from product.weight_kg)
+  const totalWeightKg = useMemo(
+    () => items.reduce((s, it) => s + (Number((it as any).weight_kg) || 0) * (it.qty || 1), 0),
+    [items]
+  );
+
+  const lalamoveConfig = useMemo(() => {
+    let serviceType = "MOTORCYCLE";
+    let itemWeight = "LESS_THAN_3KG";
+
+    if (totalWeightKg > 3 && totalWeightKg <= 20) {
+      serviceType = "VAN";
+      itemWeight = "BETWEEN_3_AND_20KG";
+    } else if (totalWeightKg > 20) {
+      serviceType = "3000KG_TRUCK";
+      itemWeight = "MORE_THAN_20KG";
+    }
+
+    return { serviceType, itemWeight };
+  }, [totalWeightKg]);
+
   const applicableVouchers = vouchers.filter((v) => {
     if (!checkoutSellerId) return true;
     return v.seller_id === checkoutSellerId;
   });
 
   const subtotal = items.reduce((n, it) => n + (it.price || 0) * (it.qty || 1), 0);
-
-  // VAT only; shipping is not charged in this mobile flow
+  // VAT
   const vat = Math.round(subtotal * 0.12);
 
   let promoDiscount = 0;
@@ -152,7 +183,150 @@ export default function CheckoutRoute() {
     }
   }
 
-  const finalTotal = Math.max(0, subtotal + vat - promoDiscount);
+  // Lalamove dynamic shipping fee (₱)
+  const shipping = lalamoveQuote?.amount != null ? Number(lalamoveQuote.amount) : 0;
+
+  const finalTotal = Math.max(0, subtotal + vat + shipping - promoDiscount);
+
+  const LALAMOVE_PICKUP = useMemo(
+    () =>
+      storePickup && storePickup.lat && storePickup.lng
+        ? storePickup
+        : {
+            lat: 13.932713984764295,
+            lng: 121.6134010614894,
+            address: "Store pickup location",
+          },
+    [storePickup]
+  );
+
+  const buildDropoffAddress = () => {
+    if (geo?.formatted) return geo.formatted;
+    if (buyerAddress) return buyerAddress;
+    const selected = addresses.find((a) => a.id === selectedAddressId) || null;
+    return (selected?.fullAddress as string | null) || selected?.line || null;
+  };
+
+  const geocodeAddress = async () => {
+    try {
+      setLalamoveError("");
+      const address = buildDropoffAddress();
+      if (!address) {
+        setLalamoveError("Please select a delivery address before continuing.");
+        return null;
+      }
+      const { data, error } = await supabase.functions.invoke("geocode-address", {
+        body: { address },
+      });
+      if (error) {
+        setGeo(null);
+        setLalamoveError(error.message || "Failed to locate address.");
+        return null;
+      }
+      if (!data?.lat || !data?.lng) {
+        setGeo(null);
+        setLalamoveError("We couldn't find that address. Please double-check and try again.");
+        return null;
+      }
+      setGeo(data);
+      return data as { lat: number; lng: number; formatted?: string };
+    } catch (e: any) {
+      setGeo(null);
+      setLalamoveError(e?.message || "Unable to locate address.");
+      return null;
+    }
+  };
+
+  const fetchLalamoveQuote = async (dropoff: { lat: number; lng: number; address: string | null }) => {
+    try {
+      setLalamoveLoading(true);
+      setLalamoveError("");
+      const { data, error } = await supabase.functions.invoke("lalamove-quote", {
+        body: {
+          pickup: LALAMOVE_PICKUP,
+          dropoff,
+          serviceType: lalamoveConfig.serviceType,
+          itemWeight: lalamoveConfig.itemWeight,
+        },
+      });
+      if (error) {
+        setLalamoveQuote(null);
+        setLalamoveError(error.message || "Failed to get Lalamove fee.");
+        return null;
+      }
+      setLalamoveQuote(data || null);
+      return data as any;
+    } catch (e: any) {
+      setLalamoveQuote(null);
+      setLalamoveError(e?.message || "Unable to get Lalamove fee.");
+      return null;
+    } finally {
+      setLalamoveLoading(false);
+    }
+  };
+
+  // Load seller store pickup coordinates, same as web
+  useEffect(() => {
+    if (!checkoutSellerId) {
+      setStorePickup(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("stores")
+          .select("lat, lng, address")
+          .eq("owner_id", checkoutSellerId)
+          .maybeSingle();
+        if (cancelled || error || !data) {
+          if (!cancelled) setStorePickup(null);
+          return;
+        }
+        if (data.lat && data.lng) {
+          setStorePickup({
+            lat: Number(data.lat),
+            lng: Number(data.lng),
+            address: data.address || "Store pickup location",
+          });
+        } else {
+          setStorePickup(null);
+        }
+      } catch {
+        if (!cancelled) setStorePickup(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [checkoutSellerId]);
+
+  // Whenever buyer address or seller changes, refresh Lalamove quote best-effort
+  useEffect(() => {
+    if (!checkoutSellerId || !buyerAddress) {
+      setLalamoveQuote(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const geoResult = await geocodeAddress();
+      if (!geoResult || cancelled) return;
+      const dropoff = {
+        lat: geoResult.lat,
+        lng: geoResult.lng,
+        address: geoResult.formatted || buildDropoffAddress(),
+      };
+      if (cancelled) return;
+      await fetchLalamoveQuote(dropoff);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [checkoutSellerId, buyerAddress]);
 
   const handlePlaceOrder = async () => {
     if (!items.length || placing) return;
@@ -163,6 +337,44 @@ export default function CheckoutRoute() {
     const itemCount = items.reduce((n, it) => n + (it.qty || 1), 0);
 
     try {
+      // Ensure we have geocoded dropoff + a Lalamove quote before placing order
+      let geoSource = geo;
+      if (!geoSource && buyerAddress && checkoutSellerId) {
+        const g = await geocodeAddress();
+        if (!g) {
+          setPlacing(false);
+          return;
+        }
+        geoSource = g;
+      }
+
+      let quoteSource = lalamoveQuote;
+      if (!quoteSource && geoSource && checkoutSellerId) {
+        const dropoff = {
+          lat: geoSource.lat,
+          lng: geoSource.lng,
+          address: geoSource.formatted || buildDropoffAddress(),
+        };
+        const q = await fetchLalamoveQuote(dropoff);
+        if (!q) {
+          setPlacing(false);
+          return;
+        }
+        quoteSource = q;
+      }
+
+      const dropoffLat = geoSource?.lat ?? null;
+      const dropoffLng = geoSource?.lng ?? null;
+      const dropoffAddress = geoSource?.formatted || buildDropoffAddress() || null;
+
+      const lalamoveQuotationId = quoteSource?.raw?.quotationId || null;
+      const lalamoveSenderStopId = Array.isArray(quoteSource?.raw?.stops)
+        ? quoteSource.raw.stops[0]?.stopId || null
+        : null;
+      const lalamoveRecipientStopId = Array.isArray(quoteSource?.raw?.stops)
+        ? quoteSource.raw.stops[1]?.stopId || null
+        : null;
+
       const { data: created, error: orderErr } = await supabase
         .from("orders")
         .insert({
@@ -173,9 +385,12 @@ export default function CheckoutRoute() {
           summary_image: first.image || null,
           seller_display: null,
           color: first.color || null,
-          dropoff_lat: null,
-          dropoff_lng: null,
-          dropoff_address: null,
+          dropoff_lat: dropoffLat,
+          dropoff_lng: dropoffLng,
+          dropoff_address: dropoffAddress,
+          lalamove_quotation_id: lalamoveQuotationId,
+          lalamove_sender_stop_id: lalamoveSenderStopId,
+          lalamove_recipient_stop_id: lalamoveRecipientStopId,
           status: "Pending",
         })
         .select("id")
@@ -198,7 +413,11 @@ export default function CheckoutRoute() {
           image: it.image || null,
           qty: it.qty || 1,
           unit_price: Number(it.price || 0),
-          shipping_fee: 0,
+          // Mobile currently charges Lalamove as a single fee; distribute equally
+          shipping_fee:
+            items.filter((x) => x.seller_id).length > 0
+              ? shipping / items.filter((x) => x.seller_id).length
+              : 0,
           buyer_name: buyerName,
           buyer_address: buyerAddress,
           payment_method: payMethod,
@@ -479,6 +698,14 @@ export default function CheckoutRoute() {
             <Text style={styles.summaryDiscount}>- ₱{promoDiscount.toLocaleString()}</Text>
           </View>
         )}
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Delivery (Lalamove)</Text>
+          {lalamoveLoading ? (
+            <Text style={styles.summaryValue}>Calculating...</Text>
+          ) : (
+            <Text style={styles.summaryValue}>₱{shipping.toLocaleString()}</Text>
+          )}
+        </View>
         <View style={[styles.summaryRow, { marginTop: 4 }] }>
           <Text style={[styles.summaryLabel, { fontWeight: "700" }] }>
             Total
@@ -487,6 +714,7 @@ export default function CheckoutRoute() {
             ₱{finalTotal.toLocaleString()}
           </Text>
         </View>
+        {lalamoveError ? <Text style={styles.error}>{lalamoveError}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <TouchableOpacity style={styles.placeOrderButton} onPress={handlePlaceOrder}>
           {placing ? (
