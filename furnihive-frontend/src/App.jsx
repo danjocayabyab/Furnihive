@@ -1,4 +1,6 @@
 // src/App.jsx
+//qweqworyqwyroq
+
 import { Routes, Route, Navigate } from "react-router-dom";
 
 /* ---------- Auth Pages ---------- */
