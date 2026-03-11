@@ -1,5 +1,6 @@
 // src/App.jsx
 // pa testing land din si danjo
+//testing
 import { Routes, Route, Navigate } from "react-router-dom";
 
 /* ---------- Auth Pages ---------- */
