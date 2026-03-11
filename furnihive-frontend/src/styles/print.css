@@ -1,0 +1,112 @@
+/* Notification slide-in animation */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out forwards;
+}
+
+/* Print-friendly styles for analytics reports */
+@media print {
+  body {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+    background: white !important;
+  }
+
+  /* Hide non-printable elements */
+  button,
+  .no-print,
+  input,
+  select {
+    display: none !important;
+  }
+
+  /* Ensure report content is visible */
+  #report-content,
+  #admin-report-content {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  /* Optimize colors for printing */
+  .bg-white {
+    background-color: white !important;
+    print-color-adjust: exact !important;
+  }
+
+  .border-gray-200 {
+    border-color: #e5e7eb !important;
+  }
+
+  .text-gray-900 {
+    color: #111827 !important;
+  }
+
+  .text-gray-600 {
+    color: #4b5563 !important;
+  }
+
+  /* Ensure proper page breaks */
+  section {
+    page-break-inside: avoid;
+  }
+
+  .grid {
+    page-break-inside: avoid;
+  }
+
+  /* Optimize text and spacing */
+  body {
+    font-size: 12pt;
+    line-height: 1.4;
+  }
+
+  h1, h2, h3 {
+    page-break-after: avoid;
+  }
+
+  /* Chart containers */
+  .recharts-wrapper {
+    page-break-inside: avoid;
+  }
+
+  /* Tables */
+  table {
+    page-break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+
+  /* Ensure proper margins */
+  @page {
+    margin: 1cm;
+    size: A4;
+  }
+
+  /* Hide scrollbars */
+  .overflow-auto,
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* Ensure all content is visible */
+  .max-h-72 {
+    max-height: none !important;
+    height: auto !important;
+  }
+}
