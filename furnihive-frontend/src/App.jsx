@@ -1,6 +1,7 @@
 // src/App.jsx
 //qweqworyqwyroq
 // pa testing land din si danjo
+// git testasdasd
 import { Routes, Route, Navigate } from "react-router-dom";
 
 /* ---------- Auth Pages ---------- */

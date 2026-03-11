@@ -5,7 +5,7 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { supabase } from "@/src/lib/supabaseClient";
-
+// git testasdasd
 export function ProfileScreen() {
   const router = useRouter();
   const { user, loading, error, login, logout } = useAuth();
