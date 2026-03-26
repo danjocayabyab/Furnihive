@@ -12,6 +12,7 @@ import PasswordInput from "../../components/ui/PasswordInput.jsx";
 import Button from "../../components/ui/Button.jsx";
 import LogoHex from "../../components/LogoHex.jsx";
 import { login } from "../../lib/auth.js";
+import { useAuth } from "../../components/contexts/AuthContext.jsx";
 
 const schema = z.object({
   email: z.string().email("Please enter a valid email."),
@@ -21,17 +22,54 @@ const schema = z.object({
 export default function Login() {
   const navigate = useNavigate();
   const [role, setRole] = useState("buyer");
+  const [showResend, setShowResend] = useState(false);
+  const [resendEmail, setResendEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { emailVerified, resendVerificationEmail } = useAuth();
 
   const { register, handleSubmit, formState: { errors } } =
     useForm({ resolver: zodResolver(schema), defaultValues: { email: "", password: "" } });
 
   const onSubmit = async (values) => {
     try {
+      setLoading(true);
       const { user } = await login({ ...values, roleHint: role });
+      
+      // Check if email is verified
+      if (!emailVerified) {
+        setShowResend(true);
+        setResendEmail(values.email);
+        toast.error("Please verify your email before logging in.");
+        return;
+      }
+      
       toast.success(`Welcome back, ${user.name}!`);
       navigate(user.role === "seller" ? "/seller" : "/home", { replace: true });
     } catch (e) {
-      toast.error(e?.message || "Login failed");
+      if (e?.message?.includes("Email not confirmed")) {
+        setShowResend(true);
+        setResendEmail(values.email);
+        toast.error("Please verify your email before logging in.");
+      } else {
+        toast.error(e?.message || "Login failed");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!resendEmail) return;
+    
+    try {
+      const { error } = await resendVerificationEmail();
+      if (error) {
+        toast.error(error.message || "Failed to resend verification email");
+      } else {
+        toast.success("Verification email sent! Please check your inbox.");
+      }
+    } catch (error) {
+      toast.error("Failed to resend verification email");
     }
   };
 
@@ -59,7 +97,24 @@ export default function Login() {
           {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>}
         </div>
 
-        <Button variant="gradient" className="w-full">Login</Button>
+        <Button variant="gradient" className="w-full" disabled={loading}>
+          {loading ? "Logging in..." : "Login"}
+        </Button>
+
+        {showResend && (
+          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-sm text-yellow-800 mb-2">
+              Email verification required. Check your inbox for the verification link.
+            </p>
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              className="text-sm text-[var(--orange-600)] hover:underline font-medium"
+            >
+              Resend verification email
+            </button>
+          </div>
+        )}
 
         <div className="text-center text-sm">
           Don’t have an account?{" "}
