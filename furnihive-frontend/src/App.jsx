@@ -6,6 +6,8 @@ import { Routes, Route, Navigate } from "react-router-dom";
 /* ---------- Auth Pages ---------- */
 import Login from "./pages/auth/Login.jsx";
 import Signup from "./pages/auth/Signup.jsx";
+import EmailVerificationPage from "./pages/auth/EmailVerificationPage.jsx";
+import VerificationSentPage from "./pages/auth/VerificationSentPage.jsx";
 
 /* ---------- User Layout + Pages ---------- */
 import UserLayout from "./layouts/UserLayout.jsx";
@@ -41,9 +43,10 @@ import AdminLogin from "./admin/AdminLogin";
 import { useAuth } from "./components/contexts/AuthContext.jsx";
 
 function RequireAuth({ children }) {
-  const { loading, user } = useAuth();
+  const { loading, user, emailVerified } = useAuth();
   if (loading) return <div className="p-8">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
+  if (!emailVerified) return <Navigate to="/verify-email/sent" replace />;
   return children;
 }
 
@@ -64,11 +67,15 @@ function LogoutRoute() {
 }
 
 function RequireRole({ role, children }) {
-  const { loading, user, profile, isAdmin } = useAuth();
+  const { loading, user, profile, isAdmin, emailVerified } = useAuth();
   if (loading) return <div className="p-8">Loading...</div>;
   if (!user) {
     // Admins go to admin login, others to user login
     return <Navigate to={role === "admin" ? "/admin/login" : "/login"} replace />;
+  }
+
+  if (!emailVerified) {
+    return <Navigate to="/verify-email/sent" replace />;
   }
 
   if (role === "admin") {
@@ -91,6 +98,8 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/logout" element={<LogoutRoute />} />
+      <Route path="/verify-email" element={<EmailVerificationPage />} />
+      <Route path="/verify-email/sent" element={<VerificationSentPage />} />
 
       {/* ---------- Buyer (User) Routes ---------- */}
       <Route element={<UserLayout />}>

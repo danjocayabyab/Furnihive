@@ -108,6 +108,9 @@ export async function signup(payload) {
   await delay(150);
   const { email, password, firstName, lastName } = payload;
   if (!email || !password) throw new Error("Missing email or password");
+  
+  console.log("Attempting signup with:", { email, firstName, lastName });
+  
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -119,27 +122,25 @@ export async function signup(payload) {
         store_name: payload.role === "seller" ? (payload.storeName || null) : null,
         phone: payload.role === "seller" ? (payload.phone || null) : null,
       },
+      emailRedirectTo: `${window.location.origin}/verify-email`,
     },
   });
-  if (error) throw new Error(error.message);
-  const u = data.user;
-  if (u) {
-    // Create or update profile with role and optional seller fields
-    const prof = {
-      id: u.id,
-      role: payload.role || "buyer",
-      first_name: firstName,
-      last_name: lastName,
-    };
-    if (payload.role === "seller") {
-      prof.store_name = payload.storeName || null;
-      prof.phone = payload.phone || null;
-    }
-    await supabase.from("profiles").upsert(prof, { onConflict: "id" });
+  
+  console.log("Supabase signup response:", { data, error });
+  
+  if (error) {
+    console.error("Signup error:", error);
+    throw new Error(error.message);
   }
-  // Some projects require email confirmation -> session may be null.
+  
+  console.log("Session created:", data.session);
+  console.log("Needs verification:", !data.session);
+  
+  // For now, skip profile creation to focus on email verification
+  // TODO: Fix profile creation after email verification is working
+  
   const name = `${payload.firstName ?? ""} ${payload.lastName ?? ""}`.trim() || payload.email;
-  const user = { id: u?.id || "", email: payload.email, name, role: payload.role || "buyer" };
+  const user = { id: data.user?.id || "", email: payload.email, name, role: payload.role || "buyer" };
   setUser(user);
-  return { user, session: data.session || null };
+  return { user, session: data.session || null, needsVerification: !data.session };
 }
