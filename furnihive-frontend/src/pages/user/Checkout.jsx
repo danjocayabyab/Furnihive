@@ -219,6 +219,34 @@ export default function Checkout() {
       formatted: geo?.formatted || buildFullAddress(),
     };
     setGeo(updated);
+
+    // Reverse geocode to fill address fields
+    try {
+      const { data, error } = await supabase.functions.invoke("reverse-geocode", {
+        body: { lat: latlng.lat, lng: latlng.lng },
+      });
+
+      if (!error && data) {
+        // Autofill address fields with reverse geocoded data
+        setShip((prev) => ({
+          ...prev,
+          street: data.street || prev.street,
+          barangay: data.barangay || prev.barangay,
+          city: data.city || prev.city,
+          province: data.province || prev.province,
+          zip: data.zip || prev.zip,
+        }));
+
+        // Update geo with formatted address
+        if (data.formatted) {
+          setGeo((g) => ({ ...g, formatted: data.formatted }));
+        }
+      }
+    } catch (e) {
+      // Silent fail - address fields won't update but coordinates are still saved
+      console.warn("Reverse geocoding failed:", e);
+    }
+
     await fetchLalamoveQuote({
       lat: updated.lat,
       lng: updated.lng,
