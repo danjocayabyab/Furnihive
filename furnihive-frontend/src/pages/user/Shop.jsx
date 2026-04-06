@@ -10,7 +10,7 @@ export default function Shop() {
   const [checkedCats, setCheckedCats] = useState([]);
   const [priceMax, setPriceMax] = useState(100000);
   const [inStockOnly, setInStockOnly] = useState(false);
-  const [sort, setSort] = useState("featured");
+  const [sort, setSort] = useState("newest");
   const [remoteProducts, setRemoteProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const CATS = ["Living Room", "Bedroom", "Dining", "Office"];
@@ -32,7 +32,7 @@ export default function Shop() {
       const { data, error } = await supabase
         .from("products")
         .select(
-          "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, weight_kg, created_at, featured_rank, categories(name)"
+          "id, seller_id, name, slug, description, category, category_id, status, base_price, sale_price, stock_qty, color, weight_kg, created_at, featured_rank, categories(name)"
         )
         .order("created_at", { ascending: false });
       let rows = data;
@@ -43,7 +43,7 @@ export default function Shop() {
         const retry = await supabase
           .from("products")
           .select(
-            "id, seller_id, name, slug, description, category, category_id, status, base_price, stock_qty, color, weight_kg, created_at, featured_rank"
+            "id, seller_id, name, slug, description, category, category_id, status, base_price, sale_price, stock_qty, color, weight_kg, created_at, featured_rank"
           )
           .order("created_at", { ascending: false });
         rows = retry.data;
@@ -52,28 +52,37 @@ export default function Shop() {
       if (!cancelled) {
         if (!err && Array.isArray(rows)) {
           // Step 1: base mapping
-          const base = rows.map((r, i) => ({
-            id: r.id,
-            seller_id: r.seller_id,
-            title: r.name || "Untitled",
-            price: Number(r.base_price ?? 0),
-            oldPrice: null,
-            image: "",
-            rating: 0,
-            reviews: 0,
-            stock_qty: typeof r.stock_qty === "number" ? r.stock_qty : null,
-            outOfStock:
-              (typeof r.stock_qty === "number" ? r.stock_qty <= 0 : false) ||
-              (r.status && r.status.toLowerCase() !== "active" && r.status.toLowerCase() !== "published"),
-            status: (r.status || "").toLowerCase(),
-            category: r.categories?.name || r.category || CATS[i % CATS.length],
-            category_id: r.category_id || null,
-            color: r.color || "",
-            weight_kg: r.weight_kg ?? null,
-            featured_rank: typeof r.featured_rank === "number" ? r.featured_rank : 0,
-            created_at: r.created_at || null,
-            seller: undefined,
-          }));
+          const base = rows.map((r, i) => {
+            // Debug: log the sale_price value for each product
+            console.log(`Product ${r.name}: base_price=${r.base_price}, sale_price=${r.sale_price}, sale_price type=${typeof r.sale_price}`);
+            
+            const hasSalePrice = typeof r.sale_price === "number" && r.sale_price > 0 && r.sale_price < r.base_price;
+            const finalPrice = hasSalePrice ? r.sale_price : r.base_price;
+            const originalPrice = hasSalePrice ? r.base_price : null;
+
+            return {
+              id: r.id,
+              seller_id: r.seller_id,
+              title: r.name || "Untitled",
+              price: Number(finalPrice ?? 0),
+              oldPrice: originalPrice ? Number(originalPrice) : null,
+              image: "",
+              rating: 0,
+              reviews: 0,
+              stock_qty: typeof r.stock_qty === "number" ? r.stock_qty : null,
+              outOfStock:
+                (typeof r.stock_qty === "number" ? r.stock_qty <= 0 : false) ||
+                (r.status && r.status.toLowerCase() !== "active" && r.status.toLowerCase() !== "published"),
+              status: (r.status || "").toLowerCase(),
+              category: r.categories?.name || r.category || CATS[i % CATS.length],
+              category_id: r.category_id || null,
+              color: r.color || "",
+              weight_kg: r.weight_kg ?? null,
+              featured_rank: typeof r.featured_rank === "number" ? r.featured_rank : 0,
+              created_at: r.created_at || null,
+              seller: undefined,
+            };
+          });
 
           // Step 2: aggregate real reviews per product (average rating + count)
           const productIds = base.map((p) => p.id);
@@ -213,6 +222,7 @@ export default function Shop() {
           }));
 
           setRemoteProducts(finalList);
+          console.log("Shop loaded products:", finalList.length, finalList.map(p => ({ id: p.id, title: p.title, status: p.status, price: p.price, oldPrice: p.oldPrice })));
         } else {
           if (err) console.warn("Shop products query failed:", err?.message);
           setRemoteProducts([]);
@@ -247,6 +257,14 @@ export default function Shop() {
       );
     });
 
+    if (sort === "newest") {
+      list = [...list].sort((a, b) => {
+        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return tb - ta; // newest first
+      });
+    }
+
     if (sort === "featured") {
       // Only show products explicitly marked as featured (featured_rank > 0)
       list = list.filter((p) => (typeof p.featured_rank === "number" ? p.featured_rank : 0) > 0);
@@ -277,7 +295,7 @@ export default function Shop() {
     setCheckedCats([]);
     setPriceMax(100000);
     setInStockOnly(false);
-    setSort("featured");
+    setSort("newest");
   };
 
   return (
@@ -308,6 +326,7 @@ export default function Shop() {
             onChange={(e) => setSort(e.target.value)}
             className="rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-sm"
           >
+            <option value="newest">Newest</option>
             <option value="featured">Featured</option>
             <option value="priceLow">Price: Low to High</option>
             <option value="priceHigh">Price: High to Low</option>

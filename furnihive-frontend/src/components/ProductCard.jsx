@@ -57,7 +57,13 @@ export default function ProductCard({ product }) {
       {/* Clickable image area */}
       <Link to={to} className="relative block">
         <img src={product.image} alt={product.title} className="h-44 w-full object-cover" />
-        {product.badge && (
+        {/* Discount badge */}
+        {product.oldPrice && product.oldPrice > product.price && (
+          <span className="absolute left-2 top-2 text-[11px] font-bold rounded-full bg-red-500 text-white px-2 py-1 shadow-md">
+            {Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}% OFF
+          </span>
+        )}
+        {product.badge && !product.oldPrice && (
           <span className="absolute left-2 top-2 text-[11px] font-medium rounded-full bg-white/90 px-2 py-1 border border-[var(--line-amber)] text-[var(--orange-600)]">
             {product.badge}
           </span>
@@ -83,7 +89,7 @@ export default function ProductCard({ product }) {
         </div>
 
         <div className="flex items-baseline gap-2">
-          <div className="font-bold text-[var(--brown-700)]">₱{Number(product.price).toLocaleString()}</div>
+          <div className="font-bold text-red-600">₱{Number(product.price).toLocaleString()}</div>
           {product.oldPrice && (
             <div className="text-xs text-gray-500 line-through">₱{Number(product.oldPrice).toLocaleString()}</div>
           )}
