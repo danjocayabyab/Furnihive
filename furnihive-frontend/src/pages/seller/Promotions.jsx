@@ -5,6 +5,54 @@ import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
 import toast from "react-hot-toast";
 
+// Notify all buyers about new promotion
+async function notifyBuyersAboutPromotion(promotion, sellerId, sellerName) {
+  try {
+    // Find ALL buyers (all users with role 'buyer')
+    const { data: buyers, error: buyersError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("role", "buyer");
+
+    if (buyersError) {
+      console.error("Error fetching buyers:", buyersError);
+      return;
+    }
+
+    const buyerIds = buyers?.map(b => b.id) || [];
+    
+    if (buyerIds.length === 0) {
+      console.log("No buyers to notify");
+      return;
+    }
+
+    const promoType = promotion.type === "voucher" ? "voucher" : "discount";
+    const discountText = promotion.discount_type === "fixed" 
+      ? `₱${promotion.discount_value} off`
+      : `${promotion.discount_value}% off`;
+
+    // Create notifications for each buyer
+    const notifications = buyerIds.map(buyerId => ({
+      user_id: buyerId,
+      type: "promotion",
+      title: `${sellerName} has a new ${promoType}!`,
+      message: `Use code ${promotion.code} to get ${discountText}. Min purchase: ₱${promotion.min_purchase || 0}`
+    }));
+
+    const { error: insertError } = await supabase
+      .from("notifications")
+      .insert(notifications);
+
+    if (insertError) {
+      console.error("Error creating promotion notifications:", insertError);
+    } else {
+      console.log(`Notified ${buyerIds.length} buyers about new promotion`);
+    }
+  } catch (err) {
+    console.error("Error in notifyBuyersAboutPromotion:", err);
+  }
+}
+
 export default function SellerPromotions() {
   const navigate = useNavigate();
   const { user: authUser } = useAuth();
@@ -13,9 +61,21 @@ export default function SellerPromotions() {
   const [promotions, setPromotions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingPromo, setEditingPromo] = useState(null);
+  const [sellerName, setSellerName] = useState("");
 
   useEffect(() => {
     if (!authUser?.id) return;
+
+    // Load seller name
+    const loadSellerName = async () => {
+      const { data } = await supabase
+        .from("sellers")
+        .select("business_name")
+        .eq("user_id", authUser.id)
+        .single();
+      setSellerName(data?.business_name || "A seller");
+    };
+    loadSellerName();
 
     let cancelled = false;
     const loadPromotions = async () => {
@@ -99,6 +159,9 @@ export default function SellerPromotions() {
         .single();
 
       if (error) throw error;
+
+      // Notify buyers with store name from payload
+      await notifyBuyersAboutPromotion(data, authUser.id, payload.storeName);
 
       setPromotions((prev) => [
         {
@@ -492,6 +555,7 @@ function CreatePromotionModal({ onClose, onCreate, onUpdate, initialPromo }) {
   );
   const [startDate, setStartDate] = useState(initialPromo?.rawStartDate || "");
   const [endDate, setEndDate] = useState(initialPromo?.rawEndDate || "");
+  const [storeName, setStoreName] = useState("");
 
   const handleGenerateCode = () => {
     const random = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -517,6 +581,7 @@ function CreatePromotionModal({ onClose, onCreate, onUpdate, initialPromo }) {
       usageLimit: usageLimit ? Number(usageLimit) : null,
       startDate,
       endDate,
+      storeName: storeName.trim() || "A seller",
     };
 
     if (initialPromo && onUpdate) {
@@ -569,6 +634,12 @@ function CreatePromotionModal({ onClose, onCreate, onUpdate, initialPromo }) {
               ))}
             </div>
           </div>
+
+          <Input
+            label="Store Name *"
+            value={storeName}
+            onChange={setStoreName}
+          />
 
           {/* Fields */}
           <Input

@@ -122,17 +122,38 @@ export function CartProvider({ children }) {
             )
             .eq("cart_id", cartId);
           if (itemsErr) throw itemsErr;
-          const mapped = (rows || []).map((r) => ({
-            id: r.product_id,
-            title: r.title,
-            price: Number(r.unit_price || 0),
-            oldPrice: Number(r.unit_price || 0),
-            image: r.image || "",
-            seller: r.seller_display || undefined,
-            color: r.color || undefined,
-            qty: r.qty || 1,
-            weight_kg: r.weight_kg || 0,
-          }));
+          
+          // Fetch actual product prices to get sale_price and base_price
+          const productIds = rows?.map(r => r.product_id).filter(Boolean) || [];
+          let productPrices = {};
+          if (productIds.length > 0) {
+            const { data: products } = await supabase
+              .from("products")
+              .select("id, sale_price, base_price")
+              .in("id", productIds);
+            productPrices = Object.fromEntries(
+              (products || []).map(p => [p.id, { sale_price: p.sale_price, base_price: p.base_price }])
+            );
+          }
+          
+          const mapped = (rows || []).map((r) => {
+            const prod = productPrices[r.product_id] || {};
+            const salePrice = prod.sale_price;
+            const basePrice = prod.base_price;
+            const price = Number(salePrice || basePrice || r.unit_price || 0);
+            const oldPrice = salePrice ? Number(basePrice || 0) : null;
+            return {
+              id: r.product_id,
+              title: r.title,
+              price,
+              oldPrice,
+              image: r.image || "",
+              seller: r.seller_display || undefined,
+              color: r.color || undefined,
+              qty: r.qty || 1,
+              weight_kg: r.weight_kg || 0,
+            };
+          });
           if (!cancelled) {
             dispatch({ type: "CLEAR" });
             mapped.forEach((it) => dispatch({ type: "ADD", payload: { item: it, qty: it.qty } }));

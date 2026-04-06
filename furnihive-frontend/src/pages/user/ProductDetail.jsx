@@ -39,7 +39,7 @@ export default function ProductDetail() {
         const { data: p, error } = await supabase
           .from("products")
           .select(
-            "id, seller_id, name, description, category, category_id, status, base_price, stock_qty, length_cm, width_cm, height_cm, material, weight_kg, color"
+            "id, seller_id, name, description, category, category_id, status, base_price, sale_price, stock_qty, length_cm, width_cm, height_cm, material, weight_kg, color"
           )
           .eq("id", id)
           .maybeSingle();
@@ -114,8 +114,8 @@ export default function ProductDetail() {
           title: p.name || "Untitled",
           description: p.description || "",
           category: p.category || "Living Room",
-          price: Number(p.base_price ?? 0),
-          oldPrice: null,
+          price: Number(p.sale_price || p.base_price || 0),
+          oldPrice: p.sale_price ? Number(p.base_price || 0) : null,
           image: cover || "",
           images: resolvedImages,
           rating: 4.8,

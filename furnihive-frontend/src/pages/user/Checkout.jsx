@@ -5,6 +5,7 @@ import { useCart } from "../../components/contexts/CartContext.jsx";
 import { useAuth } from "../../components/contexts/AuthContext.jsx";
 import { supabase } from "../../lib/supabaseClient";
 import StoreLocationMap from "../../components/seller/StoreLocationMap.jsx";
+import toast from "react-hot-toast";
 
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 
@@ -66,6 +67,8 @@ export default function Checkout() {
   // ---- PROMOTIONS (seller vouchers)
   const [vouchers, setVouchers] = useState([]); // active voucher-type promotions (all sellers)
   const [selectedVoucherId, setSelectedVoucherId] = useState(null);
+  const [voucherCodeInput, setVoucherCodeInput] = useState("");
+  const [appliedVoucher, setAppliedVoucher] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -628,37 +631,86 @@ export default function Checkout() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium text-[var(--brown-700)] text-sm">{it.title}</div>
                   <div className="text-[11px] text-gray-600">Sold by: {it.seller || "Manila Furniture Co."}</div>
-                  <div className="text-sm font-semibold">{peso((it.price || 0) * (it.qty || 1))}</div>
+                  <div className="flex items-baseline gap-2">
+                    <div className="text-sm font-semibold">{peso((it.price || 0) * (it.qty || 1))}</div>
+                    {it.oldPrice && it.oldPrice > it.price && (
+                      <div className="text-xs text-gray-500 line-through">
+                        {peso((it.oldPrice || 0) * (it.qty || 1))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
 
-            {/* Voucher selection (seller promotions; single-seller carts only) */}
-            {applicableVouchers.length > 0 && (
-              <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-3 text-sm">
-                <div className="font-semibold text-[var(--brown-700)]">Voucher</div>
+            {/* Voucher code input with dropdown side by side */}
+            <div className="rounded-xl border border-[var(--line-amber)] bg-[var(--cream-50)] p-3 text-sm">
+              <div className="font-semibold text-[var(--brown-700)]">Voucher Code</div>
+              <div className="mt-2 flex gap-2">
+                <input
+                  type="text"
+                  className="flex-1 rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-sm uppercase"
+                  placeholder="Paste code here"
+                  value={voucherCodeInput}
+                  onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
+                />
                 <select
-                  className="mt-2 w-full rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-sm"
+                  className="rounded-lg border border-[var(--line-amber)] bg-white px-3 py-2 text-sm"
                   value={selectedVoucherId || ""}
                   onChange={(e) => {
                     const val = e.target.value;
                     setSelectedVoucherId(val || null);
+                    if (val) {
+                      const matched = applicableVouchers.find((v) => v.id === val);
+                      setAppliedVoucher(matched);
+                      setVoucherCodeInput(matched?.code || "");
+                    }
                   }}
                 >
-                  <option value="">No voucher — select an available voucher to apply a discount to this order.</option>
+                  <option value="">Select voucher</option>
                   {applicableVouchers.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.name} ({v.code})
                     </option>
                   ))}
                 </select>
-                {selectedVoucherId && totals.promoDiscount > 0 && (
-                  <div className="mt-1 text-[11px] text-emerald-700">
-                    Voucher applied: you save {peso(totals.promoDiscount)} on this order.
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const code = voucherCodeInput.trim();
+                    if (!code) return;
+                    const matched = applicableVouchers.find((v) => v.code.toUpperCase() === code.toUpperCase());
+                    if (matched) {
+                      setSelectedVoucherId(matched.id);
+                      setAppliedVoucher(matched);
+                    } else {
+                      toast.error("Invalid voucher code for this store");
+                    }
+                  }}
+                  className="rounded-lg bg-[var(--orange-600)] px-4 py-2 text-white text-sm font-medium hover:brightness-95"
+                >
+                  Apply
+                </button>
               </div>
-            )}
+              {appliedVoucher && (
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[11px] text-emerald-700">
+                    Applied: {appliedVoucher.name} — You save {peso(totals.promoDiscount)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedVoucherId(null);
+                      setAppliedVoucher(null);
+                      setVoucherCodeInput("");
+                    }}
+                    className="text-[11px] text-red-600 hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+            </div>
 
             <hr className="border-[var(--line-amber)]/70" />
 
