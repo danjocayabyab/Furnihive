@@ -46,7 +46,8 @@ function RequireAuth({ children }) {
   const { loading, user, emailVerified } = useAuth();
   if (loading) return <div className="p-8">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (!emailVerified) return <Navigate to="/verify-email/sent" replace />;
+  // [EMAIL VERIFICATION DISABLED]
+  // if (!emailVerified) return <Navigate to="/verify-email/sent" replace />;
   return children;
 }
 
@@ -74,9 +75,10 @@ function RequireRole({ role, children }) {
     return <Navigate to={role === "admin" ? "/admin/login" : "/login"} replace />;
   }
 
-  if (!emailVerified) {
-    return <Navigate to="/verify-email/sent" replace />;
-  }
+  // [EMAIL VERIFICATION DISABLED]
+  // if (!emailVerified) {
+  //   return <Navigate to="/verify-email/sent" replace />;
+  // }
 
   if (role === "admin") {
     // Only allow if flagged in admins table

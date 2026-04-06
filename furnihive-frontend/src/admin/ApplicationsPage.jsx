@@ -72,8 +72,9 @@ function Row({ app, onView }) {
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={onView}
-            className="h-8 px-3 rounded-lg border border-[var(--line-amber)] text-sm hover:bg-[var(--cream-50)]"
+            className="h-8 px-3 rounded-lg border border-[var(--line-amber)] text-sm hover:bg-[var(--cream-50)] cursor-pointer"
           >
             View
           </button>
@@ -135,28 +136,31 @@ export default function ApplicationsPage() {
 
   // view modal
   const onView = async (id) => {
-    const d = await getApplication(id);
-    setCurrent(normalize({
-      ...d,
-      phone: d.phone || "+63 912 345 6789",
-      address: d.address || "123 Furniture Street, Manila, Philippines",
-      submittedAt: d.submittedAt || "",
-      description:
-        d.description ||
-        "We are a furniture company specializing in modern and contemporary pieces. Our business has been operating for over 5 years with a strong customer base in the local market.",
-      // Preserve real documents array (even if empty). Only fall back
-      // to mock entries when documents is truly missing/null.
-      documents:
-        Array.isArray(d.documents)
-          ? d.documents
-          : [
-              { name: "Business Registration" },
-              { name: "Tax Identification" },
-              { name: "Product Catalog" },
-              { name: "References" },
-            ],
-    }));
-    setOpen(true);
+    try {
+      const d = await getApplication(id);
+      setCurrent(normalize({
+        ...d,
+        phone: d.phone || "+63 912 345 6789",
+        address: d.address || "123 Furniture Street, Manila, Philippines",
+        submittedAt: d.submittedAt || "",
+        description:
+          d.description ||
+          "We are a furniture company specializing in modern and contemporary pieces. Our business has been operating for over 5 years with a strong customer base in the local market.",
+        documents:
+          Array.isArray(d.documents)
+            ? d.documents
+            : [
+                { name: "Business Registration" },
+                { name: "Tax Identification" },
+                { name: "Product Catalog" },
+                { name: "References" },
+              ],
+      }));
+      setOpen(true);
+    } catch (err) {
+      console.error("Failed to load application:", err);
+      alert("Failed to load application details. Please try again.");
+    }
   };
 
   // optimistic + reload so banners and list update immediately
@@ -172,11 +176,11 @@ export default function ApplicationsPage() {
     finally { reload(); }
   };
 
-  const onReject = async (id) => {
+  const onReject = async (id, reason) => {
     optimisticSet(id, "rejected");
     setStatus("rejected");
     setOpen(false);
-    try { await updateStatus(id, "rejected"); }
+    try { await updateStatus(id, "rejected", reason); }
     finally { reload(); }
   };
 
@@ -258,7 +262,7 @@ export default function ApplicationsPage() {
         data={current}
         onClose={() => setOpen(false)}
         onApprove={() => current && onApprove(current._id)}
-        onReject={() => current && onReject(current._id)}
+        onReject={(reason) => current && onReject(current._id, reason)}
       />
     </>
   );

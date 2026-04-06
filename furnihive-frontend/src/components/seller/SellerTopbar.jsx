@@ -4,6 +4,7 @@ import useSellerNotifications from "../../seller/lib/useNotifications.js";
 import { logout } from "../../lib/auth.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { supabase } from "../../lib/supabaseClient";
+import { Bell } from "lucide-react";
 
 export default function SellerTopbar() {
   const navigate = useNavigate();
@@ -18,6 +19,10 @@ export default function SellerTopbar() {
 
   // Unread messages across all conversations for this seller
   const [msgUnread, setMsgUnread] = useState(0);
+
+  // Database notifications (for seller_rejection, etc.)
+  const [dbNotifications, setDbNotifications] = useState([]);
+  const [dbUnreadCount, setDbUnreadCount] = useState(0);
 
   const accountRef = useRef(null);
   const notifRef = useRef(null);
@@ -45,6 +50,95 @@ export default function SellerTopbar() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  // Fetch database notifications (seller_rejection, etc.)
+  useEffect(() => {
+    if (!sellerId) return;
+    let cancelled = false;
+
+    async function loadDbNotifications() {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("user_id", sellerId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (cancelled || error) return;
+
+      setDbNotifications(data || []);
+      setDbUnreadCount((data || []).filter((n) => !n.read).length);
+    }
+
+    loadDbNotifications();
+
+    // Subscribe to new notifications
+    const channel = supabase
+      .channel(`notifications-${sellerId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${sellerId}`,
+        },
+        (payload) => {
+          if (!cancelled) {
+            setDbNotifications((prev) => [payload.new, ...prev]);
+            setDbUnreadCount((c) => c + 1);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [sellerId]);
+
+  const markDbNotificationRead = async (id) => {
+    const { error } = await supabase
+      .from("notifications")
+      .update({ read: true })
+      .eq("id", id);
+
+    if (!error) {
+      setDbNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+      );
+      setDbUnreadCount((c) => Math.max(0, c - 1));
+    }
+  };
+
+  const markAllDbNotificationsRead = async () => {
+    if (!sellerId) return;
+    
+    // Get all unread notification IDs first
+    const { data: unreadNotifications, error: fetchError } = await supabase
+      .from("notifications")
+      .select("id")
+      .eq("user_id", sellerId)
+      .eq("read", false);
+
+    if (fetchError || !unreadNotifications || unreadNotifications.length === 0) return;
+
+    // Update each notification one by one
+    let successCount = 0;
+    for (const notif of unreadNotifications) {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ read: true })
+        .eq("id", notif.id);
+      
+      if (!error) successCount++;
+    }
+
+    // Update local state
+    setDbNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setDbUnreadCount(0);
+  };
 
   // Load store logo for this seller (owner_id = sellerId)
   useEffect(() => {
@@ -219,7 +313,12 @@ export default function SellerTopbar() {
               className="relative grid h-9 w-9 place-items-center rounded-full hover:bg-[var(--cream-50)]"
               title="Notifications"
             >
-              <span className="text-[16px] leading-none text-[var(--orange-700)]">⩍</span>
+              <Bell className="h-5 w-5 text-[var(--orange-700)]" />
+              {dbUnreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">
+                  {dbUnreadCount}
+                </span>
+              )}
             </button>
 
             {notifOpen && (
@@ -227,7 +326,7 @@ export default function SellerTopbar() {
                 <div className="px-4 py-2 flex items-center justify-between border-b border-[var(--line-amber)]/60">
                   <div className="font-medium text-[var(--brown-700)]">Notifications</div>
                   <button
-                    onClick={markAllRead}
+                    onClick={markAllDbNotificationsRead}
                     className="text-[12px] px-2 py-1 rounded border border-[var(--line-amber)] hover:bg-[var(--cream-50)]"
                   >
                     Mark all as read
@@ -235,10 +334,10 @@ export default function SellerTopbar() {
                 </div>
 
                 <div className="max-h-80 overflow-auto">
-                  {items.length === 0 ? (
+                  {dbNotifications.length === 0 ? (
                     <div className="px-4 py-6 text-sm text-[var(--brown-700)]/60">No notifications.</div>
                   ) : (
-                    items.map((n) => (
+                    dbNotifications.map((n) => (
                       <button
                         key={n.id}
                         onClick={() => openNotification(n)}
@@ -261,7 +360,7 @@ export default function SellerTopbar() {
                             <div className="text-[12px] text-[var(--brown-700)]/80">{n.body}</div>
                           )}
                           <div className="text-[11px] text-[var(--brown-700)]/50 mt-0.5">
-                            {new Date(n.ts).toLocaleString()}
+                            {new Date(n.created_at).toLocaleString()}
                           </div>
                         </span>
                         {!n.read && (
