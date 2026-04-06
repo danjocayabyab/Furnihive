@@ -1,0 +1,455 @@
+FURNIHIVE USER MANUAL
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Introduction to Furnihive
+2. Getting Started
+3. For Buyers - Shopping Guide
+4. For Sellers - Business Guide
+5. For Admins - Platform Management
+6. Help & Support
+
+================================================================================
+1. INTRODUCTION TO FURNIHIVE
+================================================================================
+
+Furnihive is an online marketplace for furniture. Whether you're looking to
+furnish your home or sell your furniture products, Furnihive connects buyers
+with sellers in one easy-to-use platform.
+
+WHO CAN USE FURNIHIVE?
+
+- BUYERS: Browse and purchase furniture from various sellers
+- SELLERS: List and sell your furniture products
+- ADMINS: Manage the platform and support users
+
+================================================================================
+2. GETTING STARTED
+================================================================================
+
+SYSTEM REQUIREMENTS
+
+- Computer, tablet, or smartphone
+- Internet connection
+- Modern web browser (Chrome, Firefox, Safari, or Edge)
+- JavaScript enabled
+
+CREATING AN ACCOUNT
+
+1. Go to the Sign Up page
+2. Enter your email address
+3. Create a password
+4. Fill in your full name
+5. Select your role: Buyer or Seller
+6. Submit the form
+7. Check your email for verification (if required)
+
+LOGGING IN
+
+Buyers and Sellers:
+1. Go to the Login page
+2. Enter your email and password
+3. Click Sign In
+
+Admins:
+1. Go to the Admin Login page
+2. Enter your admin credentials
+3. Click Sign In
+
+The system will automatically take you to your dashboard based on your role.
+
+LOGGING OUT
+
+Click the Logout button in the navigation menu or go to the Logout page.
+
+================================================================================
+3. FOR BUYERS - SHOPPING GUIDE
+================================================================================
+
+3.1 BROWSING FURNITURE
+
+HOME PAGE
+The home page shows featured products, promotions, and categories to explore.
+
+SHOP PAGE
+Browse all available furniture:
+- Use filters to narrow by category, price, material, or style
+- Search for specific items using the search bar
+- Sort results by price, popularity, or newest items
+- Click on any product to see details
+
+PRODUCT DETAILS
+When viewing a product, you'll see:
+- Product images (click to zoom)
+- Name, price, and description
+- Specifications (dimensions, materials, etc.)
+- Seller information and ratings
+- Customer reviews
+- Related product suggestions
+
+3.2 SHOPPING CART
+
+ADDING ITEMS TO CART
+1. On the product page, select your desired quantity
+2. Click "Add to Cart"
+3. Continue shopping or go to cart
+
+MANAGING YOUR CART
+- View all items with images and prices
+- Change quantities using plus/minus buttons
+- Remove items by clicking the delete button
+- See your subtotal, estimated shipping, and total
+- Click "Proceed to Checkout" when ready
+
+3.3 CHECKOUT
+
+STEP 1: SHIPPING INFORMATION
+- Enter your delivery address
+- Select shipping method if options available
+
+STEP 2: PAYMENT
+- Choose your payment method
+- Enter payment details securely
+
+STEP 3: REVIEW AND CONFIRM
+- Review your order summary
+- Check all details are correct
+- Click "Place Order" to complete purchase
+
+After ordering, you'll see a confirmation page with your order number.
+
+3.4 YOUR ACCOUNT
+
+PROFILE PAGE
+Access and manage your personal information:
+- View/edit your name, email, and phone number
+- Upload or change your profile picture
+- Manage saved shipping addresses
+- View your order history and track deliveries
+- See your wishlist or saved items
+
+ACCOUNT SETTINGS
+Configure your preferences:
+- Change your password
+- Set notification preferences (email, push notifications)
+- Manage privacy settings
+- Add or remove payment methods
+
+3.5 MESSAGES
+
+Communicate directly with sellers:
+- View all your conversations in the inbox
+- Read and send messages in real-time
+- Start new conversations from product pages
+- Access message history anytime
+
+3.6 SUPPORT
+
+Need help? Visit the Support page:
+- Browse Frequently Asked Questions
+- Submit a support ticket
+- Track your support requests
+- Contact customer service
+
+================================================================================
+4. FOR SELLERS - BUSINESS GUIDE
+================================================================================
+
+4.1 DASHBOARD
+
+Your seller dashboard is your business command center. Here you can see:
+- Total sales and revenue summary
+- Number of orders received
+- Recent order activity
+- Low stock alerts
+- Sales performance charts
+- Quick action buttons for common tasks
+
+4.2 INVENTORY MANAGEMENT
+
+ADDING PRODUCTS
+1. Go to Inventory
+2. Click "Add New Product"
+3. Fill in product details:
+   - Name and description
+   - Price and stock quantity
+   - Category and subcategory
+   - Upload product images
+   - Add specifications
+4. Save the product to make it live
+
+MANAGING EXISTING PRODUCTS
+- View all products in a list or grid
+- Edit any product by clicking on it
+- Update stock quantities
+- Change prices or descriptions
+- Disable products temporarily
+- Delete products permanently
+
+4.3 ORDERS
+
+PROCESSING ORDERS
+- View all orders with status indicators
+- Filter by status: Pending, Processing, Shipped, Delivered
+- Click any order to see full details
+- Update order status as you process them
+- View customer shipping information
+- Print packing slips if needed
+
+4.4 PROMOTIONS
+
+CREATING SALES
+1. Go to Promotions
+2. Click "Create New Promotion"
+3. Choose discount type:
+   - Percentage off (e.g., 20% off)
+   - Fixed amount off (e.g., $50 off)
+   - Buy X Get Y deals
+4. Set start and end dates
+5. Select which products are included
+6. Save and activate
+
+MANAGING PROMOTIONS
+- View all active and past promotions
+- Edit promotion details
+- End promotions early if needed
+- See promotion performance
+
+4.5 ANALYTICS
+
+Track your business performance:
+- Sales overview (daily, weekly, monthly)
+- Revenue trends and comparisons
+- Best-selling products
+- Average order value
+- Customer demographics
+- Traffic sources
+- Download reports for your records
+
+4.6 CUSTOMER ENGAGEMENT
+
+REVIEWS AND RATINGS
+- View all product reviews
+- Respond to customer reviews
+- See your average rating
+- Track review trends
+
+CUSTOMER QUESTIONS
+- Answer product questions from buyers
+- Set up quick reply templates
+- Track response times
+
+4.7 MESSAGES
+
+Communicating with buyers:
+- Access all customer conversations
+- Prioritize unread messages
+- Reply to inquiries promptly
+- Use message templates for common questions
+- Keep communication history for reference
+
+4.8 SETTINGS
+
+STORE CONFIGURATION
+- Set your store name and description
+- Upload your store logo
+- Add business registration information
+
+SHIPPING SETTINGS
+- Configure shipping methods you offer
+- Set shipping rates by zone or weight
+- Define processing times
+
+PAYMENT SETTINGS
+- Add your bank account for payouts
+- Set up payment preferences
+
+STORE POLICIES
+- Write your return policy
+- Define shipping policies
+- Set terms and conditions
+
+NOTIFICATIONS
+- Choose which emails you want to receive
+- Set up low stock alerts
+- Configure order notifications
+
+4.9 SELLER SUPPORT
+
+Get help for your seller account:
+- Access seller guides and tutorials
+- Contact platform support
+- Track your support tickets
+- Find answers to common seller questions
+
+================================================================================
+5. FOR ADMINS - PLATFORM MANAGEMENT
+================================================================================
+
+5.1 ADMIN DASHBOARD
+
+The admin panel provides comprehensive platform management tools organized
+into tabs.
+
+5.2 ANALYTICS AND REPORTS
+
+View platform-wide statistics:
+- Total platform revenue
+- Number of active users (buyers and sellers)
+- Order volume and trends
+- Top-selling products across the platform
+- Geographic sales distribution
+- Generate custom date-range reports
+
+5.3 SELLER APPLICATIONS
+
+Review and approve new sellers:
+- View pending seller applications
+- Review business details and documents
+- Verify seller information
+- Approve or reject applications
+- Check application history
+
+5.4 USER MANAGEMENT
+
+Oversee all platform users:
+- Search and filter user accounts
+- View detailed user profiles
+- Suspend or ban problematic accounts
+- Verify user identities
+- Change user roles when needed
+
+5.5 ORDER MANAGEMENT
+
+Monitor all platform transactions:
+- View complete order history
+- Handle order disputes
+- Process refund requests
+- Investigate order issues
+- Access full transaction details
+
+5.6 PRODUCT MODERATION
+
+Manage the product catalog:
+- View all listed products
+- Remove inappropriate listings
+- Handle reported products
+- Manage product categories
+- Moderate product descriptions
+
+5.7 PAYOUTS
+
+Manage seller payments:
+- Process pending payouts
+- View payout history
+- Check seller balances
+- Handle payment issues
+- Configure payment methods
+
+5.8 REVENUE MANAGEMENT
+
+Financial oversight:
+- Track platform fees and commissions
+- View all financial transactions
+- Generate invoices
+- Create tax reports
+- Monitor platform profitability
+
+5.9 CUSTOMER SUPPORT
+
+Handle support tickets:
+- View all open support tickets
+- Categorize by type (buyer, seller, general)
+- Reply to customer inquiries
+- Escalate complex issues
+- Track resolution progress
+- Maintain response time standards
+
+================================================================================
+6. HELP & SUPPORT
+================================================================================
+
+COMMON ISSUES
+
+CANNOT LOG IN?
+- Double-check your email and password
+- Make sure Caps Lock is off
+- Try resetting your password
+- Clear your browser cache and cookies
+- Try a different browser
+
+PAGE NOT LOADING?
+- Check your internet connection
+- Refresh the page
+- Try accessing from a different device
+
+ORDERS NOT SHOWING?
+- Check you're logged into the correct account
+- Allow a few minutes for recent orders to appear
+- Check your email for order confirmations
+
+IMAGES NOT LOADING?
+- Check your internet connection
+- Try refreshing the page
+- Disable browser extensions temporarily
+
+CONTACT SUPPORT
+
+For technical issues or account problems:
+1. Visit the Support page
+2. Submit a support ticket with details
+3. Include screenshots if helpful
+4. Provide your account email
+5. Describe the issue clearly
+
+Response times typically range from a few hours to 24 hours depending on
+the issue complexity.
+
+================================================================================
+TIPS FOR BEST EXPERIENCE
+================================================================================
+
+FOR BUYERS:
+- Complete your profile for faster checkout
+- Save frequently used addresses
+- Read seller reviews before purchasing
+- Check shipping times and policies
+- Use the wishlist to save items for later
+
+FOR SELLERS:
+- Keep inventory updated to avoid overselling
+- Respond to messages within 24 hours
+- Process orders promptly
+- Encourage customers to leave reviews
+- Use high-quality product photos
+- Write detailed, accurate descriptions
+- Monitor your analytics to understand trends
+
+FOR ADMINS:
+- Check applications and tickets daily
+- Maintain consistent moderation standards
+- Keep platform policies up to date
+- Monitor analytics for unusual activity
+
+================================================================================
+ACCOUNT SECURITY
+================================================================================
+
+PROTECTING YOUR ACCOUNT:
+- Use a strong, unique password
+- Don't share your login credentials
+- Log out when using shared computers
+- Enable two-factor authentication if available
+- Keep your email address updated
+- Report suspicious activity immediately
+
+================================================================================
+END OF MANUAL
+================================================================================
+
+For the latest updates and additional help, visit the Furnihive Support Center.
+
+Document Version: 1.0
+Last Updated: April 2026
