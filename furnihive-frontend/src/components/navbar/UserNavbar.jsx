@@ -5,6 +5,7 @@ import { useCart } from "../contexts/CartContext.jsx";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import useBuyerNotifications from "../../buyer/lib/useNotifications.js";
 import { supabase } from "../../lib/supabaseClient";
+import toast from "react-hot-toast";
 
 export default function UserNavbar() {
   const navigate = useNavigate();
@@ -193,14 +194,8 @@ export default function UserNavbar() {
                         <div className="px-4 py-6 text-sm text-[var(--brown-700)]/60">No notifications.</div>
                       ) : (
                         items.map((n) => (
-                          <button
+                          <div
                             key={n.id}
-                            type="button"
-                            onClick={() => {
-                              markRead(n.id);
-                              if (n.link) navigate(n.link);
-                              setNotifOpen(false);
-                            }}
                             className={`w-full text-left px-4 py-3 flex gap-2 items-start border-b border-[var(--line-amber)]/50 hover:bg-[var(--cream-50)] ${
                               n.read ? "opacity-80" : ""
                             }`}
@@ -212,6 +207,8 @@ export default function UserNavbar() {
                                 ? "!"
                                 : n.type === "error"
                                 ? "!"
+                                : n.type === "promotion"
+                                ? "%"
                                 : "i"}
                             </span>
                             <span className="flex-1">
@@ -219,14 +216,48 @@ export default function UserNavbar() {
                               {n.body && (
                                 <div className="text-[12px] text-[var(--brown-700)]/80">{n.body}</div>
                               )}
+                              {/* Promotion code with copy button */}
+                              {n.type === "promotion" && n.body && (
+                                <div className="mt-2 flex items-center gap-2">
+                                  <code className="px-2 py-1 bg-[var(--cream-50)] border border-[var(--line-amber)] rounded text-[11px] font-mono text-[var(--orange-700)]">
+                                    {n.body.match(/Use code (\w+)/)?.[1] || "CODE"}
+                                  </code>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const code = n.body.match(/Use code (\w+)/)?.[1];
+                                      if (code) {
+                                        navigator.clipboard.writeText(code);
+                                        toast.success("Code copied!");
+                                      }
+                                    }}
+                                    className="text-[10px] px-2 py-0.5 rounded bg-[var(--orange-600)] text-white hover:brightness-95"
+                                  >
+                                    Copy
+                                  </button>
+                                </div>
+                              )}
                               <div className="text-[11px] text-[var(--brown-700)]/50 mt-0.5">
                                 {new Date(n.ts).toLocaleString()}
                               </div>
                             </span>
-                            {!n.read && (
-                              <span className="mt-1 h-2 w-2 rounded-full bg-[var(--orange-600)]" />
-                            )}
-                          </button>
+                            <div className="flex flex-col items-end gap-1">
+                              {!n.read && (
+                                <span className="mt-1 h-2 w-2 rounded-full bg-[var(--orange-600)]" />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  markRead(n.id);
+                                  if (n.link) navigate(n.link);
+                                }}
+                                className="text-[10px] text-[var(--orange-700)] hover:underline mt-1"
+                              >
+                                {n.link ? "View" : "Mark read"}
+                              </button>
+                            </div>
+                          </div>
                         ))
                       )}
                     </div>
