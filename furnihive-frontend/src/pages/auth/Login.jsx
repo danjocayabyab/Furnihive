@@ -35,24 +35,26 @@ export default function Login() {
       setLoading(true);
       const { user } = await login({ ...values, roleHint: role });
       
-      // Check if email is verified
-      if (!emailVerified) {
-        setShowResend(true);
-        setResendEmail(values.email);
-        toast.error("Please verify your email before logging in.");
-        return;
-      }
+      // [EMAIL VERIFICATION DISABLED] Check if email is verified
+      // if (!emailVerified) {
+      //   setShowResend(true);
+      //   setResendEmail(values.email);
+      //   toast.error("Please verify your email before logging in.");
+      //   return;
+      // }
+      //
       
       toast.success(`Welcome back, ${user.name}!`);
       navigate(user.role === "seller" ? "/seller" : "/home", { replace: true });
     } catch (e) {
-      if (e?.message?.includes("Email not confirmed")) {
-        setShowResend(true);
-        setResendEmail(values.email);
-        toast.error("Please verify your email before logging in.");
-      } else {
+      // [EMAIL VERIFICATION DISABLED] Check for unconfirmed email error
+      // if (e?.message?.includes("Email not confirmed")) {
+      //   setShowResend(true);
+      //   setResendEmail(values.email);
+      //   toast.error("Please verify your email before logging in.");
+      // } else {
         toast.error(e?.message || "Login failed");
-      }
+      // }
     } finally {
       setLoading(false);
     }
@@ -101,6 +103,7 @@ export default function Login() {
           {loading ? "Logging in..." : "Login"}
         </Button>
 
+        {/* [EMAIL VERIFICATION DISABLED]
         {showResend && (
           <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
             <p className="text-sm text-yellow-800 mb-2">
@@ -115,6 +118,7 @@ export default function Login() {
             </button>
           </div>
         )}
+        */}
 
         <div className="text-center text-sm">
           Don’t have an account?{" "}

@@ -1,4 +1,5 @@
 // src/admin/ApplicationModal.jsx
+import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 export default function ApplicationModal({
@@ -8,6 +9,9 @@ export default function ApplicationModal({
   onApprove,
   onReject,
 }) {
+  const [showRejectForm, setShowRejectForm] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+
   if (!open || !data) return null;
 
   const Line = () => <hr className="my-4 border-[var(--line-amber)]/50" />;
@@ -162,6 +166,14 @@ export default function ApplicationModal({
               </p>
             </div>
 
+            {/* Show rejection reason if rejected */}
+            {data.status === "rejected" && data.rejectionReason && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <Label>Rejection Reason</Label>
+                <p className="text-red-700 text-sm mt-1">{data.rejectionReason}</p>
+              </div>
+            )}
+
             <Line />
 
             {/* Documents */}
@@ -180,25 +192,69 @@ export default function ApplicationModal({
           </div>
 
           {/* Footer */}
-          <div className="sticky bottom-0 bg-white/95 backdrop-blur px-5 py-3 border-t border-[var(--line-amber)] flex items-center justify-end gap-2">
-            <button
-              onClick={onClose}
-              className="h-9 px-3 rounded-lg border border-[var(--line-amber)] bg-white hover:bg-[var(--cream-50)]"
-            >
-              Close
-            </button>
-            <button
-              onClick={onReject}
-              className="h-9 px-3 rounded-lg border border-red-300 bg-white text-red-600 hover:bg-red-50"
-            >
-              Reject Application
-            </button>
-            <button
-              onClick={onApprove}
-              className="h-9 px-3 rounded-lg border border-[var(--line-amber)] bg-[var(--orange-600)] text-white hover:opacity-95"
-            >
-              Approve Application
-            </button>
+          <div className="sticky bottom-0 bg-white/95 backdrop-blur px-5 py-3 border-t border-[var(--line-amber)]">
+            {showRejectForm ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-[var(--brown-700)] mb-1">
+                    Rejection Reason / Message to Seller
+                  </label>
+                  <textarea
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="Explain why this application was rejected (e.g., incomplete documents, invalid business registration, etc.)"
+                    className="w-full h-24 rounded-lg border border-red-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => {
+                      setShowRejectForm(false);
+                      setRejectReason("");
+                    }}
+                    className="h-9 px-3 rounded-lg border border-[var(--line-amber)] bg-white hover:bg-[var(--cream-50)]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!rejectReason.trim()) {
+                        alert("Please provide a rejection reason.");
+                        return;
+                      }
+                      onReject(rejectReason);
+                      setShowRejectForm(false);
+                      setRejectReason("");
+                    }}
+                    disabled={!rejectReason.trim()}
+                    className="h-9 px-3 rounded-lg border border-red-300 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    Confirm Rejection
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={onClose}
+                  className="h-9 px-3 rounded-lg border border-[var(--line-amber)] bg-white hover:bg-[var(--cream-50)]"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => setShowRejectForm(true)}
+                  className="h-9 px-3 rounded-lg border border-red-300 bg-white text-red-600 hover:bg-red-50"
+                >
+                  Reject Application
+                </button>
+                <button
+                  onClick={onApprove}
+                  className="h-9 px-3 rounded-lg border border-[var(--line-amber)] bg-[var(--orange-600)] text-white hover:opacity-95"
+                >
+                  Approve Application
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

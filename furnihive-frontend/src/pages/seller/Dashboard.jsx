@@ -39,6 +39,7 @@ export default function SellerDashboard() {
   const [recentOrders, setRecentOrders] = useState([]);
   const [lowStockProducts, setLowStockProducts] = useState([]);
   const [verifyModalOpen, setVerifyModalOpen] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
   const [files, setFiles] = useState([]);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
 
@@ -355,8 +356,15 @@ export default function SellerDashboard() {
         .eq("id", verification.id);
       if (updateErr) throw updateErr;
 
+      // [AUTO VERIFICATION] Automatically approve seller after document submission
+      const { error: approveErr } = await supabase
+        .from("profiles")
+        .update({ seller_approved: true })
+        .eq("id", authUser.id);
+      if (approveErr) throw approveErr;
+
       setFiles([]);
-      toast.success("Your verification documents have been submitted for review.");
+      toast.success("Your verification documents have been submitted and approved!");
     } catch (e) {
       console.error("Verification submit failed", e);
       toast.error(e?.message || "Failed to submit verification documents.");
@@ -521,12 +529,22 @@ export default function SellerDashboard() {
 
       {!isVerified && (
         <div className="rounded-2xl border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-3">
-          <div>
+          <div className="flex-1">
             <div className="font-semibold">Seller verification required</div>
             <p className="mt-1">
               Your seller account is pending verification. Please submit your application so the admin can review and approve it before you can use all seller tools.
             </p>
-            <div className="mt-2 flex flex-wrap gap-2">
+            
+            {/* Show rejection reason if available */}
+            {rejectionReason && (
+              <div className="mt-3 p-3 bg-red-100 border border-red-300 rounded-lg">
+                <div className="font-semibold text-red-800">Previous application rejected:</div>
+                <p className="text-red-700 mt-1">{rejectionReason}</p>
+                <p className="text-red-600 text-xs mt-2">Please address these issues and submit a new application.</p>
+              </div>
+            )}
+            
+            <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setVerifyModalOpen(true)}
@@ -541,22 +559,25 @@ export default function SellerDashboard() {
                   try {
                     // Check the latest verification application status
                     let latestStatus = null;
+                    let latestRejectionReason = "";
                     if (authUser?.id) {
                       const { data: appRow } = await supabase
                         .from("store_verifications")
-                        .select("status")
+                        .select("status, rejection_reason")
                         .eq("seller_id", authUser.id)
                         .order("created_at", { ascending: false })
                         .limit(1)
                         .maybeSingle();
                       latestStatus = appRow?.status?.toString().toLowerCase() || null;
+                      latestRejectionReason = appRow?.rejection_reason || "";
                     }
 
                     if (latest?.seller_approved) {
                       toast.success("You are now verified! Welcome.");
                     } else if (latestStatus === "rejected") {
+                      setRejectionReason(latestRejectionReason);
                       toast.error(
-                        "Your verification application was rejected by the admin. Please review your details and submit a new application."
+                        "Your verification application was rejected. See details above."
                       );
                     } else {
                       toast("Still pending admin approval. Please try again later.");

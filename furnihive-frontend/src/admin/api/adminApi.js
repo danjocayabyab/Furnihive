@@ -143,14 +143,14 @@ export async function updateHeroRank(productId, rank) {
   return { id: data?.id || productId, hero_rank: data?.hero_rank ?? 0 };
 }
 
-// Load a single application with more detail for the modal.
+    // Load a single application with more detail for the modal.
 // We fetch the verification first, then (optionally) enrich from profiles.
 export async function getApplication(id) {
   const appId = normalizeId(id);
 
   const { data, error } = await supabase
     .from("store_verifications")
-    .select("id, seller_id, status, created_at, notes, files, contact_email, contact_phone, location")
+    .select("id, seller_id, status, created_at, notes, files, contact_email, contact_phone, location, rejection_reason")
     .eq("id", appId)
     .maybeSingle();
 
@@ -193,19 +193,26 @@ export async function getApplication(id) {
       : "",
     description: data.notes || "",
     documents: data.files || [],
+    rejectionReason: data.rejection_reason || "",
   };
 }
 
-// Update verification status and, when approved, flag seller as verified.
-export async function updateStatus(id, status) {
+// Update verification status and, when approved/rejected, flag seller and notify.
+export async function updateStatus(id, status, rejectionReason = null) {
   const appId = normalizeId(id);
   const next = mapStatus(status);
 
+  // Build update payload - include rejection_reason if provided
+  const updatePayload = { status: next };
+  if (next === "rejected" && rejectionReason) {
+    updatePayload.rejection_reason = rejectionReason;
+  }
+
   const { data, error } = await supabase
     .from("store_verifications")
-    .update({ status: next })
+    .update(updatePayload)
     .eq("id", appId)
-    .select("id, seller_id, status")
+    .select("id, seller_id, status, contact_email, rejection_reason")
     .single();
 
   if (error) throw error;
@@ -223,6 +230,48 @@ export async function updateStatus(id, status) {
         .from("profiles")
         .update({ seller_approved: false })
         .eq("id", data.seller_id);
+    }
+
+    // Send email notification for rejection and create in-app notification
+    if (next === "rejected" && data.seller_id) {
+      // Create in-app notification directly (don't rely on Edge Function)
+      try {
+        console.log("Creating notification for seller:", data.seller_id);
+        const { data: notifData, error: notifErr } = await supabase
+          .from("notifications")
+          .insert({
+            user_id: data.seller_id,
+            type: "seller_rejection",
+            title: "Seller Application Rejected",
+            message: rejectionReason || "Your seller application was rejected.",
+            read: false,
+          })
+          .select();
+        
+        if (notifErr) {
+          console.error("Failed to create notification:", notifErr);
+        } else {
+          console.log("Notification created successfully:", notifData);
+        }
+      } catch (notifErr) {
+        console.error("Error creating rejection notification:", notifErr);
+      }
+
+      // Try to send email via Edge Function
+      if (data.contact_email) {
+        try {
+          await supabase.functions.invoke("send-rejection-email", {
+            body: {
+              to: data.contact_email,
+              sellerId: data.seller_id,
+              reason: rejectionReason || "Your application did not meet our requirements.",
+            },
+          });
+        } catch (e) {
+          console.warn("Failed to send rejection email:", e);
+          // Don't throw - rejection should still succeed even if email fails
+        }
+      }
     }
   }
 
