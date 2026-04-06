@@ -40,7 +40,7 @@ export default function Inventory() {
         const { data, error } = await supabase
           .from("products")
           .select(
-            `id, seller_id, name, description, category, base_price, status,
+            `id, seller_id, name, description, category, base_price, sale_price, status,
              sku, length_cm, width_cm, height_cm, stock_qty, material, weight_kg, color,
              product_images ( url, is_primary, position ),
              inventory_items ( quantity_on_hand )`
@@ -59,6 +59,7 @@ export default function Inventory() {
             category: p.category || "Uncategorized",
             description: p.description || "",
             price: p.base_price,
+            sale_price: p.sale_price,
             stock: (p.stock_qty ?? null) != null ? p.stock_qty : (p.inventory_items?.[0]?.quantity_on_hand ?? 0),
             views: 0,
             sold: 0,
@@ -150,6 +151,7 @@ export default function Inventory() {
         description: changes.description,
         category: changes.category,
         base_price: changes.price,
+        sale_price: changes.sale_price,
         sku: changes.sku,
         length_cm: changes.length,
         width_cm: changes.width,
@@ -860,6 +862,7 @@ function EditModal({ item, onCancel, onSave }) {
     category: item.category || "Living Room",
     description: item.description || "",
     price: item.price || 0,
+    sale_price: item.sale_price || "",
     stock: item.stock || 0,
     sku: item.sku || "SKU-001",
     length: item.length || 0,
@@ -932,6 +935,7 @@ function EditModal({ item, onCancel, onSave }) {
       title: form.title,
       category: form.category,
       price: Number(form.price) || 0,
+      sale_price: form.sale_price ? Number(form.sale_price) : null,
       stock: Number(form.stock) || 0,
       length: Number(form.length) || 0,
       width: Number(form.width) || 0,
@@ -1072,16 +1076,26 @@ function EditModal({ item, onCancel, onSave }) {
           </div>
         </div>
 
-        {/* Price, Stock, SKU */}
-        <div className="grid md:grid-cols-3 gap-3">
+        {/* Price, Sale Price, Stock, SKU */}
+        <div className="grid md:grid-cols-4 gap-3">
           <div>
-            <label className="text-xs text-gray-600">Price (₱)</label>
+            <label className="text-xs text-gray-600">Regular Price (₱) *</label>
             <input
               type="number"
               className="w-full rounded-xl border border-[var(--line-amber)] px-3 py-2"
               value={form.price}
               onChange={(e) => set("price", e.target.value)}
               required
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-600 text-red-600">Sale Price (₱)</label>
+            <input
+              type="number"
+              className="w-full rounded-xl border border-red-300 px-3 py-2 bg-red-50"
+              value={form.sale_price}
+              onChange={(e) => set("sale_price", e.target.value)}
+              placeholder="Optional discount"
             />
           </div>
           <div>
