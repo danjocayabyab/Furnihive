@@ -80,9 +80,14 @@ export default function Signup() {
 
   const onSubmit = async (values) => {
     try {
-      const { user, session } = await signupApi(values);
-      setNextPath("/login");
-      setSuccessOpen(true);
+      const result = await signupApi(values);
+      if (result.needsVerification) {
+        setNextPath("/verify-email/sent");
+        setSuccessOpen(true);
+      } else {
+        setNextPath("/login");
+        setSuccessOpen(true);
+      }
     } catch (e) {
       toast.error(e?.message || "Sign up failed");
     }
@@ -230,8 +235,15 @@ export default function Signup() {
         navigate(nextPath, { replace: true });
       }}
     >
-      <h2 className="text-lg font-semibold text-[var(--brown-700)]">Account created successfully</h2>
-      <p className="mt-2 text-sm text-[var(--brown-700)]/80">Your account has been created.</p>
+      <h2 className="text-lg font-semibold text-[var(--brown-700)]">
+        {nextPath === "/verify-email/sent" ? "Verification email sent" : "Account created successfully"}
+      </h2>
+      <p className="mt-2 text-sm text-[var(--brown-700)]/80">
+        {nextPath === "/verify-email/sent" 
+          ? "We've sent a verification link to your email. Please check your inbox and click the link to verify your account."
+          : "Your account has been created."
+        }
+      </p>
       <div className="mt-4 flex justify-end">
         <button
           className="rounded-lg bg-[var(--orange-600)] px-4 py-2 text-white hover:brightness-110"
