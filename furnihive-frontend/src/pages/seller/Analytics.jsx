@@ -429,8 +429,13 @@ export default function SellerAnalytics() {
       // Clean and style the cloned content
       const allElements = clonedElement.querySelectorAll('*');
       allElements.forEach(el => {
+        const hasChart = el.tagName === 'svg' || el.tagName === 'canvas' || el.querySelector('svg, canvas');
+        
         // Remove Tailwind classes but keep structure
-        el.removeAttribute('class');
+        // Don't remove classes from chart elements to preserve sizing
+        if (!hasChart && el.tagName !== 'svg') {
+          el.removeAttribute('class');
+        }
         
         // Apply professional PDF styling with page break prevention
         if (el.tagName === 'SECTION') {
@@ -451,7 +456,8 @@ export default function SellerAnalytics() {
           el.style.marginTop = '0';
         }
         
-        if (el.tagName === 'DIV' && el.querySelector('canvas, svg')) {
+        // Style chart containers - parent divs that contain charts
+        if (el.tagName === 'DIV' && el.querySelector(':scope > svg, :scope > canvas, :scope > div > svg, :scope > div > canvas')) {
           el.style.textAlign = 'center';
           el.style.margin = '20px 0';
           el.style.padding = '15px';
@@ -462,14 +468,23 @@ export default function SellerAnalytics() {
           el.style.overflow = 'hidden';
           el.style.pageBreakInside = 'avoid';
           el.style.breakInside = 'avoid';
-          
-          // Ensure chart is responsive and clean
-          const chart = el.querySelector('canvas, svg');
-          if (chart) {
-            chart.style.maxWidth = '100%';
-            chart.style.height = 'auto';
-            chart.style.display = 'block';
-            chart.style.margin = '0 auto';
+          el.style.width = '100%';
+          el.style.minHeight = '300px';
+        }
+        
+        // Ensure SVG charts have explicit dimensions
+        if (el.tagName === 'svg') {
+          el.style.maxWidth = '100%';
+          el.style.width = '100%';
+          el.style.height = '300px';
+          el.style.display = 'block';
+          el.style.margin = '0 auto';
+          // Set explicit width/height attributes if missing
+          if (!el.getAttribute('width')) {
+            el.setAttribute('width', '100%');
+          }
+          if (!el.getAttribute('height')) {
+            el.setAttribute('height', '300');
           }
         }
       });
@@ -584,13 +599,32 @@ export default function SellerAnalytics() {
         // Add sections
         sectionsToRender.forEach(section => {
           const sectionClone = section.cloneNode(true);
-          // Clean styling
+          // Clean styling but preserve chart elements
           const allEls = sectionClone.querySelectorAll('*');
           allEls.forEach(el => {
-            el.removeAttribute('class');
+            const hasChart = el.tagName === 'svg' || el.tagName === 'canvas' || el.querySelector('svg, canvas');
+            // Don't remove classes from chart elements
+            if (!hasChart && el.tagName !== 'svg') {
+              el.removeAttribute('class');
+            }
             if (el.style) {
               el.style.pageBreakInside = 'avoid';
               el.style.breakInside = 'avoid';
+            }
+            // Ensure SVG charts have explicit dimensions
+            if (el.tagName === 'svg') {
+              el.style.maxWidth = '100%';
+              el.style.width = '100%';
+              el.style.height = '300px';
+              el.style.display = 'block';
+              el.style.margin = '0 auto';
+              if (!el.getAttribute('width')) el.setAttribute('width', '100%');
+              if (!el.getAttribute('height')) el.setAttribute('height', '300');
+            }
+            // Style chart containers
+            if (el.tagName === 'DIV' && el.querySelector(':scope > svg, :scope > div > svg')) {
+              el.style.width = '100%';
+              el.style.minHeight = '300px';
             }
           });
           pageContainer.appendChild(sectionClone);
