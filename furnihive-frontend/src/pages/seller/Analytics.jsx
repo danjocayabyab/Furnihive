@@ -124,6 +124,25 @@ export default function SellerAnalytics() {
           return;
         }
 
+        // Fetch product categories for category breakdown
+        const productIds = items.map(i => i.product_id).filter(Boolean);
+        let productCategories = {};
+        if (productIds.length > 0) {
+          const { data: products } = await supabase
+            .from("products")
+            .select("id, category")
+            .in("id", productIds);
+          productCategories = Object.fromEntries(
+            (products || []).map(p => [p.id, p.category])
+          );
+        }
+
+        // Add category to each item
+        const itemsWithCategory = items.map(item => ({
+          ...item,
+          category: productCategories[item.product_id] || null
+        }));
+
         const orderIds = new Set();
         let totalSales = 0;
         const byProduct = new Map();
@@ -177,7 +196,7 @@ export default function SellerAnalytics() {
           // Generate trend data
           const trendData = generateTrendData(items, range);
           setRevenueTrend(trendData);
-          setCategoryData(generateCategoryData(items));
+          setCategoryData(generateCategoryData(itemsWithCategory));
           setMonthlyData(generateMonthlyData(items));
         }
       } catch {
